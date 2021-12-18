@@ -1,4 +1,3 @@
-import argparse
 import gym
 import os
 import time
@@ -8,7 +7,7 @@ import pandas as pd
 from models import TD3
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".5"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".25"
 
 
 def eval_policy(agent: TD3,
@@ -46,8 +45,8 @@ def get_args():
     parser.add_argument("--policy_noise", default=0.2, type=float)
     parser.add_argument("--noise_clip", default=0.5, type=float)
     parser.add_argument("--policy_freq", default=2, type=int)
-    parser.add_argument("--log_dir", default="./logs", type=str)
-    parser.add_argument("--model_dir", default="./saved_models", type=str)
+    parser.add_argument("--log_dir", default="./td3_logs", type=str)
+    parser.add_argument("--model_dir", default="./td3_models", type=str)
     args = parser.parse_args()
     return args
 
@@ -59,7 +58,7 @@ def main(args):
     act_dim = env.action_space.shape[0]
     max_action = float(env.action_space.high[0])
 
-    # andom seeds
+    # random seeds
     env.seed(args.seed)
     env.action_space.seed(args.seed)
     np.random.seed(args.seed)
