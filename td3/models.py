@@ -62,6 +62,14 @@ class Critic(nn.Module):
         q1 = self.l3(q1)
         return q1
 
+    def Repr(self, observations: jnp.ndarray,
+             actions: jnp.ndarray) -> jnp.ndarray:
+        x = jnp.concatenate([observations, actions], axis=-1)
+        q1 = nn.relu(self.l1(x))
+        repr = nn.relu(self.l2(q1))
+        q1 = self.l3(repr)
+        return repr, q1
+
 
 class TD3:
     def __init__(self,
