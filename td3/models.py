@@ -180,7 +180,7 @@ class TD3:
 
         return critic_info, critic_state
 
-    @functools.partial(jax.jit, static_argnums=0)
+    @functools.partial(jax.jit, static_argnames=("self"))
     def update_target_params(self, params: frozen_dict.FrozenDict,
                              target_params: frozen_dict.FrozenDict):
         def _update(param, target_param):
@@ -189,7 +189,7 @@ class TD3:
         updated_params = jax.tree_multimap(_update, params, target_params)
         return updated_params
 
-    @functools.partial(jax.jit, static_argnums=0)
+    @functools.partial(jax.jit, static_argnames=("self"))
     def select_action(self, params: frozen_dict.FrozenDict,
                       observations: np.ndarray) -> jnp.ndarray:
         observations = jax.device_put(observations[None])

@@ -145,5 +145,4 @@ def main(args):
 if __name__ == "__main__":
     args = get_args()
     print(f"\nArguments:\n{vars(args)}")
-    env = gym.make(args.env)
     main(args)
