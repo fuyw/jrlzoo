@@ -4,6 +4,7 @@ import os
 import time
 import numpy as np
 import pandas as pd
+from tqdm import trange
 
 from models import TD3_BC
 from utils import ReplayBuffer
@@ -14,6 +15,8 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".25"
 def eval_policy(agent: TD3_BC,
                 env_name: str,
                 seed: int,
+                mean: np.ndarray,
+                std: np.ndarray,
                 eval_episodes: int = 10) -> float:
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
@@ -23,11 +26,13 @@ def eval_policy(agent: TD3_BC,
         obs, done = eval_env.reset(), False
         while not done:
             t += 1
-            action = agent.select_action(agent.actor_state.params, np.array(obs))
+            obs = (np.array(obs).reshape(1, -1) - mean) / std
+            action = agent.select_action(agent.actor_state.params, obs)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
-    return avg_reward
+    d4rl_score = eval_env.get_normalized_score(avg_reward) * 100
+    return d4rl_score
 
 
 def get_args():
@@ -37,7 +42,6 @@ def get_args():
     parser.add_argument("--env", default="hopper-medium-v0")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
-    parser.add_argument("--start_timesteps", default=int(25e3), type=int)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
     parser.add_argument("--eval_freq", default=int(5e3), type=int)
     parser.add_argument("--expl_noise", default=0.1, type=float)
@@ -90,21 +94,17 @@ def main(args):
         mean, std = 0, 1
 
     # Evaluate the untrained policy
-    logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]
+    logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed, mean, std)}]
 
     # Initialize training stats
-    obs, done = env.reset(), False
-    episode_num = 0
-    episode_reward = 0
-    episode_timesteps = 0
     start_time = time.time()
 
     # Train agent and evaluate policy
-    for t in range(args.max_timesteps):
+    for t in trange(args.max_timesteps):
         log_info = agent.train(replay_buffer, args.batch_size)
 
         if (t + 1) % args.eval_freq == 0:
-            eval_reward = eval_policy(agent, args.env, args.seed)
+            eval_reward = eval_policy(agent, args.env, args.seed, mean, std)
             log_info.update({
                 "step": t+1,
                 "reward": eval_reward,
@@ -136,4 +136,3 @@ if __name__ == "__main__":
     args = get_args()
     print(f"\nArguments:\n{vars(args)}")
     main(args)
-

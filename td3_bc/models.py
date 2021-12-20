@@ -131,7 +131,7 @@ class TD3_BC:
                                       batch.observations,
                                       actions,
                                       method=Critic.Q1)
-            lmbda = self.alpha / jnp.abs(q_val).mean()
+            lmbda = self.alpha / jnp.abs(jax.lax.stop_gradient(q_val)).mean()
             bc_loss = jnp.mean((actions - batch.actions)**2)
             actor_loss = -lmbda * jnp.mean(q_val) + bc_loss
             return actor_loss, {"actor_loss": actor_loss, "bc_loss": bc_loss}
