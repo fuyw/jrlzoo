@@ -53,8 +53,8 @@ def get_args():
     parser.add_argument("--policy_noise", default=0.2, type=float)
     parser.add_argument("--noise_clip", default=0.5, type=float)
     parser.add_argument("--policy_freq", default=2, type=int)
-    parser.add_argument("--log_dir", default="./td3_logs", type=str)
-    parser.add_argument("--model_dir", default="./td3_models", type=str)
+    parser.add_argument("--log_dir", default="./logs", type=str)
+    parser.add_argument("--model_dir", default="./saved_models", type=str)
     args = parser.parse_args()
     return args
 
