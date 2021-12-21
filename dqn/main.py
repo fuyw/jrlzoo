@@ -1,3 +1,5 @@
+import os
+
 import bsuite
 from bsuite import sweep
 from bsuite.utils import gym_wrapper
@@ -20,6 +22,7 @@ def get_args():
     parser.add_argument("--batch_size", default=32, type=float)
     parser.add_argument("--learning_rate", default=1e-3, type=float)
     parser.add_argument("--target_update_period", default=4, type=int)
+    parser.add_argument("--model_dir", default="saved_models", type=str)
     args = parser.parse_args()
     return args
 
@@ -57,6 +60,10 @@ def main(args):
             if episode >= args.min_replay_size:
                 print(f"# Episode {episode + 1}: reward = {eval_reward:.2f}, "
                     f"q_loss = {log_info['q_loss']:.2f}, q = {log_info['q']:.2f}")
+
+        # Save logs
+        os.makedirs(args.model_dir, exist_ok=True)
+        agent.save(f"{args.model_dir}/{args.seed}")
 
 
 if __name__ == "__main__":
