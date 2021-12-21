@@ -13,8 +13,8 @@ class QNet(nn.Module):
     act_dim: int
 
     def setup(self):
-        self.l1 = nn.Dense(64, name="fc1")
-        self.l2 = nn.Dense(64, name="fc2")
+        self.l1 = nn.Dense(32, name="fc1")
+        self.l2 = nn.Dense(3, name="fc2")
         self.l3 = nn.Dense(self.act_dim, name="fc3")
 
     def __call__(self, inputs: jnp.ndarray):
@@ -89,3 +89,11 @@ class DQN:
         model_file = filename + "_qnet.ckpt"
         with open(model_file, "wb") as f:
             f.write(serialization.to_bytes(self.state.params))
+
+    def load(self, filename):
+        # TODO: model loading is untested
+        critic_file = filename + '_critic.ckpt'
+        with open(critic_file, 'rb') as f:
+            self.critic_params = serialization.from_bytes(
+                self.critic_params, f.read())
+        self.critic_target_params = self.critic_params
