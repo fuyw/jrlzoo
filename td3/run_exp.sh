@@ -9,12 +9,25 @@ envs=(
     # "Ant-v2"
 )
 
-for ((i=6;i<10;i+=1))
+seeds=(
+    "8"
+    "0"
+    "2"
+)
+
+# for ((i=6;i<10;i+=1))
+# do 
+#     for env in ${envs[*]}
+#     do
+#         python main.py \
+#         --env $env \
+#         --seed $i
+#     done
+# done
+
+for ((i=0;i<3;i+=1))
 do 
-    for env in ${envs[*]}
-    do
-        python main.py \
-        --env $env \
-        --seed $i
-    done
+    python main.py \
+    --env ${envs[$i]} \
+    --seed ${seeds[$i]}
 done

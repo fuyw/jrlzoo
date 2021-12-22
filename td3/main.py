@@ -10,6 +10,10 @@ from utils import ReplayBuffer
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".25"
 
+SAVE_FREQ = {"HalfCheetah-v2": [int(1e5), int(3e5), int(5e5), int(1e6)], 
+             "Walker2d-v2": [int(1e5), int(3e5), int(5e5), int(1e6)],
+             "Hopper-v2": [int(1e5), int(2.5e5), int(4e5), int(1e6)]}
+
 
 def eval_policy(agent: TD3,
                 env_name: str,
@@ -133,6 +137,9 @@ def main(args):
                 logs.append({"step": t+1, "reward": eval_reward})
                 print(f"# Step {t+1}: {eval_reward:.2f}")
 
+            if (t + 1) in SAVE_FREQ[args.env]:
+                agent.save(f"{args.model_dir}/{args.env}/step{int((t+1)/1e4)}_seed{args.seed}")
+
     # Save logs
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
@@ -140,7 +147,7 @@ def main(args):
     os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{args.seed}.csv")
-    agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
+    # agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
 
 
 if __name__ == "__main__":
