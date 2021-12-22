@@ -6,10 +6,10 @@ envs=(
     "HalfCheetah-v2"
     "Walker2d-v2"
     "Hopper-v2"
-    "Ant-v2"
+    # "Ant-v2"
 )
 
-for ((i=0;i<5;i+=1))
+for ((i=6;i<10;i+=1))
 do 
     for env in ${envs[*]}
     do

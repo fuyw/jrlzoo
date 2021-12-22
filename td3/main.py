@@ -3,6 +3,7 @@ import os
 import time
 import numpy as np
 import pandas as pd
+from tqdm import trange
 
 from models import TD3
 from utils import ReplayBuffer
@@ -45,8 +46,8 @@ def get_args():
     parser.add_argument("--policy_noise", default=0.2, type=float)
     parser.add_argument("--noise_clip", default=0.5, type=float)
     parser.add_argument("--policy_freq", default=2, type=int)
-    parser.add_argument("--log_dir", default="./td3_logs", type=str)
-    parser.add_argument("--model_dir", default="./td3_models", type=str)
+    parser.add_argument("--log_dir", default="./logs", type=str)
+    parser.add_argument("--model_dir", default="./saved_models", type=str)
     args = parser.parse_args()
     return args
 
@@ -89,7 +90,7 @@ def main(args):
     start_time = time.time()
 
     # Train agent and evaluate policy
-    for t in range(args.max_timesteps):
+    for t in trange(args.max_timesteps):
         episode_timesteps += 1
         if t < args.start_timesteps:
             action = env.action_space.sample()
