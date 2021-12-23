@@ -237,18 +237,24 @@ class TD3_BC:
             f.write(serialization.to_bytes(self.actor_state.params))
 
     def load(self, filename):
-        # TODO: model loading is untested
         critic_file = filename + '_critic.ckpt'
         with open(critic_file, 'rb') as f:
-            self.critic_params = serialization.from_bytes(
-                self.critic_params, f.read())
-        self.critic_target_params = self.critic_params
+            critic_params = serialization.from_bytes(
+                self.critic_state.params, f.read())
+        self.critic_state = train_state.TrainState.create(
+            apply_fn=Critic.apply,
+            params=critic_params,
+            tx=optax.adam(learning_rate=self.learning_rate))
+
         actor_file = filename + '_actor.ckpt'
         with open(actor_file, 'rb') as f:
-            self.actor_params = serialization.from_bytes(
-                self.actor_params, f.read())
-        self.actor_target_params = self.actor_params
-
+            actor_params = serialization.from_bytes(
+                self.actor_state.params, f.read())
+        self.actor_state = train_state.TrainState.create(
+            apply_fn=Actor.apply,
+            params=actor_params,
+            tx=optax.adam(learning_rate=self.learning_rate)
+        )
 
 class TD3:
     def __init__(self,
@@ -411,14 +417,21 @@ class TD3:
             f.write(serialization.to_bytes(self.actor_state.params))
 
     def load(self, filename):
-        # TODO: model loading is untested
         critic_file = filename + '_critic.ckpt'
         with open(critic_file, 'rb') as f:
-            self.critic_params = serialization.from_bytes(
-                self.critic_params, f.read())
-        self.critic_target_params = self.critic_params
+            critic_params = serialization.from_bytes(
+                self.critic_state.params, f.read())
+        self.critic_state = train_state.TrainState.create(
+            apply_fn=Critic.apply,
+            params=critic_params,
+            tx=optax.adam(learning_rate=self.learning_rate))
+
         actor_file = filename + '_actor.ckpt'
         with open(actor_file, 'rb') as f:
-            self.actor_params = serialization.from_bytes(
-                self.actor_params, f.read())
-        self.actor_target_params = self.actor_params
+            actor_params = serialization.from_bytes(
+                self.actor_state.params, f.read())
+        self.actor_state = train_state.TrainState.create(
+            apply_fn=Actor.apply,
+            params=actor_params,
+            tx=optax.adam(learning_rate=self.learning_rate)
+        )
