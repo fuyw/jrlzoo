@@ -8,7 +8,7 @@ from tqdm import trange
 from models import TD3
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".25"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 SAVE_FREQ = {"HalfCheetah-v2": [int(1e5), int(3e5), int(5e5), int(1e6)], 
              "Walker2d-v2": [int(1e5), int(3e5), int(5e5), int(1e6)],
@@ -151,5 +151,9 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args()
+    os.makedirs(args.log_dir, exist_ok=True)
+    os.makedirs(args.model_dir, exist_ok=True)
+    os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
+    os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     print(f"\nArguments:\n{vars(args)}")
     main(args)
