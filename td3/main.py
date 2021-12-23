@@ -146,7 +146,7 @@ def main(args):
     os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
     os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"{args.log_dir}/{args.env}/{args.seed}_check.csv")
+    log_df.to_csv(f"{args.log_dir}/{args.env}/{args.seed}.csv")
 
 
 if __name__ == "__main__":

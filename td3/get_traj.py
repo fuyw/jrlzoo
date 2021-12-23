@@ -25,7 +25,7 @@ def eval_policy(agent: TD3,
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="HalfCheetah-v2")
+    parser.add_argument("--env", default="Walker2d-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     args = parser.parse_args()
@@ -42,7 +42,7 @@ def main(args):
     agent = TD3(obs_dim=obs_dim, act_dim=act_dim, max_action=max_action)
     eval_reward1 = eval_policy(agent, args.env, 0)
     print(f"Eval reward before load parameters: {eval_reward1}")
-    agent.load(f"saved_models/Walker2d-v2/8")
+    agent.load(f"saved_models/Walker2d-v2/step100_seed0")
     eval_reward2 = eval_policy(agent, args.env, 0)
     print(f"Eval reward before load parameters: {eval_reward2}")
 

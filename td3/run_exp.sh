@@ -15,7 +15,7 @@ seeds=(
     "2"
 )
 
-for ((i=0;i<3;i+=1))
+for ((i=0;i<10;i+=1))
 do 
     for env in ${envs[*]}
     do
