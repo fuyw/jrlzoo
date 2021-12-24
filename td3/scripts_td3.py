@@ -9,7 +9,7 @@ def single_exp(seed='0', env_name='hopper-medium-v0', sleep=1):
 
 def run():
     tasks = [
-        (i, 'HalfCheetah-v2') for i in range(1, 6)
+        (i, 'HalfCheetah-v2') for i in range(6, 10)
     ]
 
     threads = []
