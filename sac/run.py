@@ -9,9 +9,9 @@ def single_exp(seed='0', env_name='HalfCheetah-v2'):
 
 
 def run():
-    tasks = [(i, 'HalfCheetah-v2') for i in range(1, 6)]
-
+    tasks = [(i, 'HalfCheetah-v2') for i in range(6, 10)]
     threads = []
+    time.sleep(3600*1)
     for (seed, env_name) in tasks:
         t_thread = threading.Thread(target=single_exp, args=(seed, env_name,))
         t_thread.start()

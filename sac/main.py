@@ -46,8 +46,8 @@ def get_args():
     parser.add_argument("--tau", default=0.005, type=float)
     parser.add_argument("--target_entropy", default=None, type=float)
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
-    parser.add_argument("--log_dir", default="./ogs", type=str)
-    parser.add_argument("--model_dir", default="./save_models", type=str)
+    parser.add_argument("--log_dir", default="./logs", type=str)
+    parser.add_argument("--model_dir", default="./saved_models", type=str)
     args = parser.parse_args()
     return args
 
