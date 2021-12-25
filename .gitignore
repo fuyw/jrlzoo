@@ -1,5 +1,8 @@
 .DS_Store
 __pycache__
 logs
-benchmarks
 saved_models
+benchmarks
+mico
+dopamine
+atari-representation-learning
