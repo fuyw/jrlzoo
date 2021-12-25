@@ -35,7 +35,7 @@ def eval_policy(agent: SACAgent,
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="HalfCheetah-v2")
+    parser.add_argument("--env", default="Hopper-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--start_timesteps", default=int(25e3), type=int)

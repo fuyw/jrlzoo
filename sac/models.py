@@ -178,14 +178,12 @@ class SACAgent:
             actor_loss = (alpha * logp - sampled_q).mean()
 
             # Critic loss
-            q1, q2 = self.critic.apply({"params": critic_params},
-                                       observation, action)
+            q1, q2 = self.critic.apply({"params": critic_params}, observation, action)
             q1 = jnp.squeeze(q1)
             q2 = jnp.squeeze(q2)
             _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng2, next_observation)
             next_q1, next_q2 = self.critic.apply({"params": critic_target_params}, next_observation, next_action)
-            next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2)) - \
-                alpha * logp_next_action
+            next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2)) - alpha * logp_next_action
 
             target_q = reward + self.gamma * discount * next_q
             target_q = jax.lax.stop_gradient(target_q)
