@@ -24,9 +24,7 @@ class Actor(nn.Module):
         self.l2 = nn.Dense(256, name="fc2")
         self.l3 = nn.Dense(2 * self.act_dim, name="fc3")
 
-    def __call__(self,
-                 rng,
-                 observation: jnp.ndarray):
+    def __call__(self, rng: Any, observation: jnp.ndarray):
         x = nn.relu(self.l1(observation))
         x = nn.relu(self.l2(x))
         x = self.l3(x)
@@ -47,9 +45,7 @@ class Critic(nn.Module):
     hid_dim: int = 256
 
     @nn.compact
-    def __call__(self,
-                 observation: jnp.ndarray,
-                 action: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         kernel_initializer = jax.nn.initializers.glorot_uniform()
         x = jnp.concatenate([observation, action], axis=-1)
         q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer,

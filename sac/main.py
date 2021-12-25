@@ -125,7 +125,7 @@ def main(args):
                 logs.append(log_info)
                 print(
                     f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
-                    f"actor_loss: {log_info['actor_loss']:.3f}, actor_loss: {log_info['alpha_loss']:.3f}, "
+                    f"actor_loss: {log_info['actor_loss']:.3f}, alpha_loss: {log_info['alpha_loss']:.3f}, "
                     f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}, alpha: {log_info['alpha']:.3f}")
             else:
                 logs.append({"step": t+1, "reward": eval_reward})
