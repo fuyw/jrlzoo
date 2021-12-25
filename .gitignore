@@ -2,3 +2,7 @@
 __pycache__
 logs
 saved_models
+benchmarks
+mico
+dopamine
+atari-representation-learning
