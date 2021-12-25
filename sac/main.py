@@ -41,7 +41,6 @@ def get_args():
     parser.add_argument("--start_timesteps", default=int(25e3), type=int)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
     parser.add_argument("--eval_freq", default=int(5e3), type=int)
-    parser.add_argument("--expl_noise", default=0.1, type=float)
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
@@ -126,7 +125,8 @@ def main(args):
                 logs.append(log_info)
                 print(
                     f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
-                    f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}")
+                    f"actor_loss: {log_info['actor_loss']:.3f}, actor_loss: {log_info['alpha_loss']:.3f}, "
+                    f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}, alpha: {log_info['alpha']:.3f}")
             else:
                 logs.append({"step": t+1, "reward": eval_reward})
                 print(f"# Step {t+1}: {eval_reward:.2f}")
@@ -138,7 +138,7 @@ def main(args):
     os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{args.seed}.csv")
-    agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
+    # agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
 
 
 if __name__ == "__main__":
