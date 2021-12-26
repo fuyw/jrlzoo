@@ -22,15 +22,12 @@ kernel_initializer = jax.nn.initializers.glorot_uniform()
 class Actor(nn.Module):
     act_dim: int
 
-    def setup(self):
-        self.l1 = nn.Dense(256, kernel_init=kernel_initializer, name="fc1")
-        self.l2 = nn.Dense(256, kernel_init=kernel_initializer, name="fc2")
-        self.l3 = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="fc3")
-
+    @nn.compact
     def __call__(self, rng: Any, observation: jnp.ndarray):
-        x = nn.relu(self.l1(observation))
-        x = nn.relu(self.l2(x))
-        x = self.l3(x)
+        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc1")(observation))
+        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc2")(x))
+        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="fc3")(x)
+
         mu, log_std = jnp.split(x, 2, axis=-1)
         log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
         std = jnp.exp(log_std)
@@ -50,10 +47,8 @@ class Critic(nn.Module):
     @nn.compact
     def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observation, action], axis=-1)
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer,
-                             name="fc1")(x))
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer,
-                             name="fc2")(q))
+        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")(x))
+        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc2")(q))
         q = nn.Dense(1, kernel_init=kernel_initializer, name="fc3")(q)
         return q
 
@@ -159,7 +154,7 @@ class SACAgent:
                     discount: jnp.ndarray,
                     next_observation: jnp.ndarray,
                     rng: jnp.ndarray):
-
+            """compute loss for a single transition"""
             rng1, rng2 = jax.random.split(rng, 2)
 
             # Sample actions with Actor
@@ -167,32 +162,32 @@ class SACAgent:
 
             # Alpha loss: stop gradient to avoid affect Actor parameters
             log_alpha = self.log_alpha.apply({"params": alpha_params})
-            alpha_loss = -log_alpha * jax.lax.stop_gradient(logp + self.target_entropy).mean()
+            alpha_loss = -log_alpha * jax.lax.stop_gradient(logp + self.target_entropy)
             alpha = jnp.exp(log_alpha)
 
-            # We use frozen_params so that gradients can flow back to the actor without
-            # being used to update the critic.
+            # We use frozen_params so that gradients can flow back to the actor without being used to update the critic.
             sampled_q1, sampled_q2 = self.critic.apply({"params": frozen_critic_params}, observation, sampled_action)
             sampled_q = jnp.squeeze(jnp.minimum(sampled_q1, sampled_q2))
 
             # Actor loss
             alpha = jax.lax.stop_gradient(alpha)  # stop gradient to avoid affect Alpha parameters
-            actor_loss = (alpha * logp - sampled_q).mean()
+            actor_loss = (alpha * logp - sampled_q)
 
             # Critic loss
             q1, q2 = self.critic.apply({"params": critic_params}, observation, action)
             q1 = jnp.squeeze(q1)
             q2 = jnp.squeeze(q2)
+
+            # Use frozen_actor_params to avoid affect Actor parameters
             _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng2, next_observation)
             next_q1, next_q2 = self.critic.apply({"params": critic_target_params}, next_observation, next_action)
             next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2)) - alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
-            target_q = jax.lax.stop_gradient(target_q) # stop gradient to avoid affect Actor parameters
-            critic_loss = ((q1 - target_q)**2 + (q2 - target_q)**2).mean()
+            critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
 
             # Loss weight form Dopamine
             total_loss = 0.5 * critic_loss + actor_loss + alpha_loss
-            log_info = {"q1": q1.mean(), "q2": q2.mean(), "critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss, "alpha": alpha}
+            log_info = {"q1": q1, "q2": q2, "critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss, "alpha": alpha}
 
             return total_loss, log_info
         
