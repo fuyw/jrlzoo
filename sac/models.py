@@ -15,14 +15,17 @@ from utils import Batch
 LOG_STD_MAX = 2.
 LOG_STD_MIN = -10.
 
+kernel_initializer = jax.nn.initializers.glorot_uniform()
+# kernel_initializer = jax.nn.initializers.lecun_normal()
+
 
 class Actor(nn.Module):
     act_dim: int
 
     def setup(self):
-        self.l1 = nn.Dense(256, name="fc1")
-        self.l2 = nn.Dense(256, name="fc2")
-        self.l3 = nn.Dense(2 * self.act_dim, name="fc3")
+        self.l1 = nn.Dense(256, kernel_init=kernel_initializer, name="fc1")
+        self.l2 = nn.Dense(256, kernel_init=kernel_initializer, name="fc2")
+        self.l3 = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="fc3")
 
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = nn.relu(self.l1(observation))
@@ -46,7 +49,6 @@ class Critic(nn.Module):
 
     @nn.compact
     def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        kernel_initializer = jax.nn.initializers.glorot_uniform()
         x = jnp.concatenate([observation, action], axis=-1)
         q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer,
                              name="fc1")(x))
@@ -161,20 +163,20 @@ class SACAgent:
             rng1, rng2 = jax.random.split(rng, 2)
 
             # Sample actions with Actor
-            _, sampled_action, logp = self.actor.apply({"params": actor_params},
-                                                       rng1, observation)
+            _, sampled_action, logp = self.actor.apply({"params": actor_params}, rng1, observation)
 
-            # Alpha loss
+            # Alpha loss: stop gradient to avoid affect Actor parameters
             log_alpha = self.log_alpha.apply({"params": alpha_params})
             alpha_loss = -log_alpha * jax.lax.stop_gradient(logp + self.target_entropy).mean()
             alpha = jnp.exp(log_alpha)
 
-            # Evaluate sampled actions with Critic
+            # We use frozen_params so that gradients can flow back to the actor without
+            # being used to update the critic.
             sampled_q1, sampled_q2 = self.critic.apply({"params": frozen_critic_params}, observation, sampled_action)
             sampled_q = jnp.squeeze(jnp.minimum(sampled_q1, sampled_q2))
 
             # Actor loss
-            alpha = jax.lax.stop_gradient(alpha)
+            alpha = jax.lax.stop_gradient(alpha)  # stop gradient to avoid affect Alpha parameters
             actor_loss = (alpha * logp - sampled_q).mean()
 
             # Critic loss
@@ -184,9 +186,8 @@ class SACAgent:
             _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng2, next_observation)
             next_q1, next_q2 = self.critic.apply({"params": critic_target_params}, next_observation, next_action)
             next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2)) - alpha * logp_next_action
-
             target_q = reward + self.gamma * discount * next_q
-            target_q = jax.lax.stop_gradient(target_q)
+            target_q = jax.lax.stop_gradient(target_q) # stop gradient to avoid affect Actor parameters
             critic_loss = ((q1 - target_q)**2 + (q2 - target_q)**2).mean()
 
             # Loss weight form Dopamine
