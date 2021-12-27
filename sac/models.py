@@ -16,7 +16,6 @@ LOG_STD_MAX = 2.
 LOG_STD_MIN = -10.
 
 kernel_initializer = jax.nn.initializers.glorot_uniform()
-# kernel_initializer = jax.nn.initializers.lecun_normal()
 
 
 class Actor(nn.Module):
@@ -160,7 +159,7 @@ class SACAgent:
             # Sample actions with Actor
             _, sampled_action, logp = self.actor.apply({"params": actor_params}, rng1, observation)
 
-            # Alpha loss: stop gradient to avoid affect Actor parameters
+            # Alpha loss: stop gradient to avoid affecting Actor parameters
             log_alpha = self.log_alpha.apply({"params": alpha_params})
             alpha_loss = -log_alpha * jax.lax.stop_gradient(logp + self.target_entropy)
             alpha = jnp.exp(log_alpha)
@@ -190,7 +189,7 @@ class SACAgent:
             log_info = {"q1": q1, "q2": q2, "critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss, "alpha": alpha}
 
             return total_loss, log_info
-        
+
         grad_fn = jax.vmap(
             jax.value_and_grad(loss_fn, argnums=(0, 1, 2), has_aux=True),
             in_axes=(None, None, None, 0, 0, 0, 0, 0, 0))
