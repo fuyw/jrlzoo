@@ -39,3 +39,18 @@ class ReplayBuffer:
                       next_observations=jax.device_put(
                           self.next_observations[idx]))
         return batch
+
+    def convert_D4RL(self, dataset):
+        self.observations = dataset["observations"]
+        self.actions = dataset["actions"]
+        self.next_observations = dataset["next_observations"]
+        self.rewards = dataset["rewards"]
+        self.discounts = 1. - dataset["terminals"]
+        self.size = self.observations.shape[0]
+
+    def normalize_states(self, eps: float = 1e-3):
+        mean = self.observations.mean(0, keepdims=True)
+        std = self.observations.std(0, keepdims=True) + eps
+        self.observations = (self.observations - mean)/std
+        self.next_observations = (self.next_observations - mean)/std
+        return mean, std

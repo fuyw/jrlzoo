@@ -269,12 +269,14 @@ class CQLAgent:
                  lagrange_thresh: int = 10):
 
         self.update_step = 0
+        self.obs_dim = obs_dim
+        self.act_dim = act_dim
         self.tau = tau
         self.gamma = gamma
         self.learning_rate = learning_rate
         self.auto_entropy_tuning = auto_entropy_tuning
         if target_entropy is None:
-            self.target_entropy = -act_dim / 2
+            self.target_entropy = -self.act_dim / 2
         else:
             self.target_entropy = target_entropy
 
@@ -282,11 +284,11 @@ class CQLAgent:
         self.rng, actor_key, critic_key = jax.random.split(self.rng, 3)
 
         # Dummy inputs
-        dummy_obs = jnp.ones([1, obs_dim], dtype=jnp.float32)
-        dummy_act = jnp.ones([1, act_dim], dtype=jnp.float32)
+        dummy_obs = jnp.ones([1, self.obs_dim], dtype=jnp.float32)
+        dummy_act = jnp.ones([1, self.act_dim], dtype=jnp.float32)
 
         # Initialize the Actor
-        self.actor = Actor(act_dim)
+        self.actor = Actor(self.act_dim)
         actor_params = self.actor.init(actor_key, actor_key, dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(
             apply_fn=Actor.apply,
@@ -324,8 +326,7 @@ class CQLAgent:
                 apply_fn=None,
                 params=self.log_cql_alpha.init(cql_key)["params"],
                 tx=optax.adam(self.learning_rate))
-        
-    
+
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
                    batch: Batch,
@@ -333,6 +334,7 @@ class CQLAgent:
                    actor_state: train_state.TrainState,
                    critic_state: train_state.TrainState,
                    alpha_state: train_state.TrainState,
+                   cql_alpha_state: train_state.TrainState,
                    key: jnp.ndarray):
 
         # For use in loss_fn without apply gradients
@@ -413,27 +415,33 @@ class CQLAgent:
                 log_cql_alpha = self.log_cql_alpha.apply({"params": cql_alpha_params})
                 cql_alpha = jnp.clip(jnp.exp(log_cql_alpha), 0.0, 1000000.0)
                 cql1_loss = cql_alpha * (cql1_loss - self.target_action_gap)
-                cql2_loss=  cql_alpha * (cql2_loss - self.target_action_gap)
+                cql2_loss = cql_alpha * (cql2_loss - self.target_action_gap)
                 cql_alpha_loss = (-cql1_loss - cql2_loss) * 0.5
+            else:
+                cql_alpha = 0
+                cql_alpha_loss = 0
 
             # CQL regularized critic loss
             critic_loss += cql1_loss + cql2_loss
 
             # Loss weight form Dopamine
             total_loss = 0.5 * critic_loss + actor_loss + alpha_loss + cql_alpha_loss
-            log_info = {"q1": q1, "q2": q2, "critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
-                        "alpha": alpha, "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, "cql_alpha_loss": cql_alpha_loss}
+            log_info = {"q1": q1, "q2": q2, "critic_loss": critic_loss, "actor_loss": actor_loss,
+                        "alpha_loss": alpha_loss, "alpha": alpha, "cql1_loss": cql1_loss,
+                        "cql2_loss": cql2_loss, "cql_alpha_loss": cql_alpha_loss, "cql_alpha": cql_alpha,
+                        "ood_q1": cql_ood_q1, "ood_q2": cql_ood_q2}
 
             return total_loss, log_info
-        
+
         grad_fn = jax.vmap(
-            jax.value_and_grad(loss_fn, argnums=(0, 1, 2), has_aux=True),
-            in_axes=(None, None, None, 0, 0, 0, 0, 0, 0))
+            jax.value_and_grad(loss_fn, argnums=(0, 1, 2, 3), has_aux=True),
+            in_axes=(None, None, None, None, 0, 0, 0, 0, 0, 0))
         rng = jnp.stack(jax.random.split(key, num=actions.shape[0]))
 
         (_, log_info), gradients = grad_fn(actor_state.params,
                                            critic_state.params,
                                            alpha_state.params,
+                                           cql_alpha_state.params,
                                            observations,
                                            actions,
                                            rewards,
@@ -444,14 +452,15 @@ class CQLAgent:
         gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
         log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
 
-        actor_grads, critic_grads, alpha_grads = gradients
+        actor_grads, critic_grads, alpha_grads, cql_alpha_grads = gradients
 
         # Update TrainState
         actor_state = actor_state.apply_gradients(grads=actor_grads)
         critic_state = critic_state.apply_gradients(grads=critic_grads)
         alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
+        cql_alpha_state = cql_alpha_state.apply_gradients(grads=cql_alpha_grads)
 
-        return log_info, actor_state, critic_state, alpha_state
+        return log_info, actor_state, critic_state, alpha_state, cql_alpha_state
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def update_target_params(self, params: FrozenDict, target_params: FrozenDict):
@@ -475,12 +484,9 @@ class CQLAgent:
         batch = replay_buffer.sample(batch_size)
 
         self.rng, key = jax.random.split(self.rng)
-        log_info, self.actor_state, self.critic_state, self.alpha_state = self.train_step(batch,
-                                                                                          self.critic_target_params,
-                                                                                          self.actor_state,
-                                                                                          self.critic_state,
-                                                                                          self.alpha_state,
-                                                                                          key)
+        (log_info, self.actor_state, self.critic_state, self.alpha_state, self.cql_alpha_state) =\
+            self.train_step(batch, self.critic_target_params, self.actor_state, self.critic_state,
+                            self.alpha_state, self.cql_alpha_state, key)
 
         # update target network
         params = self.critic_state.params
