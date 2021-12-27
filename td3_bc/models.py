@@ -13,15 +13,17 @@ import optax
 
 from utils import Batch, ReplayBuffer
 
+kernel_initializer = jax.nn.initializers.glorot_uniform()
+
 
 class Actor(nn.Module):
     act_dim: int
     max_action: float
 
     def setup(self):
-        self.l1 = nn.Dense(256, name="fc1")
-        self.l2 = nn.Dense(256, name="fc2")
-        self.l3 = nn.Dense(self.act_dim, name="fc3")
+        self.l1 = nn.Dense(256, kernel_init=kernel_initializer, name="fc1")
+        self.l2 = nn.Dense(256, kernel_init=kernel_initializer, name="fc2")
+        self.l3 = nn.Dense(self.act_dim, kernel_init=kernel_initializer, name="fc3")
 
     def __call__(self, observations: jnp.ndarray) -> jnp.ndarray:
         x = nn.relu(self.l1(observations))
@@ -32,13 +34,13 @@ class Actor(nn.Module):
 
 class Critic(nn.Module):
     def setup(self):
-        self.l1 = nn.Dense(256, name="fc1")
-        self.l2 = nn.Dense(256, name="fc2")
-        self.l3 = nn.Dense(1, name="fc3")
+        self.l1 = nn.Dense(256, kernel_init=kernel_initializer, name="fc1")
+        self.l2 = nn.Dense(256, kernel_init=kernel_initializer, name="fc2")
+        self.l3 = nn.Dense(1, kernel_init=kernel_initializer, name="fc3")
 
-        self.l4 = nn.Dense(256, name="fc4")
-        self.l5 = nn.Dense(256, name="fc5")
-        self.l6 = nn.Dense(1, name="fc6")
+        self.l4 = nn.Dense(256, kernel_init=kernel_initializer, name="fc4")
+        self.l5 = nn.Dense(256, kernel_init=kernel_initializer, name="fc5")
+        self.l6 = nn.Dense(1, kernel_init=kernel_initializer, name="fc6")
 
     def __call__(self, observations: jnp.ndarray,
                  actions: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
