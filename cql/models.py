@@ -385,7 +385,7 @@ class CQLAgent:
 
             # CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
-            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim))  # (10, 3)
+            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim))
 
             # Sample 10 actions with current state
             repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0), repeats=self.num_random, axis=0)
@@ -422,10 +422,10 @@ class CQLAgent:
                 cql_alpha_loss = 0
 
             # CQL regularized critic loss
-            critic_loss += cql1_loss + cql2_loss
+            # critic_loss += cql1_loss + cql2_loss 
 
             # Loss weight form Dopamine
-            total_loss = 0.5 * critic_loss + actor_loss + alpha_loss + cql_alpha_loss
+            total_loss = 0.5 * critic_loss + actor_loss + alpha_loss + cql_alpha_loss + cql1_loss + cql2_loss
             log_info = {"q1": q1, "q2": q2, "critic_loss": critic_loss, "actor_loss": actor_loss,
                         "alpha_loss": alpha_loss, "alpha": alpha, "cql1_loss": cql1_loss,
                         "cql2_loss": cql2_loss, "cql_alpha_loss": cql_alpha_loss, "cql_alpha": cql_alpha,
