@@ -40,7 +40,8 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", default="hopper-medium-v0")
     parser.add_argument("--seed", default=0, type=int)
-    parser.add_argument("--learning_rate", default=3e-4, type=float)
+    parser.add_argument("--lr_actor", default=1e-4, type=float)
+    parser.add_argument("--lr", default=3e-4, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
     parser.add_argument("--eval_freq", default=int(5e3), type=int)
     parser.add_argument("--batch_size", default=256, type=int)
@@ -50,6 +51,7 @@ def get_args():
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
+    parser.add_argument("--with_lagrange", default=False, action="store_true")
     args = parser.parse_args()
     return args
 
@@ -72,9 +74,11 @@ def main(args):
                      seed=args.seed,
                      tau=args.tau,
                      gamma=args.gamma,
-                     learning_rate=args.learning_rate,
+                     lr=args.lr,
+                     lr_actor=args.lr_actor,
                      auto_entropy_tuning=args.auto_entropy_tuning,
-                     target_entropy=args.target_entropy)
+                     target_entropy=args.target_entropy,
+                     with_lagrange=args.with_lagrange)
 
     # Replay D4RL buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
@@ -98,13 +102,22 @@ def main(args):
                 "time": (time.time() - start_time) / 60
             })
             logs.append(log_info)
-            print(
-                f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
-                f"actor_loss: {log_info['actor_loss']:.3f}, alpha_loss: {log_info['alpha_loss']:.3f}, "
-                f"alpha: {log_info['alpha']:.3f}, cql_alpha: {log_info['cql_alpha']:.3f}, "
-                f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}, "
-                f"ood_q1: {log_info['ood_q1']:.3f}, ood_q2: {log_info['ood_q2']:.3f}"
-            )
+            if args.with_lagrange:
+                print(
+                    f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
+                    f"actor_loss: {log_info['actor_loss']:.3f}, alpha_loss: {log_info['alpha_loss']:.3f}, "
+                    f"alpha: {log_info['alpha']:.3f}, cql_alpha: {log_info['cql_alpha']:.3f}, "
+                    f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}, "
+                    f"ood_q1: {log_info['ood_q1']:.3f}, ood_q2: {log_info['ood_q2']:.3f}"
+                )
+            else:
+                print(
+                    f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
+                    f"actor_loss: {log_info['actor_loss']:.3f}, alpha_loss: {log_info['alpha_loss']:.3f}, "
+                    f"alpha: {log_info['alpha']:.3f}, "
+                    f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}, "
+                    f"random_q1: {log_info['q1_random']:.3f}, random_q2: {log_info['q2_random']:.3f}"
+                )
 
     # Save logs
     os.makedirs(args.log_dir, exist_ok=True)
