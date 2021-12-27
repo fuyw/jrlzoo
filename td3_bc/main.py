@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from tqdm import trange
 
-from models import TD3_BC
+from models import TD3, TD3_BC
 from utils import ReplayBuffer
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".25"
@@ -72,17 +72,29 @@ def main(args):
     np.random.seed(args.seed)
 
     # TD3 agent
-    agent = TD3_BC(obs_dim=obs_dim,
-                   act_dim=act_dim,
-                   max_action=max_action,
-                   tau=args.tau,
-                   gamma=args.gamma,
-                   noise_clip=args.noise_clip,
-                   policy_noise=args.policy_noise,
-                   policy_freq=args.policy_freq,
-                   learning_rate=args.learning_rate,
-                   alpha=args.alpha,
-                   seed=args.seed)
+    if args.algo == "td3bc":
+        agent = TD3_BC(obs_dim=obs_dim,
+                       act_dim=act_dim,
+                       max_action=max_action,
+                       tau=args.tau,
+                       gamma=args.gamma,
+                       noise_clip=args.noise_clip,
+                       policy_noise=args.policy_noise,
+                       policy_freq=args.policy_freq,
+                       learning_rate=args.learning_rate,
+                       alpha=args.alpha,
+                       seed=args.seed)
+    elif args.algo == "td3":
+        agent = TD3(obs_dim=obs_dim,
+                    act_dim=act_dim,
+                    max_action=max_action,
+                    tau=args.tau,
+                    gamma=args.gamma,
+                    noise_clip=args.noise_clip,
+                    policy_noise=args.policy_noise,
+                    policy_freq=args.policy_freq,
+                    learning_rate=args.learning_rate,
+                    seed=args.seed)
 
     # Replay D4RL buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)

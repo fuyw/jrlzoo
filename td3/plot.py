@@ -19,9 +19,9 @@ def smooth(x, window=3):
 
 
 # read experiment res with different seeds
-def read_data(env_name='Ant-v2', col='reward', window=7):
+def read_data(env_name='Ant-v2', col='reward', window=7, num=5):
     res_lst = []
-    for i in range(3):
+    for i in range(num):
         df = pd.read_csv(f'logs/{env_name}/{i}.csv', index_col=0).set_index('step')
         x = df[col].values
         res_lst.append(smooth(x, window=window))
@@ -55,7 +55,7 @@ def plot_ax(ax, data, fill_color, title=None, log=False, label=None):
     ax.set_xticklabels([0, 0.2, 0.4, 0.6, 0.8, 1])
 
 
-def plot_exp():
+def plot_exp(seeds=True):
     # matplotlib plot setting
     mpl.rcParams['xtick.labelsize'] = 7
     mpl.rcParams['ytick.labelsize'] = 7
@@ -63,21 +63,23 @@ def plot_exp():
     mpl.rcParams['xtick.major.pad']='0.1'
     mpl.rcParams['ytick.major.pad']='0'
 
-    _, axes = plt.subplots(nrows=2, ncols=2, figsize=(8, 6))
-    plt.subplots_adjust(hspace=0.2, wspace=0.15)
+    envs = ['HalfCheetah', 'Walker2d', 'Hopper']
+    _, axes = plt.subplots(nrows=1, ncols=3, figsize=(12, 4))
 
-    for idx, env in enumerate(['HalfCheetah', 'Hopper', 'Walker2d', 'Ant']):
-        ax = axes[idx // 2][idx % 2]
-        data_jax = read_data(env_name=f'{env}-v2')
-        data_torch = read_np_data(env_name=f'{env}-v2')
-        plot_ax(ax, data_jax, colors[0], title=f'{env}', label='jax_td3')
-        plot_ax(ax, data_torch, colors[1], label='torch_td3')
-        ax.legend(fontsize=7, loc='upper left')
-
-    # patches = [mpatches.Patch(color=colors[i], label=labels[i]) for i, metric in enumerate(metrics)]
-    # plt.figlegend(handles=patches, loc='upper center', fontsize=8.5, ncol=len(metrics), frameon=False, bbox_to_anchor=(0.5, 0.95), handlelength=0.7)
+    for idx, env in enumerate(envs):
+        ax = axes[idx]
+        data_jax = read_data(env_name=f'{env}-v2', num=10)
+        if seeds:
+            for i in range(data_jax.shape[-1]):
+                ax.plot(range(data_jax.shape[0]), data_jax[:, i], label=f'{i}')
+            ax.legend()
+        else:
+            plot_ax(ax, data_jax, colors[0], title=f'{env}')
+        ax.set_xlabel('Steps (1e6)')
+        ax.set_title(f'{env}')
     plt.tight_layout()
-    plt.savefig('imgs/td3.png', dpi=720)
+    plt.savefig('imgs/ten_seeds_td3.png', dpi=720)
+
 
 
 if __name__ == '__main__':
