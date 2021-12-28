@@ -95,7 +95,8 @@ class CQLAgent:
         self.act_dim = act_dim
         self.tau = tau
         self.gamma = gamma
-        self.learning_rate = learning_rate
+        self.lr = lr
+        self.lr_actor = lr_actor
         self.auto_entropy_tuning = auto_entropy_tuning
         if target_entropy is None:
             self.target_entropy = -self.act_dim
@@ -115,7 +116,7 @@ class CQLAgent:
         self.actor_state = train_state.TrainState.create(
             apply_fn=Actor.apply,
             params=actor_params,
-            tx=optax.adam(self.learning_rate))
+            tx=optax.adam(self.lr_actor))
 
         # Initialize the Critic
         self.critic = DoubleCritic()
@@ -124,7 +125,7 @@ class CQLAgent:
         self.critic_state = train_state.TrainState.create(
             apply_fn=Critic.apply,
             params=critic_params,
-            tx=optax.adam(self.learning_rate))
+            tx=optax.adam(self.lr))
 
         # Entropy tuning
         if self.auto_entropy_tuning:
@@ -133,7 +134,7 @@ class CQLAgent:
             self.alpha_state = train_state.TrainState.create(
                 apply_fn=None,
                 params=self.log_alpha.init(alpha_key)["params"],
-                tx=optax.adam(self.learning_rate)
+                tx=optax.adam(self.lr)
             )
 
         # CQL parameters
@@ -143,12 +144,11 @@ class CQLAgent:
         if self.with_lagrange:
             self.target_action_gap = lagrange_thresh
             self.rng, cql_key = jax.random.split(self.rng, 2)
-            # TODO: self.log_cql_alpha = Scalar(0.0)
-            self.log_cql_alpha = Scalar(0.0)
+            self.log_cql_alpha = Scalar(0.0)  # 1.0
             self.cql_alpha_state = train_state.TrainState.create(
                 apply_fn=None,
                 params=self.log_cql_alpha.init(cql_key)["params"],
-                tx=optax.adam(self.learning_rate))
+                tx=optax.adam(self.lr))
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
@@ -200,6 +200,8 @@ class CQLAgent:
             # Use frozen_actor_params to avoid affect Actor parameters
             _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng2, next_observation)
             next_q1, next_q2 = self.critic.apply({"params": critic_target_params}, next_observation, next_action)
+
+            # TODO: backup without entorpy
             next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2)) - alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
             critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
@@ -236,8 +238,8 @@ class CQLAgent:
                         "alpha_loss": alpha_loss, "cql1_loss": cql1_loss,
                         "cql2_loss": cql2_loss, 
                         "q1_random": cql_q1_random.mean(), "q2_random": cql_q2_random.mean()}
-            if self.with_lagrange:
-                log_info.update({"cql_alpha": 0.0})
+            # if self.with_lagrange:
+            #     log_info.update({"cql_alpha": 0.0})
 
             return total_loss, log_info
 

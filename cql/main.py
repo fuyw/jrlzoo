@@ -38,7 +38,7 @@ def eval_policy(agent: CQLAgent,
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="hopper-medium-v0")
+    parser.add_argument("--env", default="hopper-medium-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--lr_actor", default=1e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
@@ -52,6 +52,7 @@ def get_args():
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
     parser.add_argument("--with_lagrange", default=False, action="store_true")
+    parser.add_argument("--lagrange_thresh", default=1.0, type=float)
     args = parser.parse_args()
     return args
 
@@ -78,7 +79,8 @@ def main(args):
                      lr_actor=args.lr_actor,
                      auto_entropy_tuning=args.auto_entropy_tuning,
                      target_entropy=args.target_entropy,
-                     with_lagrange=args.with_lagrange)
+                     with_lagrange=args.with_lagrange,
+                     lagrange_thresh=args.lagrange_thresh)
 
     # Replay D4RL buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
@@ -120,12 +122,13 @@ def main(args):
                 )
 
     # Save logs
+    log_name = f"t{args.lagrange_thresh}_s{args.seed}"
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
     os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"{args.log_dir}/{args.env}/{args.seed}.csv")
+    log_df.to_csv(f"{args.log_dir}/{args.env}/{log_name}.csv")
     # agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
 
 
