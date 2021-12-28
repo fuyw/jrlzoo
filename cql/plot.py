@@ -75,5 +75,19 @@ def plot_exp():
     plt.savefig('sac.png', dpi=720)
 
 
+def plot_single_run(fname1, fname2):
+    df = pd.read_csv(fname1)
+    x = df['reward'].values
+    plt.plot(range(len(x)), x, label='no entropy')
+
+    df = pd.read_csv(fname2)
+    x = df['reward'].values
+    plt.plot(range(len(x)), x, label='with entropy')
+    plt.title(label='compare entropy')
+    plt.savefig('1.png')
+
 if __name__ == '__main__':
-    plot_exp()
+    # plot_exp()
+    f1 = 'logs/hopper-medium-v2/Backup_entropy0_s0.csv'
+    f2 = 'logs/hopper-medium-v2/Backup_entropy1_s0.csv'
+    plot_single_run(f1, f2)

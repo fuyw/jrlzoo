@@ -86,6 +86,7 @@ class CQLAgent:
                  lr_actor: float = 1e-4,
                  auto_entropy_tuning: bool = True,
                  target_entropy: Optional[float] = None,
+                 backup_entropy: bool = False,
                  num_random: int = 10,
                  with_lagrange: bool = False,
                  lagrange_thresh: int = 5.0):
@@ -98,6 +99,7 @@ class CQLAgent:
         self.lr = lr
         self.lr_actor = lr_actor
         self.auto_entropy_tuning = auto_entropy_tuning
+        self.backup_entropy = backup_entropy
         if target_entropy is None:
             self.target_entropy = -self.act_dim
         else:
@@ -201,8 +203,9 @@ class CQLAgent:
             _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng2, next_observation)
             next_q1, next_q2 = self.critic.apply({"params": critic_target_params}, next_observation, next_action)
 
-            # TODO: backup without entorpy
-            next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2)) - alpha * logp_next_action
+            next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2))
+            if self.backup_entropy:
+                next_q -= alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
             critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
 
@@ -216,15 +219,15 @@ class CQLAgent:
             _, cql_sampled_actions, cql_logp = self.actor.apply({"params": frozen_actor_params}, rng3, repeat_observations)
             _, cql_next_actions, cql_logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng4, repeat_next_observations)
 
-            cql_q1_random, cql_q2_random = self.critic.apply({"params": critic_params}, repeat_observations, cql_random_actions)
+            cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_random_actions)
             cql_q1, cql_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_sampled_actions)
             cql_next_q1, cql_next_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_next_actions)
 
             random_density = np.log(0.5 ** self.act_dim)
-            cql_concat_q1 = jnp.concatenate([jnp.squeeze(cql_q1_random) - random_density,
+            cql_concat_q1 = jnp.concatenate([jnp.squeeze(cql_random_q1) - random_density,
                                              jnp.squeeze(cql_next_q1) - cql_logp_next_action,
                                              jnp.squeeze(cql_q1) - cql_logp])
-            cql_concat_q2 = jnp.concatenate([jnp.squeeze(cql_q2_random) - random_density,
+            cql_concat_q2 = jnp.concatenate([jnp.squeeze(cql_random_q2) - random_density,
                                              jnp.squeeze(cql_next_q2) - cql_logp_next_action,
                                              jnp.squeeze(cql_q2) - cql_logp])
 
@@ -233,11 +236,12 @@ class CQLAgent:
 
             # Loss weight form Dopamine
             total_loss = 0.5 * critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
-            log_info = {"q1": q1, "q2": q2, "alpha": alpha,
-                        "critic_loss": critic_loss, "actor_loss": actor_loss,
-                        "alpha_loss": alpha_loss, "cql1_loss": cql1_loss,
-                        "cql2_loss": cql2_loss, 
-                        "q1_random": cql_q1_random.mean(), "q2_random": cql_q2_random.mean()}
+            log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
+                        "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, 
+                        "q1": q1, "q2": q2, "cql_q1": cql_q1.mean(), "cql_q2": cql_q2.mean(),
+                        "cql_next_q1": cql_next_q1.mean(), "cql_next_q2": cql_next_q2.mean(),
+                        "random_q1": cql_random_q1.mean(), "random_q2": cql_random_q2.mean(),
+                        "alpha": alpha, "logp": logp, "logp_next_action": logp_next_action}
             # if self.with_lagrange:
             #     log_info.update({"cql_alpha": 0.0})
 
@@ -337,15 +341,15 @@ class CQLAgent:
             _, cql_sampled_actions, cql_logp = self.actor.apply({"params": frozen_actor_params}, rng3, repeat_observations)
             _, cql_next_actions, cql_logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng4, repeat_next_observations)
 
-            cql_q1_random, cql_q2_random = self.critic.apply({"params": critic_params}, repeat_observations, cql_random_actions)
+            cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_random_actions)
             cql_q1, cql_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_sampled_actions)
             cql_next_q1, cql_next_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_next_actions)
 
             random_density = np.log(0.5 ** self.act_dim)
-            cql_concat_q1 = jnp.concatenate([jnp.squeeze(cql_q1_random) - random_density,
+            cql_concat_q1 = jnp.concatenate([jnp.squeeze(cql_random_q1) - random_density,
                                              jnp.squeeze(cql_next_q1) - cql_logp_next_action,
                                              jnp.squeeze(cql_q1) - cql_logp])
-            cql_concat_q2 = jnp.concatenate([jnp.squeeze(cql_q2_random) - random_density,
+            cql_concat_q2 = jnp.concatenate([jnp.squeeze(cql_random_q2) - random_density,
                                              jnp.squeeze(cql_next_q2) - cql_logp_next_action,
                                              jnp.squeeze(cql_q2) - cql_logp])
 
@@ -367,10 +371,10 @@ class CQLAgent:
 
             # Loss weight form Dopamine
             total_loss = 0.5 * critic_loss + actor_loss + alpha_loss + cql_alpha_loss + cql1_loss + cql2_loss
-            log_info = {"q1": q1, "q2": q2, "alpha": alpha, "cql_alpha": cql_alpha,
-                        "critic_loss": critic_loss, "actor_loss": actor_loss,
-                        "alpha_loss": alpha_loss, "cql1_loss": cql1_loss,
-                        "cql2_loss": cql2_loss, "cql_alpha_loss": cql_alpha_loss, 
+            log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss,
+                        "alpha_loss": alpha_loss, "cql_loss": (cql1_loss+cql2_loss)/2, 
+                        "alpha": alpha, "cql_alpha": cql_alpha,
+                        "q1": q1, "q2": q2,
                         "ood_q1": cql_ood_q1, "ood_q2": cql_ood_q2}
             if self.with_lagrange:
                 log_info.update({"cql_alpha": 0.0})

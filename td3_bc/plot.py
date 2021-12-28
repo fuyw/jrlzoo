@@ -12,7 +12,7 @@ linestyles = ['solid', 'dashed', 'dashdot', 'dotted']
 
 
 
-envs = ["halfcheetah-medium-v0", "hopper-medium-v0"]
+envs = ["halfcheetah-medium-v2", "hopper-medium-v2"]
 
 # envs=[
 #     "halfcheetah-random-v0",
@@ -68,7 +68,7 @@ def plot_ax(ax, data, fill_color, title=None, log=False, label=None):
         ax.plot(range(len(mu)), mu, color=fill_color, ls='solid', lw=0.6)
     ax.fill_between(range(len(mu)), mu+sigma, mu-sigma, alpha=0.3, edgecolor=fill_color, facecolor=fill_color)
     if title:
-        ax.set_title(title, fontsize=8.5, pad=2.5)
+        ax.set_title(title, fontsize=8.5, pad=8)
     ax.grid(True, alpha=0.3, lw=0.3)
     ax.xaxis.set_ticks_position('none') 
     ax.yaxis.set_ticks_position('none') 
@@ -102,6 +102,19 @@ def plot_exp(seeds=True):
     plt.savefig('imgs/ten_seeds_td3.png', dpi=720)
 
 
+def plot_one():
+    # env = 'td3bc_halfcheetah-medium-v0'
+    env = 'td3bc_halfcheetah-medium-v2'
+
+    data = read_data(env_name=f'{env}', window=5, num=5)
+    origin_data = np.mean(read_data(env_name=f'{env}', window=1, num=5)[-10:, :], axis=0)
+    mu = np.mean(origin_data)
+    std = np.std(origin_data) 
+    _, ax = plt.subplots()
+    plot_ax(ax, data, colors[0], title=f'{env} {mu:.2f}({std:.2f})')
+    plt.savefig(f'{env}.png')
+
 
 if __name__ == '__main__':
-    plot_exp()
+    # plot_exp()
+    plot_one()

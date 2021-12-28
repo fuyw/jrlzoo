@@ -13,10 +13,7 @@ from utils import ReplayBuffer
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 
-def eval_policy(agent: CQLAgent,
-                env_name: str,
-                seed: int,
-                eval_episodes: int = 10) -> float:
+def eval_policy(agent: CQLAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
     eval_rng = jax.random.PRNGKey(seed + 100)
@@ -40,7 +37,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", default="hopper-medium-v2")
     parser.add_argument("--seed", default=0, type=int)
-    parser.add_argument("--lr_actor", default=1e-4, type=float)
+    parser.add_argument("--lr_actor", default=3e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
     parser.add_argument("--eval_freq", default=int(5e3), type=int)
@@ -51,8 +48,9 @@ def get_args():
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
+    parser.add_argument("--backup_entropy", default=False, action="store_true")
     parser.add_argument("--with_lagrange", default=False, action="store_true")
-    parser.add_argument("--lagrange_thresh", default=1.0, type=float)
+    parser.add_argument("--lagrange_thresh", default=5.0, type=float)
     args = parser.parse_args()
     return args
 
@@ -78,6 +76,7 @@ def main(args):
                      lr=args.lr,
                      lr_actor=args.lr_actor,
                      auto_entropy_tuning=args.auto_entropy_tuning,
+                     backup_entropy=args.backup_entropy,
                      target_entropy=args.target_entropy,
                      with_lagrange=args.with_lagrange,
                      lagrange_thresh=args.lagrange_thresh)
@@ -106,23 +105,27 @@ def main(args):
             logs.append(log_info)
             if args.with_lagrange:
                 print(
-                    f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
-                    f"actor_loss: {log_info['actor_loss']:.3f}, alpha_loss: {log_info['alpha_loss']:.3f}, "
-                    f"alpha: {log_info['alpha']:.3f}, cql_alpha: {log_info['cql_alpha']:.3f}, "
-                    f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}, "
-                    f"ood_q1: {log_info['ood_q1']:.3f}, ood_q2: {log_info['ood_q2']:.3f}"
+                    f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.2f}, "
+                    f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, "
+                    f"alpha: {log_info['alpha']:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}, "
+                    f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
+                    f"ood_q1: {log_info['ood_q1']:.2f}, ood_q2: {log_info['ood_q2']:.2f}"
                 )
             else:
                 print(
-                    f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
-                    f"actor_loss: {log_info['actor_loss']:.3f}, alpha_loss: {log_info['alpha_loss']:.3f}, "
-                    f"alpha: {log_info['alpha']:.3f}, "
-                    f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}, "
-                    f"random_q1: {log_info['q1_random']:.3f}, random_q2: {log_info['q2_random']:.3f}"
+                    f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.2f}, "
+                    f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, "
+                    f"cql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}, "
+                    f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
+                    f"cql_q1: {log_info['cql_q1']:.2f}, cql_q2: {log_info['cql_q2']:.2f}, "
+                    f"cql_next_q1: {log_info['cql_next_q1']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}, "
+                    f"random_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
+                    f"alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}, "
+                    f"logp_next_action: {log_info['logp_next_action']:.2f}"
                 )
 
     # Save logs
-    log_name = f"t{args.lagrange_thresh}_s{args.seed}"
+    log_name = f"Backup_entropy{int(args.backup_entropy)}_s{args.seed}"
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
