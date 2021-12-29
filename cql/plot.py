@@ -75,19 +75,22 @@ def plot_exp():
     plt.savefig('sac.png', dpi=720)
 
 
-def plot_single_run(fname1, fname2):
-    df = pd.read_csv(fname1)
+def plot_single_run():
+    df = pd.read_csv('/usr/local/data/yuweifu/jaxrl/cql/logs/hopper-medium-v2/Backup_entropy0_s3.csv')
     x = df['reward'].values
-    plt.plot(range(len(x)), x, label='no entropy')
+    r1 = x[-10:].mean()
+    plt.plot(range(len(x)), x, label=f'my: {r1:.2f}')
 
-    df = pd.read_csv(fname2)
-    x = df['reward'].values
-    plt.plot(range(len(x)), x, label='with entropy')
-    plt.title(label='compare entropy')
+    df = pd.read_csv('/usr/local/data/yuweifu/jaxrl/benchmarks/logs/hopper-medium-v2/hopper-medium-s3.csv')
+    df = df[['sac/average_qf1', 'sac/average_qf2', 'sac/policy_loss', 'sac/qf1_loss', 'sac/qf2_loss', 'average_return', 'average_normalizd_return']]
+    idx = [i*5-1 for i in range(1, len(df) // 5 +1)]
+    df = df.loc[idx] 
+    x = (df['average_normalizd_return'] * 100).values
+    r2 = x[-10:].mean()
+    plt.plot(range(len(x)), x, label=f'jaxcql: {r2:.2f}')
+    plt.legend()
     plt.savefig('1.png')
 
 if __name__ == '__main__':
     # plot_exp()
-    f1 = 'logs/hopper-medium-v2/Backup_entropy0_s0.csv'
-    f2 = 'logs/hopper-medium-v2/Backup_entropy1_s0.csv'
-    plot_single_run(f1, f2)
+    plot_single_run()

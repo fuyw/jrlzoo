@@ -13,7 +13,7 @@ from utils import Batch
 
 
 LOG_STD_MAX = 2.
-LOG_STD_MIN = -10.
+LOG_STD_MIN = -20.
 
 kernel_initializer = jax.nn.initializers.glorot_uniform()
 
@@ -83,7 +83,7 @@ class CQLAgent:
                  tau: float = 0.005,
                  gamma: float = 0.99,
                  lr: float = 3e-4,
-                 lr_actor: float = 1e-4,
+                 lr_actor: float = 3e-4,
                  auto_entropy_tuning: bool = True,
                  target_entropy: Optional[float] = None,
                  backup_entropy: bool = False,
@@ -235,7 +235,7 @@ class CQLAgent:
             cql2_loss = (jax.scipy.special.logsumexp(cql_concat_q2) - q2) * self.min_q_weight
 
             # Loss weight form Dopamine
-            total_loss = 0.5 * critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
+            total_loss = critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
             log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
                         "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, 
                         "q1": q1, "q2": q2, "cql_q1": cql_q1.mean(), "cql_q2": cql_q2.mean(),
@@ -273,7 +273,6 @@ class CQLAgent:
         alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
 
         return log_info, actor_state, critic_state, alpha_state
-
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step_lag(self,
@@ -410,7 +409,6 @@ class CQLAgent:
 
         return log_info, actor_state, critic_state, alpha_state, cql_alpha_state
 
-
     @functools.partial(jax.jit, static_argnames=("self"))
     def update_target_params(self, params: FrozenDict, target_params: FrozenDict):
         def _update(param, target_param):
@@ -431,9 +429,7 @@ class CQLAgent:
 
         # Sample from the buffer
         batch = replay_buffer.sample(batch_size)
-
         self.rng, key = jax.random.split(self.rng)
-
         if self.with_lagrange:
             (log_info, self.actor_state, self.critic_state, self.alpha_state, self.cql_alpha_state) =\
                 self.train_step(batch, self.critic_target_params, self.actor_state, self.critic_state,

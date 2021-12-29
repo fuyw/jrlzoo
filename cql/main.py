@@ -23,8 +23,7 @@ def eval_policy(agent: CQLAgent, env_name: str, seed: int, eval_episodes: int = 
         obs, done = eval_env.reset(), False
         while not done:
             t += 1
-            eval_rng, action = agent.select_action(agent.actor_state.params,
-                                                   eval_rng, np.array(obs), True)
+            eval_rng, action = agent.select_action(agent.actor_state.params, eval_rng, np.array(obs), True)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -125,7 +124,7 @@ def main(args):
                 )
 
     # Save logs
-    log_name = f"Backup_entropy{int(args.backup_entropy)}_s{args.seed}"
+    log_name = f"s{args.seed}"
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
