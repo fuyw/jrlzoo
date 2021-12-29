@@ -76,12 +76,12 @@ def plot_exp():
 
 
 def plot_single_run():
-    df = pd.read_csv('/usr/local/data/yuweifu/jaxrl/cql/logs/hopper-medium-v2/Backup_entropy0_s3.csv')
+    df = pd.read_csv('/usr/local/data/yuweifu/jaxrl/cql/logs/hopper-medium-v2/s1.csv')
     x = df['reward'].values
     r1 = x[-10:].mean()
     plt.plot(range(len(x)), x, label=f'my: {r1:.2f}')
 
-    df = pd.read_csv('/usr/local/data/yuweifu/jaxrl/benchmarks/logs/hopper-medium-v2/hopper-medium-s3.csv')
+    df = pd.read_csv('/usr/local/data/yuweifu/jaxrl/benchmarks/logs/hopper-medium-v2/hopper-medium-s1.csv')
     df = df[['sac/average_qf1', 'sac/average_qf2', 'sac/policy_loss', 'sac/qf1_loss', 'sac/qf2_loss', 'average_return', 'average_normalizd_return']]
     idx = [i*5-1 for i in range(1, len(df) // 5 +1)]
     df = df.loc[idx] 
@@ -90,6 +90,55 @@ def plot_single_run():
     plt.plot(range(len(x)), x, label=f'jaxcql: {r2:.2f}')
     plt.legend()
     plt.savefig('1.png')
+
+
+
+def plot_one_env():
+    # res = []
+    # for i in range(1, 10):
+    #     df = pd.read_csv(f'/usr/local/data/yuweifu/jaxrl/benchmarks/logs/hopper-medium-v2/hopper-medium-s{i}.csv', index_col=0)
+    #     df = df[['sac/average_qf1', 'sac/average_qf2', 'sac/policy_loss', 'sac/qf1_loss', 'sac/qf2_loss', 'average_return', 'average_normalizd_return']]
+    #     idx = [i*5-1 for i in range(1, len(df) // 5 +1)]
+    #     df = df.loc[idx]
+    #     df['average_normalizd_return'] *= 100
+    #     res.append(df['average_normalizd_return'].values)
+
+    # data = np.array(res).T
+    # sigma = np.std(data, axis=1)
+    # mu = np.mean(data, axis=1)
+    # _, ax = plt.subplots()
+    # rew = data[-10:, :].reshape(-1).mean()
+    # ax.plot(range(len(mu)), mu, ls='solid', lw=0.6, label=f'jaxrl({rew:.2f})')
+    # ax.fill_between(range(len(mu)), mu+sigma, mu-sigma, alpha=0.3)  #, edgecolor=fill_color, facecolor=fill_color)
+
+    res = []
+    for i in range(4):
+        df = pd.read_csv(f'/usr/local/data/yuweifu/jaxrl/cql/logs/hopper-medium-v2_glurot/Backup_entropy0_s{i}.csv', index_col=0)
+        res.append(df['reward'].values)
+
+    data = np.array(res).T
+    sigma = np.std(data, axis=1)
+    mu = np.mean(data, axis=1)
+    _, ax = plt.subplots()
+    rew = data[-10:, :].reshape(-1).mean()
+    ax.plot(range(len(mu)), mu, ls='solid', lw=0.6, label=f'jaxrl({rew:.2f})')
+    ax.fill_between(range(len(mu)), mu+sigma, mu-sigma, alpha=0.3)  #, edgecolor=fill_color, facecolor=fill_color)
+
+
+    res2 = []
+    for i in [0,1,2,3,4,8]:
+        df = pd.read_csv(f'/usr/local/data/yuweifu/jaxrl/cql/logs/hopper-medium-v2/s{i}.csv', index_col=0)
+        res2.append(df['reward'].values)
+    data2 = np.array(res2).T
+    sigma2 = np.std(data2, axis=1)
+    mu2 = np.mean(data2, axis=1)
+    rew2 = data2[-10:, :].reshape(-1).mean()
+    ax.plot(range(len(mu2)), mu2, ls='solid', color='red', lw=0.6, label=f'myjax({rew2:.2f})')
+    ax.fill_between(range(len(mu2)), mu2+sigma2, mu2-sigma2, alpha=0.3, edgecolor='red', facecolor='red')
+    ax.legend()
+    plt.savefig('b.png')
+
+
 
 if __name__ == '__main__':
     # plot_exp()
