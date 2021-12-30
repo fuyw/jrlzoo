@@ -143,9 +143,10 @@ def plot_seeds():
     _, ax = plt.subplots()
     for seed in [0, 1]:
         df = pd.read_csv(f'{fdir}/s{seed}.csv')
-        ax.plot(range(len(df)), df['reward'], label=f'{seed}')
         if len(df) == 201:
-            print(f"seed {seed}: reward = {df['reward'].iloc[-10:].mean():.2f}")
+            reward = df['reward'].iloc[-10:].mean()
+            ax.plot(range(len(df)), df['reward'], label=f's{seed}: {reward:.2f}')
+    plt.legend()
     plt.savefig('seeds.png')
 
 
