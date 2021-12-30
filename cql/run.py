@@ -17,7 +17,7 @@ def run():
             t_thread.start()
             threads.append(t_thread)
         [t.join() for t in threads]
-        time.sleep(3600 * 3)
+        time.sleep(3600 * 2)
 
 
 if __name__ == '__main__':

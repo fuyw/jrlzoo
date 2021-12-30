@@ -139,7 +139,18 @@ def plot_one_env():
     plt.savefig('b.png')
 
 
+def plot_seeds():
+    fdir = '/usr/local/data/yuweifu/jaxrl/cql/logs/hopper-medium-expert-v2_critic_loss_0.5'
+    _, ax = plt.subplots()
+    for seed in [0, 1]:
+        df = pd.read_csv(f'{fdir}/s{seed}.csv')
+        ax.plot(range(len(df)), df['reward'], label=f'{seed}')
+        if len(df) == 201:
+            print(f"seed {seed}: reward = {df['reward'].iloc[-10:].mean():.2f}")
+    plt.savefig('seeds.png')
+
 
 if __name__ == '__main__':
     # plot_exp()
-    plot_single_run()
+    # plot_single_run()
+    plot_seeds()

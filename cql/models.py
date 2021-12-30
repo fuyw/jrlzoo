@@ -207,7 +207,7 @@ class CQLAgent:
             if self.backup_entropy:
                 next_q -= alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
-            critic_loss = 0.5*(q1 - target_q)**2 + 0.5*(q2 - target_q)**2  # mse_loss
+            critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
 
             # CQL loss
             rng3, rng4 = jax.random.split(rng, 2)

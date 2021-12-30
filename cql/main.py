@@ -133,7 +133,7 @@ def main(args):
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{log_name}.csv")
     with open(f"{args.log_dir}/{args.env}/{log_name}.json", "w") as f:
-        f.write(vars(args), f)
+        json.dump(vars(args), f)
     # agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
 
 
