@@ -9,21 +9,15 @@ def single_exp(seed='0', env_name='HalfCheetah-v2'):
 
 
 def run():
-    tasks = [(i, 'hopper-medium-v2') for i in range(0, 5)]
-    threads = []
-    for (seed, env_name) in tasks:
-        t_thread = threading.Thread(target=single_exp, args=(seed, env_name,))
-        t_thread.start()
-        threads.append(t_thread)
-    [t.join() for t in threads]
-    tasks = [(i, 'hopper-medium-v2') for i in range(5, 10)]
-    time.sleep(3600 * 4.5)
-    threads = []
-    for (seed, env_name) in tasks:
-        t_thread = threading.Thread(target=single_exp, args=(seed, env_name,))
-        t_thread.start()
-        threads.append(t_thread)
-    [t.join() for t in threads]
+    for t in range(3):
+        tasks = [(i, 'hopper-medium-expert-v2') for i in range(2*t, 2*t+2)]
+        threads = []
+        for (seed, env_name) in tasks:
+            t_thread = threading.Thread(target=single_exp, args=(seed, env_name,))
+            t_thread.start()
+            threads.append(t_thread)
+        [t.join() for t in threads]
+        time.sleep(3600 * 3)
 
 
 if __name__ == '__main__':

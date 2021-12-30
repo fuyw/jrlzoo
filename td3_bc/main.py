@@ -9,7 +9,7 @@ from tqdm import trange
 from models import TD3, TD3_BC
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
+# os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 
 def eval_policy(agent: TD3_BC,

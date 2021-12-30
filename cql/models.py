@@ -207,11 +207,11 @@ class CQLAgent:
             if self.backup_entropy:
                 next_q -= alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
-            critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
+            critic_loss = 0.5*(q1 - target_q)**2 + 0.5*(q2 - target_q)**2  # mse_loss
 
             # CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
-            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim))
+            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim), minval=-1.0, maxval=1.0)
 
             # Sample 10 actions with current state
             repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0), repeats=self.num_random, axis=0)

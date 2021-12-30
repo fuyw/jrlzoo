@@ -1,6 +1,7 @@
 import d4rl
 import gym
 import jax
+import json
 import os
 import time
 import numpy as np
@@ -34,7 +35,7 @@ def eval_policy(agent: CQLAgent, env_name: str, seed: int, eval_episodes: int = 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="hopper-medium-v2")
+    parser.add_argument("--env", default="hopper-medium-expert-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--lr_actor", default=3e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
@@ -131,6 +132,8 @@ def main(args):
     os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{log_name}.csv")
+    with open(f"{args.log_dir}/{args.env}/{log_name}.json", "w") as f:
+        f.write(vars(args), f)
     # agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
 
 
