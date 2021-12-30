@@ -242,8 +242,6 @@ class CQLAgent:
                         "cql_next_q1": cql_next_q1.mean(), "cql_next_q2": cql_next_q2.mean(),
                         "random_q1": cql_random_q1.mean(), "random_q2": cql_random_q2.mean(),
                         "alpha": alpha, "logp": logp, "logp_next_action": logp_next_action}
-            # if self.with_lagrange:
-            #     log_info.update({"cql_alpha": 0.0})
 
             return total_loss, log_info
 

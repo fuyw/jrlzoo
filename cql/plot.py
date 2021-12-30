@@ -92,7 +92,6 @@ def plot_single_run():
     plt.savefig('1.png')
 
 
-
 def plot_one_env():
     # res = []
     # for i in range(1, 10):
@@ -140,7 +139,7 @@ def plot_one_env():
 
 
 def plot_seeds():
-    fdir = '/usr/local/data/yuweifu/jaxrl/cql/logs/hopper-medium-expert-v2_critic_loss_0.5'
+    fdir = '/usr/local/data/yuweifu/jaxrl/cql/logs/hopper-medium-expert-v2'
     _, ax = plt.subplots()
     for seed in [0, 1]:
         df = pd.read_csv(f'{fdir}/s{seed}.csv')

@@ -109,7 +109,7 @@ def main(args):
                     f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, "
                     f"alpha: {log_info['alpha']:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}, "
                     f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
-                    f"ood_q1: {log_info['ood_q1']:.2f}, ood_q2: {log_info['ood_q2']:.2f}"
+                    f"ood_q1: {log_info['ood_q1']:.2f}, ood_q2: {log_info['ood_q2']:.2f}"\n
                 )
             else:
                 print(
@@ -121,7 +121,7 @@ def main(args):
                     f"cql_next_q1: {log_info['cql_next_q1']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}, "
                     f"random_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
                     f"alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}, "
-                    f"logp_next_action: {log_info['logp_next_action']:.2f}"
+                    f"logp_next_action: {log_info['logp_next_action']:.2f}"\n
                 )
 
     # Save logs
