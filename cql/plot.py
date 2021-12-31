@@ -40,8 +40,8 @@ def plot_ax(ax, data, fill_color, title=None, log=False, label=None):
     if title:
         ax.set_title(title, fontsize=8.5, pad=2.5)
     ax.grid(True, alpha=0.3, lw=0.3)
-    ax.xaxis.set_ticks_position('none') 
-    ax.yaxis.set_ticks_position('none') 
+    ax.xaxis.set_ticks_position('none')
+    ax.yaxis.set_ticks_position('none')
     ax.set_xticks(range(0, 240, 40))
     ax.set_xticklabels([0, 0.2, 0.4, 0.6, 0.8, 1])
 
@@ -84,7 +84,7 @@ def plot_single_run():
     df = pd.read_csv('/usr/local/data/yuweifu/jaxrl/benchmarks/logs/hopper-medium-v2/hopper-medium-s1.csv')
     df = df[['sac/average_qf1', 'sac/average_qf2', 'sac/policy_loss', 'sac/qf1_loss', 'sac/qf2_loss', 'average_return', 'average_normalizd_return']]
     idx = [i*5-1 for i in range(1, len(df) // 5 +1)]
-    df = df.loc[idx] 
+    df = df.loc[idx]
     x = (df['average_normalizd_return'] * 100).values
     r2 = x[-10:].mean()
     plt.plot(range(len(x)), x, label=f'jaxcql: {r2:.2f}')
@@ -138,19 +138,24 @@ def plot_one_env():
     plt.savefig('b.png')
 
 
-def plot_seeds():
-    fdir = '/usr/local/data/yuweifu/jaxrl/cql/logs/hopper-medium-expert-v2'
+def plot_seeds(env_name="halfcheetah-medium-expert-v2"):
+    fdir = f'/usr/local/data/yuweifu/jaxrl/cql/logs/{env_name}'
     _, ax = plt.subplots()
-    for seed in [0, 1]:
+    res = []
+    for seed in [0, 1, 2]:
         df = pd.read_csv(f'{fdir}/s{seed}.csv')
-        if len(df) == 201:
-            reward = df['reward'].iloc[-10:].mean()
+        if len(df) == 101:
+            reward = df['reward'].iloc[-5:].mean()
             ax.plot(range(len(df)), df['reward'], label=f's{seed}: {reward:.2f}')
+            res.append(reward)
     plt.legend()
-    plt.savefig('seeds.png')
+    res = np.array(res)
+    plt.title(f"{np.mean(res):.2f} ({np.std(res):.2f})")
+    plt.savefig(f'/usr/local/data/yuweifu/jaxrl/cql/logs/{env_name}/res.png')
 
 
 if __name__ == '__main__':
     # plot_exp()
     # plot_single_run()
-    plot_seeds()
+    env_name = "hopper-medium-v2"
+    plot_seeds(env_name)

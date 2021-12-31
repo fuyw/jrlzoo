@@ -20,12 +20,18 @@ kernel_initializer = jax.nn.initializers.glorot_uniform()
 
 class Actor(nn.Module):
     act_dim: int
+    hid_dim: int = 256
+    hid_layers: int = 3
 
     @nn.compact
     def __call__(self, rng: Any, observation: jnp.ndarray):
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc1")(observation))
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc2")(x))
-        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="fc3")(x)
+        x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")(observation))
+        x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc2")(x))
+        x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc3")(x))
+        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name=f"fc4")(x)
+        # for layer_idx in range(1, self.hid_layers):
+        #     x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc{layer_idx+1}")(x))
+        # x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name=f"fc{self.hid_layers + 1}")(x)
 
         mu, log_std = jnp.split(x, 2, axis=-1)
         log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
@@ -42,22 +48,28 @@ class Actor(nn.Module):
 
 class Critic(nn.Module):
     hid_dim: int = 256
+    hid_layers: int = 3
 
     @nn.compact
     def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observation, action], axis=-1)
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")(x))
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc2")(q))
-        q = nn.Dense(1, kernel_init=kernel_initializer, name="fc3")(q)
+        x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")(x))
+        x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc2")(x))
+        x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc3")(x))
+        q = nn.Dense(1, kernel_init=kernel_initializer, name=f"fc4")(x)
+        # for layer_idx in range(1, self.hid_layers):
+        #     x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc{layer_idx+1}")(x))
+        # q = nn.Dense(1, kernel_init=kernel_initializer, name=f"fc{self.hid_layers+1}")(x)
         return q
 
 
 class DoubleCritic(nn.Module):
     hid_dim: int = 256
+    hid_layers: int = 3
 
     def setup(self):
-        self.critic1 = Critic(self.hid_dim)
-        self.critic2 = Critic(self.hid_dim)
+        self.critic1 = Critic(self.hid_dim, self.hid_layers)
+        self.critic2 = Critic(self.hid_dim, self.hid_layers)
 
     def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         q1 = self.critic1(observation, action)
@@ -79,6 +91,8 @@ class CQLAgent:
     def __init__(self,
                  obs_dim: int,
                  act_dim: int,
+                 hid_dim: int = 256,
+                 hid_layer: int = 3,
                  seed: int = 42,
                  tau: float = 0.005,
                  gamma: float = 0.99,
@@ -94,6 +108,8 @@ class CQLAgent:
         self.update_step = 0
         self.obs_dim = obs_dim
         self.act_dim = act_dim
+        self.hid_dim = hid_dim
+        self.hid_layer = hid_layer
         self.tau = tau
         self.gamma = gamma
         self.lr = lr
@@ -113,7 +129,7 @@ class CQLAgent:
         dummy_act = jnp.ones([1, self.act_dim], dtype=jnp.float32)
 
         # Initialize the Actor
-        self.actor = Actor(self.act_dim)
+        self.actor = Actor(self.act_dim, self.hid_dim, self.hid_layer)
         actor_params = self.actor.init(actor_key, actor_key, dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(
             apply_fn=Actor.apply,
@@ -121,7 +137,7 @@ class CQLAgent:
             tx=optax.adam(self.lr_actor))
 
         # Initialize the Critic
-        self.critic = DoubleCritic()
+        self.critic = DoubleCritic(self.hid_dim, self.hid_layer)
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]
         self.critic_target_params = critic_params
         self.critic_state = train_state.TrainState.create(
@@ -207,7 +223,7 @@ class CQLAgent:
             if self.backup_entropy:
                 next_q -= alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
-            critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
+            critic_loss = 0.5*(q1 - target_q)**2 + 0.5*(q2 - target_q)**2
 
             # CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
@@ -238,7 +254,7 @@ class CQLAgent:
             total_loss = critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
             log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
                         "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, 
-                        "q1": q1, "q2": q2, "cql_q1": cql_q1.mean(), "cql_q2": cql_q2.mean(),
+                        "q1": q1, "q2": q2, "target_q": target_q, "cql_q1": cql_q1.mean(), "cql_q2": cql_q2.mean(),
                         "cql_next_q1": cql_next_q1.mean(), "cql_next_q2": cql_next_q2.mean(),
                         "random_q1": cql_random_q1.mean(), "random_q2": cql_random_q2.mean(),
                         "alpha": alpha, "logp": logp, "logp_next_action": logp_next_action}
@@ -428,14 +444,8 @@ class CQLAgent:
         # Sample from the buffer
         batch = replay_buffer.sample(batch_size)
         self.rng, key = jax.random.split(self.rng)
-        if self.with_lagrange:
-            (log_info, self.actor_state, self.critic_state, self.alpha_state, self.cql_alpha_state) =\
-                self.train_step(batch, self.critic_target_params, self.actor_state, self.critic_state,
-                                self.alpha_state, self.cql_alpha_state, key)
-        else:
-            (log_info, self.actor_state, self.critic_state, self.alpha_state) =\
-                self.train_step(batch, self.critic_target_params, self.actor_state, self.critic_state,
-                                self.alpha_state, key)
+        (log_info, self.actor_state, self.critic_state, self.alpha_state) = self.train_step(
+            batch, self.critic_target_params, self.actor_state, self.critic_state, self.alpha_state, key)
 
         # update target network
         params = self.critic_state.params
