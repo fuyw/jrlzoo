@@ -85,8 +85,8 @@ def main(args):
                      target_entropy=args.target_entropy,
                      with_lagrange=args.with_lagrange,
                      lagrange_thresh=args.lagrange_thresh)
-    # print(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
-    # print(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
+    print(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
+    print(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
 
     # Replay D4RL buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
@@ -94,7 +94,6 @@ def main(args):
 
     # Evaluate the untrained policy
     logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]
-    print(f"Eval reward of the untrained agent: {logs[0]['reward']:.2f}")  # 2.25
 
     # Initialize training stats
     start_time = time.time()
@@ -102,11 +101,6 @@ def main(args):
     # Train agent and evaluate policy
     for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, args.batch_size)
-        if t in [0, 1, 2]:
-            print(
-                f"\n# Step {t+1}:  critic_loss: {log_info['critic_loss']:.2f}, "
-                f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, "
-                f"cql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}, ")
 
         # save some evaluate time
         if ((t+1) >= int(9.5e5) and (t + 1) % args.eval_freq == 0) or ((t+1) <= int(9e5) and (t + 1) % (2*args.eval_freq) == 0):

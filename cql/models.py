@@ -26,12 +26,9 @@ class Actor(nn.Module):
     @nn.compact
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")(observation))
-        x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc2")(x))
-        x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc3")(x))
-        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name=f"fc4")(x)
-        # for layer_idx in range(1, self.hid_layers):
-        #     x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc{layer_idx+1}")(x))
-        # x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name=f"fc{self.hid_layers + 1}")(x)
+        for layer_idx in range(1, self.hid_layers):
+            x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc{layer_idx+1}")(x))
+        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name=f"fc{self.hid_layers + 1}")(x)
 
         mu, log_std = jnp.split(x, 2, axis=-1)
         log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
@@ -54,12 +51,9 @@ class Critic(nn.Module):
     def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observation, action], axis=-1)
         x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")(x))
-        x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc2")(x))
-        x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc3")(x))
-        q = nn.Dense(1, kernel_init=kernel_initializer, name=f"fc4")(x)
-        # for layer_idx in range(1, self.hid_layers):
-        #     x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc{layer_idx+1}")(x))
-        # q = nn.Dense(1, kernel_init=kernel_initializer, name=f"fc{self.hid_layers+1}")(x)
+        for layer_idx in range(1, self.hid_layers):
+            x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc{layer_idx+1}")(x))
+        q = nn.Dense(1, kernel_init=kernel_initializer, name=f"fc{self.hid_layers+1}")(x)
         return q
 
 
