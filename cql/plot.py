@@ -142,12 +142,14 @@ def plot_seeds(env_name="halfcheetah-medium-expert-v2"):
     fdir = f'/usr/local/data/yuweifu/jaxrl/cql/logs/{env_name}'
     _, ax = plt.subplots()
     res = []
-    for seed in [0, 1, 2]:
-        df = pd.read_csv(f'{fdir}/s{seed}.csv')
-        if len(df) == 101:
-            reward = df['reward'].iloc[-5:].mean()
-            ax.plot(range(len(df)), df['reward'], label=f's{seed}: {reward:.2f}')
-            res.append(reward)
+    for seed in [0]:
+        df = pd.read_csv(f'{fdir}/s{seed}.csv', index_col=0).set_index('step')
+        plot_idx = [10000 * i for i in range(101)]
+        res_idx = range(955000, 1005000, 5000)
+        reward = df.loc[res_idx, 'reward'].mean()
+        ax.plot(plot_idx, df.loc[plot_idx, 'reward'], label=f's{seed}: {reward:.2f}')
+        # ax.plot(df.index, df['reward'].values, label=f's{seed}: {reward:.2f}')
+        res.append(reward)
     plt.legend()
     res = np.array(res)
     plt.title(f"{np.mean(res):.2f} ({np.std(res):.2f})")

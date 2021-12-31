@@ -35,7 +35,7 @@ def eval_policy(agent: CQLAgent, env_name: str, seed: int, eval_episodes: int = 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="halfcheetah-medium-expert-v2")
+    parser.add_argument("--env", default="hopper-medium-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--hid_dim", default=256, type=int)
     parser.add_argument("--hid_layer", default=3, type=int)
@@ -103,7 +103,7 @@ def main(args):
         log_info = agent.update(replay_buffer, args.batch_size)
 
         # save some evaluate time
-        if ((t+1) >= int(9.5e5) and (t + 1) % args.eval_freq == 0) or ((t+1) <= int(9e5) and (t + 1) % (2*args.eval_freq) == 0):
+        if ((t+1) >= int(9.5e5) and (t + 1) % args.eval_freq == 0) or ((t+1) <= int(9.5e5) and (t + 1) % (2*args.eval_freq) == 0):
             eval_reward = eval_policy(agent, args.env, args.seed)
             log_info.update({
                 "step": t+1,
@@ -122,6 +122,7 @@ def main(args):
                 f"alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}, "
                 f"logp_next_action: {log_info['logp_next_action']:.2f}"
             )
+
 
     # Save logs
     log_name = f"s{args.seed}"
