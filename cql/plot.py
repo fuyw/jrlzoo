@@ -138,11 +138,11 @@ def plot_one_env():
     plt.savefig('b.png')
 
 
-def plot_seeds(env_name="halfcheetah-medium-expert-v2"):
+def plot_seeds(env_name="halfcheetah-medium-expert-v2", seeds=[0]):
     fdir = f'/usr/local/data/yuweifu/jaxrl/cql/logs/{env_name}'
     _, ax = plt.subplots()
     res = []
-    for seed in [0]:
+    for seed in seeds:
         df = pd.read_csv(f'{fdir}/s{seed}.csv', index_col=0).set_index('step')
         plot_idx = [10000 * i for i in range(101)]
         res_idx = range(955000, 1005000, 5000)
@@ -160,4 +160,5 @@ if __name__ == '__main__':
     # plot_exp()
     # plot_single_run()
     env_name = "hopper-medium-v2"
-    plot_seeds(env_name)
+    seeds = [0, 1]
+    plot_seeds(env_name, seeds)

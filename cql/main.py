@@ -35,10 +35,10 @@ def eval_policy(agent: CQLAgent, env_name: str, seed: int, eval_episodes: int = 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="hopper-medium-v2")
+    parser.add_argument("--env", default="halfcheetah-medium-expert-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--hid_dim", default=256, type=int)
-    parser.add_argument("--hid_layer", default=3, type=int)
+    parser.add_argument("--hid_layers", default=3, type=int)
     parser.add_argument("--lr_actor", default=1e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
@@ -74,7 +74,7 @@ def main(args):
     agent = CQLAgent(obs_dim=obs_dim,
                      act_dim=act_dim,
                      hid_dim=args.hid_dim,
-                     hid_layer=args.hid_layer,
+                     hid_layers=args.hid_layers,
                      seed=args.seed,
                      tau=args.tau,
                      gamma=args.gamma,

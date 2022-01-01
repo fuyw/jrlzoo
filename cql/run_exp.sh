@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Script to reproduce results
-
 envs=(
     "halfcheetah-medium-v2"
     "halfcheetah-medium-replay-v2"
@@ -13,8 +12,8 @@ envs=(
     "walker2d-medium-replay-v2"
     "walker2d-medium-expert-v2"
 )
-
-for ((i=0;i<1;i+=1))
+sleep 21600
+for ((i=2;i<3;i+=1))
 do 
     for env in ${envs[*]}
     do

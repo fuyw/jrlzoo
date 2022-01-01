@@ -86,7 +86,7 @@ class CQLAgent:
                  obs_dim: int,
                  act_dim: int,
                  hid_dim: int = 256,
-                 hid_layer: int = 3,
+                 hid_layers: int = 3,
                  seed: int = 42,
                  tau: float = 0.005,
                  gamma: float = 0.99,
@@ -103,7 +103,7 @@ class CQLAgent:
         self.obs_dim = obs_dim
         self.act_dim = act_dim
         self.hid_dim = hid_dim
-        self.hid_layer = hid_layer
+        self.hid_layers = hid_layers
         self.tau = tau
         self.gamma = gamma
         self.lr = lr
@@ -123,7 +123,7 @@ class CQLAgent:
         dummy_act = jnp.ones([1, self.act_dim], dtype=jnp.float32)
 
         # Initialize the Actor
-        self.actor = Actor(self.act_dim, self.hid_dim, self.hid_layer)
+        self.actor = Actor(self.act_dim, self.hid_dim, self.hid_layers)
         actor_params = self.actor.init(actor_key, actor_key, dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(
             apply_fn=Actor.apply,
@@ -131,7 +131,7 @@ class CQLAgent:
             tx=optax.adam(self.lr_actor))
 
         # Initialize the Critic
-        self.critic = DoubleCritic(self.hid_dim, self.hid_layer)
+        self.critic = DoubleCritic(self.hid_dim, self.hid_layers)
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]
         self.critic_target_params = critic_params
         self.critic_state = train_state.TrainState.create(
