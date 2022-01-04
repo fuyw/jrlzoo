@@ -141,7 +141,7 @@ def main(args):
     os.makedirs(f"{args.model_dir}/{args.algo}_{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.algo}_{args.env}/{args.seed}.csv")
-    agent.save(f"{args.model_dir}/{args.algo}_{args.env}/{args.seed}")
+    # agent.save(f"{args.model_dir}/{args.algo}_{args.env}/{args.seed}")
 
 
 if __name__ == "__main__":
