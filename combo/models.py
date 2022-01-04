@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 import functools
 from flax import linen as nn
 from flax.core import FrozenDict
@@ -74,6 +74,79 @@ class Scalar(nn.Module):
     def __call__(self):
         return self.value
 
+
+class EnsembleDense(nn.Module):
+    num_members: int
+    features: int
+    use_bias: bool = True
+    dtype: Any = jnp.float32
+    precision: Any = None
+    kernel_init: Callable = jax.nn.initializers.lecun_normal()
+    bias_init: Callable = jax.nn.initializers.zeros
+
+    @nn.compact
+    def __call__(self, inputs: jnp.array) -> jnp.array:
+        inputs = jnp.asarray(inputs, self.dtype)
+        kernel = self.param("kernel", self.kernel_initializer,
+                            (self.num_members, inputs.shape[-1], self.features))
+        kernel = jnp.array(kernel, self.dtype)
+        y = jnp.matmul(inputs, kernel)
+        if self.use_bias:
+            bias = self.param("bias", self.bias_init, (self.num_members, 1, self.features))
+            bias = jnp.astype(bias, self.dtype)
+            y += bias
+        return y
+
+
+class GaussianMLP(nn.Module):
+    features: int
+    num_members: int
+    out_dim: int
+    hid_dim: int = 256
+    max_log_var: float = 0.5
+    min_log_var: float = -10.0
+
+    def setup(self):
+        self.l1 = EnsembleDense(num_members=self.num_members, features=self.hid_dim, name="fc1")
+        self.l2 = EnsembleDense(num_members=self.num_members, features=self.hid_dim, name="fc2")
+        self.l3 = EnsembleDense(num_members=self.num_members, features=self.hid_dim, name="fc3")
+        self.l4 = EnsembleDense(num_members=self.num_members, features=self.hid_dim, name="fc4")
+        self.l5 = EnsembleDense(num_members=self.num_members, features=self.out_dim*2, name="fc5")
+
+    def __call__(self, observation, action):
+        x = jnp.concatenate([observation, action], axis=-1)
+        x = nn.swish(self.l1(x))
+        x = nn.swish(self.l2(x))
+        x = nn.swish(self.l3(x))
+        x = nn.swish(self.l4(x))
+        x = self.l5(x)
+
+        mu, log_var = jnp.split(x, 2, axis=-1)
+        # TODO:
+        # log_var = jnp.clip(log_std, self.min_log_var, self.max_log_var)
+        log_var = self.max_log_var - jax.nn.softplus(self.max_log_var - log_var)
+        log_var = self.min_log_var + jax.nn.softplus(log_var - self.min_log_var)
+        # return mu, log_var
+        return mu.mean(axis=0), log_var.mean(axis=0)
+
+
+
+class BNN:
+    """"Neural network models"""
+    def __init__(self, params):
+        self.name = params.get("name", "BNN")
+        self.model_dir = params.get("model_dir", None)
+
+        # mse_loss
+        # reward_loss
+
+        self.deterministic = params.get("deterministic", False)
+        self.gradient_penalty = params.get("gradient_penalty", 0.0)
+        self.gradient_penalty_scale = params.get("gradient_penalty_scale", 10.0)
+
+        self.multi_step_prediction = params.get('multi_step_prediction', False)
+        self.num_plan_steps = params.get('num_plan_steps', 1)
+        self.obs_dim = params.get('obs_dim', None)
 
 class COMBOAgent:
     def __init__(self,
