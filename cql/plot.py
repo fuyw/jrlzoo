@@ -153,12 +153,16 @@ def plot_seeds(env_name="halfcheetah-medium-expert-v2", seeds=[0]):
     plt.legend()
     res = np.array(res)
     plt.title(f"{np.mean(res):.2f} ({np.std(res):.2f})")
-    plt.savefig(f'/usr/local/data/yuweifu/jaxrl/cql/logs/{env_name}/res.png')
+    os.system(f'rm /usr/local/data/yuweifu/jaxrl/cql/logs/{env_name}/res*.png')
+    plt.savefig(f'/usr/local/data/yuweifu/jaxrl/cql/logs/{env_name}/res_{np.mean(res):.2f}.png')
 
 
 if __name__ == '__main__':
     # plot_exp()
     # plot_single_run()
-    env_name = "hopper-medium-v2"
-    seeds = [0, 1]
-    plot_seeds(env_name, seeds)
+    env_names = ["walker2d-medium-expert-v2", "walker2d-medium-replay-v2", "walker2d-medium-v2",
+                "halfcheetah-medium-expert-v2", "halfcheetah-medium-replay-v2", "halfcheetah-medium-v2",
+                "hopper-medium-expert-v2", "hopper-medium-replay-v2", "hopper-medium-v2",]
+    seeds = [0, 1, 2]
+    for env_name in env_names:
+        plot_seeds(env_name, seeds)

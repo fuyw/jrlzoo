@@ -12,8 +12,7 @@ envs=(
     "walker2d-medium-replay-v2"
     "walker2d-medium-expert-v2"
 )
-sleep 21600
-for ((i=2;i<3;i+=1))
+for ((i=4;i<5;i+=1))
 do 
     for env in ${envs[*]}
     do
