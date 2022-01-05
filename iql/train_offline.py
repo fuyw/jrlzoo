@@ -5,6 +5,7 @@ from typing import Tuple
 
 import gym
 import numpy as np
+import pandas as pd
 import time
 import tqdm
 from absl import app, flags
@@ -100,6 +101,7 @@ def main(_):
                 'reward': eval_stats['return'],
                 'time': (time.time() - start_time) / 60                
             })
+            logs.append(update_info)
 
     # Save logs
     os.makedirs('logs', exist_ok=True)
