@@ -40,7 +40,7 @@ class EnsembleDense(nn.Module):
 class GaussianMLP(nn.Module):
     num_members: int
     out_dim: int
-    hid_dim: int = 256
+    hid_dim: int = 200
     max_log_var: float = 0.5
     min_log_var: float = -10.0
 
@@ -114,7 +114,7 @@ targets, holdout_targets = targets[permutation[num_holdout:]], targets[permutati
 holdout_inputs = np.tile(holdout_inputs[None], [num_members, 1, 1])
 holdout_targets = np.tile(holdout_targets[None], [num_members, 1, 1])
 
-batch_size = 256
+batch_size = 1280
 batch_num = int(np.ceil(inputs.shape[0] / batch_size))
 
 
@@ -130,11 +130,23 @@ def loss_fn(params, x, y):
 grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
 
 
+@jax.jit
+def val_loss_fn(params, x, y):
+    mu, log_var = jax.lax.stop_gradient(model.apply({'params': params}, x))
+    inv_var = jnp.exp(-log_var)
+    mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
+    return mse_loss
+
+
+patience = 20
+optimal_params = None
+min_val_loss = np.inf
+
 for epoch in trange(50):
     shuffled_idxs = np.concatenate([np.random.permutation(np.arange(inputs.shape[0])).reshape(1, -1)
                                     for _ in range(num_members)], axis=0)
     model_loss, mse_loss, var_loss = [], [], []
-    for i in range(batch_num):
+    for i in trange(batch_num):
         batch_idxs = shuffled_idxs[:, i*batch_size:(i+1)*batch_size]  # (7, 256)
         batch_inputs = inputs[batch_idxs]       # (7, 256, 14)
         batch_targets = targets[batch_idxs]     # (7, 256, 12)
@@ -147,7 +159,17 @@ for epoch in trange(50):
         model_loss.append(log_info['model_loss'].item())
         mse_loss.append(log_info['mse_loss'].item())
         var_loss.append(log_info['var_loss'].item())
-    print(f'Epoch # {epoch+1}: model_loss = {sum(model_loss)/batch_num:.2f} '
-          f'mse_loss = {sum(mse_loss)/batch_num:.2f} '
-          f'var_loss = {sum(var_loss)/batch_num:.2f}')
 
+    val_loss = jnp.mean(jax.vmap(val_loss_fn, in_axes=(None, 1, 1))(
+        model_state.params, holdout_inputs, holdout_targets))
+    if val_loss < min_val_loss:
+        optimal_params = model_state.params
+        min_val_loss = val_loss
+    else:
+        patience += 1
+
+
+    print(f'Epoch # {epoch+1}: train_loss = {sum(model_loss)/batch_num:.3f} '
+          f'mse_loss = {sum(mse_loss)/batch_num:.3f} '
+          f'var_loss = {sum(var_loss)/batch_num:.3f} '
+          f'val_loss = {val_loss:.3f}')

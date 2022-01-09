@@ -137,16 +137,18 @@ class COMBOAgent:
                  gamma: float = 0.99,
                  lr: float = 3e-4,
                  lr_actor: float = 3e-4,
-                 lr_model: float = 1e-3,
-                 weight_decay: float = 3e-5,
                  auto_entropy_tuning: bool = True,
                  target_entropy: Optional[float] = None,
                  backup_entropy: bool = False,
                  num_random: int = 10,
                  with_lagrange: bool = False,
                  lagrange_thresh: int = 5.0,
-                 
+
+                 # COMBO
+                 lr_model: float = 1e-3,
+                 weight_decay: float = 3e-5,
                  num_members: int = 7,
+                 max_patience: int = 5,
                  real_ratio: float = 0.1,
                  holdout_ratio: float = 0.1):
 
@@ -157,8 +159,6 @@ class COMBOAgent:
         self.gamma = gamma
         self.lr = lr
         self.lr_actor = lr_actor
-        self.lr_model = lr_model
-        self.weight_decay = weight_decay
         self.auto_entropy_tuning = auto_entropy_tuning
         self.backup_entropy = backup_entropy
         if target_entropy is None:
@@ -167,6 +167,9 @@ class COMBOAgent:
             self.target_entropy = target_entropy
 
         # COMBO parameters
+        self.lr_model = lr_model
+        self.weight_decay = weight_decay
+        self.max_patience = max_patience
         self.real_ratio = real_ratio
         self.holdout_ratio = holdout_ratio
         self.num_members = num_members
@@ -228,18 +231,36 @@ class COMBOAgent:
                 params=self.log_cql_alpha.init(cql_key)["params"],
                 tx=optax.adam(self.lr))
  
-    def train_model(self, replay_buffer, batch_size=256, epochs=100, max_logging=1000):
+    def train_model(self, replay_buffer, batch_size=1024, epochs=100):
+        @jax.jit
+        def train_loss_fn(params, x, y):
+            mu, log_var = self.model.apply({'params': params}, x)  # (7, 12)
+            inv_var = jnp.exp(-log_var)
+            mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
+            var_loss = jnp.mean(jnp.mean(log_var, axis=-1), axis=-1)
+            total_loss = mse_loss + var_loss
+            return total_loss, {'mse_loss': mse_loss, 'var_loss': var_loss, 'train_loss': total_loss}
+
+        @jax.jit
+        def val_loss_fn(params, x, y):
+            mu, log_var = jax.lax.stop_gradient(self.model.apply({'params': params}, x))
+            inv_var = jnp.exp(-log_var)
+            mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
+            return mse_loss
+
+        grad_fn = jax.vmap(jax.value_and_grad(train_loss_fn, has_aux=True), in_axes=(None, 1, 1))
+
         # Preparing inputs and outputs
         observations = replay_buffer.observations
         actions = replay_buffer.actions
         next_observations = replay_buffer.next_observations
-        rewards = replay_buffer.rewards
+        rewards = replay_buffer.rewards.reshape(-1, 1)
         delta_observations = next_observations - observations
         inputs = np.concatenate([observations, actions], axis=-1)
         targets = np.concatenate([rewards, delta_observations], axis=-1)
 
         # Split into training and holdout sets
-        num_holdout = min(int(inputs.shape[0] * self.holdout_ratio), max_logging)
+        num_holdout = int(inputs.shape[0] * self.holdout_ratio)
         permutation = np.random.permutation(inputs.shape[0])
         inputs, holdout_inputs = inputs[permutation[num_holdout:]], inputs[permutation[:num_holdout]]
         targets, holdout_targets = targets[permutation[num_holdout:]], targets[permutation[:num_holdout]]
@@ -250,7 +271,7 @@ class COMBOAgent:
 
         for epoch in trange(epochs, desc='[Training the dynamics model]'):
             shuffled_idxs = np.concatenate([np.random.permutation(np.arange(inputs.shape[0])).reshape(1, -1)
-                                            for _ in range(self.num_members)], axis=0)
+                                            for _ in range(self.num_members)], axis=0)  # (7, N)
             for i in range(batch_num):
                 batch_idxs = shuffled_idxs[:, i*batch_size:(i+1)*batch_size]
                 batch_inputs = inputs[batch_idxs]
@@ -264,15 +285,16 @@ class COMBOAgent:
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_model_step(self, model_state, batch_inputs, batch_targets):
+
         def loss_fn(params: FrozenDict,
                     x: jnp.ndarray,
                     y: jnp.ndarray):
             mu, log_var = self.model.apply({"params": params}, x)
             inv_var = jnp.exp(-log_var)
-            mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * log_var, axis=-1), axis=-1)
+            mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
             var_loss = jnp.mean(jnp.mean(log_var, axis=-1), axis=-1)
-            total_loss = mse_loss + var_loss
-            return total_loss, {'mse_loss': mse_loss, 'var_loss': var_loss, 'model_loss': mse_loss+var_loss}
+            train_loss = mse_loss + var_loss
+            return train_loss, {'mse_loss': mse_loss, 'var_loss': var_loss, 'train_loss': train_loss}
 
         grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
         (_, log_info), gradients = grad_fn(model_state.params, batch_inputs, batch_targets)
