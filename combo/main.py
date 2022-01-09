@@ -42,13 +42,13 @@ import numpy as np
 import pandas as pd
 from tqdm import trange
 
-from models import CQLAgent
+from models import COMBOAgent
 from utils import ReplayBuffer
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 
-def eval_policy(agent: CQLAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
+def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
     eval_rng = jax.random.PRNGKey(seed + 100)
@@ -102,7 +102,7 @@ def main(args):
     np.random.seed(args.seed)
 
     # TD3 agent
-    agent = CQLAgent(obs_dim=obs_dim,
+    agent = COMBOAgent(obs_dim=obs_dim,
                      act_dim=act_dim,
                      seed=args.seed,
                      tau=args.tau,
@@ -124,6 +124,9 @@ def main(args):
 
     # Initialize training stats
     start_time = time.time()
+
+    # Train CMOBO models
+     
 
     # Train agent and evaluate policy
     for t in trange(args.max_timesteps):
