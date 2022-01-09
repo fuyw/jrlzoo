@@ -1,6 +1,6 @@
 #!/bin/bash
 
-seed=1
+seed=4
 envs=(
     "hopper-medium-v2"
     "hopper-medium-expert-v2"
