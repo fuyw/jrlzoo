@@ -54,3 +54,28 @@ class ReplayBuffer:
         self.observations = (self.observations - mean)/std
         self.next_observations = (self.next_observations - mean)/std
         return mean, std
+
+
+def get_training_data(replay_buffer, num_member=7, holdout_ratio=0.1):
+    # load the offline data
+    observations = replay_buffer.observations
+    actions = replay_buffer.actions
+    next_observations = replay_buffer.next_observations
+    rewards = replay_buffer.rewards.reshape(-1, 1)  # reshape for correct shape
+    delta_observations = next_observations - observations
+
+    # prepare for model inputs & outputs
+    inputs = np.concatenate([observations, actions], axis=-1)
+    targets = np.concatenate([rewards, delta_observations], axis=-1)
+
+    # validation dataset
+    num_holdout = int(inputs.shape[0] * holdout_ratio)
+    permutation = np.random.permutation(inputs.shape[0])
+
+    # split the dataset
+    inputs, holdout_inputs = inputs[permutation[num_holdout:]], inputs[permutation[:num_holdout]]
+    targets, holdout_targets = targets[permutation[num_holdout:]], targets[permutation[:num_holdout]]
+    holdout_inputs = np.tile(holdout_inputs[None], [num_member, 1, 1])
+    holdout_targets = np.tile(holdout_targets[None], [num_member, 1, 1])
+
+    return inputs, targets, holdout_inputs, holdout_targets

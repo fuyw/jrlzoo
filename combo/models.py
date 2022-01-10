@@ -102,7 +102,7 @@ class EnsembleDense(nn.Module):
 class GaussianMLP(nn.Module):
     num_members: int
     out_dim: int
-    hid_dim: int = 256
+    hid_dim: int = 200
     max_log_var: float = 0.5
     min_log_var: float = -10.0
 
