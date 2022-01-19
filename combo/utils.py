@@ -29,6 +29,20 @@ class ReplayBuffer:
 
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
+    
+    def add_batch(self, observations, actions, next_observations, rewards, dones):
+        add_num = len(actions)
+        add_idx = np.arange(self.ptr, self.ptr + add_num) % self.max_size
+
+        self.observations[add_idx] = observations
+        self.actions[add_idx] = actions
+        self.next_observations[add_idx] = next_observations
+        self.rewards[add_idx] = rewards
+        self.discounts[add_idx] = 1 - dones
+
+        self.ptr = (self.ptr + add_num + 1) % self.max_size
+        self.size = min(self.size + add_num, self.max_size)
+
 
     def sample(self, batch_size: int) -> Batch:
         idx = np.random.randint(0, self.size, size=batch_size)
@@ -56,7 +70,7 @@ class ReplayBuffer:
         return mean, std
 
 
-def get_training_data(replay_buffer, num_member=7, holdout_ratio=0.1):
+def get_training_data(replay_buffer, ensemble_num=7, holdout_num=1000):
     # load the offline data
     observations = replay_buffer.observations
     actions = replay_buffer.actions
@@ -69,13 +83,12 @@ def get_training_data(replay_buffer, num_member=7, holdout_ratio=0.1):
     targets = np.concatenate([rewards, delta_observations], axis=-1)
 
     # validation dataset
-    num_holdout = int(inputs.shape[0] * holdout_ratio)
     permutation = np.random.permutation(inputs.shape[0])
 
     # split the dataset
-    inputs, holdout_inputs = inputs[permutation[num_holdout:]], inputs[permutation[:num_holdout]]
-    targets, holdout_targets = targets[permutation[num_holdout:]], targets[permutation[:num_holdout]]
-    holdout_inputs = np.tile(holdout_inputs[None], [num_member, 1, 1])
-    holdout_targets = np.tile(holdout_targets[None], [num_member, 1, 1])
+    inputs, holdout_inputs = inputs[permutation[holdout_num:]], inputs[permutation[:holdout_num]]
+    targets, holdout_targets = targets[permutation[holdout_num:]], targets[permutation[:holdout_num]]
+    holdout_inputs = np.tile(holdout_inputs[None], [ensemble_num, 1, 1])
+    holdout_targets = np.tile(holdout_targets[None], [ensemble_num, 1, 1])
 
     return inputs, targets, holdout_inputs, holdout_targets

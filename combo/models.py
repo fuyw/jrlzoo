@@ -1,16 +1,19 @@
 from typing import Any, Callable, Optional
-import functools
 from flax import linen as nn
+from flax import serialization
 from flax.core import FrozenDict
 from flax.training import train_state
+import functools
+import gym
+import d4rl
 import distrax
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from static_fn import static_fns
 from tqdm import trange
-
-from utils import Batch
+from utils import Batch, ReplayBuffer, get_training_data
 
 
 LOG_STD_MAX = 2.
@@ -77,7 +80,7 @@ class Scalar(nn.Module):
 
 
 class EnsembleDense(nn.Module):
-    num_members: int
+    ensemble_num: int
     features: int
     use_bias: bool = True
     dtype: Any = jnp.float32
@@ -89,29 +92,29 @@ class EnsembleDense(nn.Module):
     def __call__(self, inputs: jnp.array) -> jnp.array:
         inputs = jnp.asarray(inputs, self.dtype)
         kernel = self.param("kernel", self.kernel_init,
-                            (self.num_members, inputs.shape[-1], self.features))
+                            (self.ensemble_num, inputs.shape[-1], self.features))
         kernel = jnp.asarray(kernel, self.dtype)
         y = jnp.einsum("ij,ijk->ik", inputs, kernel)
         if self.use_bias:
-            bias = self.param("bias", self.bias_init, (self.num_members, self.features))
+            bias = self.param("bias", self.bias_init, (self.ensemble_num, self.features))
             bias = jnp.asarray(bias, self.dtype)
             y += bias
         return y
 
 
 class GaussianMLP(nn.Module):
-    num_members: int
+    ensemble_num: int
     out_dim: int
     hid_dim: int = 200
     max_log_var: float = 0.5
     min_log_var: float = -10.0
 
     def setup(self):
-        self.l1 = EnsembleDense(num_members=self.num_members, features=self.hid_dim, name="fc1")
-        self.l2 = EnsembleDense(num_members=self.num_members, features=self.hid_dim, name="fc2")
-        self.l3 = EnsembleDense(num_members=self.num_members, features=self.hid_dim, name="fc3")
-        self.l4 = EnsembleDense(num_members=self.num_members, features=self.hid_dim, name="fc4")
-        self.l5 = EnsembleDense(num_members=self.num_members, features=self.out_dim*2, name="fc5")
+        self.l1 = EnsembleDense(ensemble_num=self.ensemble_num, features=self.hid_dim, name="fc1")
+        self.l2 = EnsembleDense(ensemble_num=self.ensemble_num, features=self.hid_dim, name="fc2")
+        self.l3 = EnsembleDense(ensemble_num=self.ensemble_num, features=self.hid_dim, name="fc3")
+        self.l4 = EnsembleDense(ensemble_num=self.ensemble_num, features=self.hid_dim, name="fc4")
+        self.l5 = EnsembleDense(ensemble_num=self.ensemble_num, features=self.out_dim*2, name="fc5")
 
     def __call__(self, x):
         x = nn.swish(self.l1(x))
@@ -121,17 +124,182 @@ class GaussianMLP(nn.Module):
         x = self.l5(x)
 
         mu, log_var = jnp.split(x, 2, axis=-1)
-        # TODO:
-        # log_var = jnp.clip(log_std, self.min_log_var, self.max_log_var)
         log_var = self.max_log_var - jax.nn.softplus(self.max_log_var - log_var)
         log_var = self.min_log_var + jax.nn.softplus(log_var - self.min_log_var)
         return mu, log_var
 
 
+class DynamicsModel:
+    def __init__(self,
+                 env: str = "hopper-medium-v2",
+                 seed: int = 0,
+                 ensemble_num: int = 7,
+                 elite_num: int = 5,
+                 holdout_num: int = 1000,
+                 lr: float = 1e-3,
+                 weight_decay: float = 3e-5,
+                 epochs: int = 100,
+                 batch_size: int = 1280,
+                 max_patience: int = 5,
+                 model_dir: str = "./ensemble_models"):
+
+        # Model parameters
+        self.seed = seed
+        self.lr = lr
+        self.static_fn = static_fns[env.split('-')[0]]
+        self.weight_decay = weight_decay
+        self.ensemble_num = ensemble_num
+        self.elite_num = elite_num
+        self.elite_models = None
+        self.holdout_num = holdout_num
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.max_patience = max_patience
+
+        # Environment & ReplayBuffer
+        self.env = gym.make(env)
+        obs_dim = self.env.observation_space.shape[0]
+        act_dim = self.env.action_space.shape[0]
+        self.obs_dim = obs_dim
+        self.replay_buffer = ReplayBuffer(obs_dim, act_dim)
+        self.replay_buffer.convert_D4RL(d4rl.qlearning_dataset(self.env))
+
+        # Initilaize the ensemble model
+        np.random.seed(seed)
+        rng = jax.random.PRNGKey(seed)
+        _, model_key = jax.random.split(rng, 2)
+        self.model = GaussianMLP(ensemble_num=ensemble_num, out_dim=obs_dim+1)
+        dummy_model_inputs = jnp.ones([ensemble_num, obs_dim+act_dim], dtype=jnp.float32)
+        model_params = self.model.init(model_key, dummy_model_inputs)["params"]
+        self.model_state = train_state.TrainState.create(
+            apply_fn=self.model.apply, params=model_params,
+            tx=optax.adamw(learning_rate=lr, weight_decay=weight_decay))
+        self.save_file = f"{model_dir}/{env}"
+        self.elite_mask = None
+
+    def load(self, filename):
+        with open(f"{filename}.ckpt", "rb") as f:
+            model_params = serialization.from_bytes(
+                self.model_state.params, f.read())
+        self.model_state = train_state.TrainState.create(
+            apply_fn=self.model.apply, params=model_params,
+            tx=optax.adamw(learning_rate=self.lr,
+            weight_decay=self.weight_decay))
+        elite_idx = np.loadtxt(f'{filename}_elite_models.txt', dtype=np.int32)[:self.elite_num]
+        self.elite_mask = jnp.eye(self.ensemble_num)[elite_idx, :]
+
+    def train(self):
+        inputs, targets, holdout_inputs, holdout_targets = get_training_data(
+            self.replay_buffer, self.ensemble_num, self.holdout_num)
+
+        patience = 0 
+        batch_num = int(np.ceil(len(inputs) / self.batch_size))
+        min_val_loss = np.inf
+        optial_params = None
+        res = []
+
+        # Loss functions
+        @jax.jit
+        def loss_fn(params, x, y):
+            mu, log_var = self.model.apply({"params": params}, x)
+            inv_var = jnp.exp(-log_var)
+            mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
+            var_loss = jnp.mean(jnp.mean(log_var, axis=-1), axis=-1)
+            train_loss = mse_loss + var_loss
+            return train_loss, {"mse_loss": mse_loss, "var_loss": var_loss, "train_loss": train_loss}
+
+        @jax.jit
+        def val_loss_fn(params, x, y):
+            mu, log_var = jax.lax.stop_gradient(self.model.apply({"params": params}, x))
+            inv_var = jnp.exp(-log_var)
+            mse_loss = jnp.mean(jnp.square(mu - y) * inv_var, axis=-1)
+            return mse_loss
+
+        # Wrap loss functions with jax.vmap
+        grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
+        val_loss_fn = jax.vmap(val_loss_fn, in_axes=(None, 1, 1))
+
+        for epoch in trange(self.epochs):
+            shuffled_idxs = np.concatenate([np.random.permutation(np.arange(
+                inputs.shape[0])).reshape(1, -1) for _ in range(self.ensemble_num)], axis=0)
+            train_loss, mse_loss, var_loss = [], [], []
+            for i in range(batch_num):
+                batch_idxs = shuffled_idxs[:, i*self.batch_size:(i+1)*self.batch_size]
+                batch_inputs = inputs[batch_idxs]  # (7, 256, 14)
+                batch_targets = targets[batch_idxs]  # (7, 256, 12)
+
+                (_, log_info), gradients = grad_fn(self.model_state.params, batch_inputs, batch_targets)
+                log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+                gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
+                self.model_state = self.model_state.apply_gradients(grads=gradients)
+
+                train_loss.append(log_info["train_loss"].item())
+                mse_loss.append(log_info["mse_loss"].item())
+                var_loss.append(log_info["var_loss"].item())
+        
+            val_loss = jnp.mean(val_loss_fn(self.model_state.params, holdout_inputs, holdout_targets), axis=0)  # (7,)
+            mean_val_loss = jnp.mean(val_loss)
+            if mean_val_loss < min_val_loss:
+                optimal_params = self.model_state.params
+                min_val_loss = mean_val_loss
+                elite_models = jnp.argsort(val_loss)  # find elite models
+                patience = 0
+            else:
+                patience += 1
+            if patience == self.max_patience:
+                print(f"Early stopping at epoch {epoch+1}.")
+                break
+
+            res.append((epoch, sum(train_loss)/batch_num, sum(mse_loss)/batch_num, sum(var_loss)/batch_num, mean_val_loss))
+            print(f"Epoch #{epoch+1}: train_loss = {sum(train_loss)/batch_num:.3f} "
+                  f"mse_loss = {sum(mse_loss)/batch_num:.3f} "
+                  f"var_loss = {sum(var_loss)/batch_num:.3f} "
+                  f"val_loss = {mean_val_loss:.3f} "
+                  f"val_loss1 = {val_loss}")
+
+        res_df = pd.DataFrame(res, columns=["epoch", "train_loss", "mse_loss", "var_loss", "val_loss"])
+        res_df.to_csv(f"{self.save_file}/s{self.seed}.csv")
+        with open(f"{self.save_file}/s{self.seed}.ckpt", "wb") as f:
+            f.write(serialization.to_bytes(optimal_params))
+        with open(f"{self.save_file}/s{self.seed}_elite_models.txt", "w") as f:
+            for idx in elite_models:
+                f.write(f"{idx}\n")
+    
+    def step(self, key, observations, actions):
+        model_idx = jax.random.randint(key, shape=(actions.shape[0],), minval=0, maxval=self.elite_num)
+        model_masks = self.elite_mask[model_idx].reshape(-1, self.ensemble_num, 1)
+
+        @jax.jit
+        def rollout(params, rng, observation, action, model_mask):
+            x = jnp.concatenate([observation, action], axis=-1).reshape(1, -1)
+            model_mu, model_log_var = self.model.apply({"params": params}, x)
+            model_std = jnp.sqrt(jnp.exp(model_log_var))  # (7, 12)
+            model_noise = jax.random.normal(rng, (self.ensemble_num, self.obs_dim+1))  # (7, 12)
+
+            reward_noise, observation_noise = jnp.split(model_noise, [1], axis=-1)     # (7, 1), (7, 11)
+            reward_mu, observation_mu = jnp.split(model_mu, [1], axis=-1)              # (7, 1), (7, 11)
+
+            model_next_observation = observation + jnp.sum(
+                model_mask*(observation_mu + observation_noise), axis=0)              # (1, 11)
+            model_reward = jnp.sum(model_mask * (reward_mu + reward_noise), axis=0)   # (1, 1)
+
+            return model_next_observation, model_reward
+        rollout = jax.vmap(rollout, in_axes=(None, 0, 0, 0, 0))
+        rollout_rng = jnp.stack(jax.random.split(key, num=actions.shape[0]))
+
+        next_observations, rewards = rollout(self.model_state.params, rollout_rng, observations,
+                                             actions, model_masks)
+
+        # judge terminals w.r.t. predefined static functions
+        terminals = self.static_fn.termination_fn(observations, actions, next_observations)
+        return next_observations, rewards.squeeze(), terminals.squeeze()
+
+
 class COMBOAgent:
     def __init__(self,
-                 obs_dim: int,
-                 act_dim: int,
+                 env: str = "hopper-medium-v2",
+                 obs_dim: int = 11,
+                 act_dim: int = 3,
                  seed: int = 42,
                  tau: float = 0.005,
                  gamma: float = 0.99,
@@ -145,11 +313,15 @@ class COMBOAgent:
                  lagrange_thresh: int = 5.0,
 
                  # COMBO
+                 horizon: int = 5,
                  lr_model: float = 1e-3,
                  weight_decay: float = 3e-5,
-                 num_members: int = 7,
+                 real_ratio: float = 0.5,
+                 ensemble_num: int = 7,
+                 elite_num: int = 5,
                  max_patience: int = 5,
-                 real_ratio: float = 0.1,
+                 batch_size: int = 256,
+                 rollout_batch_size: int = 10000,
                  holdout_ratio: float = 0.1):
 
         self.update_step = 0
@@ -167,21 +339,23 @@ class COMBOAgent:
             self.target_entropy = target_entropy
 
         # COMBO parameters
+        self.horizon = horizon
         self.lr_model = lr_model
         self.weight_decay = weight_decay
         self.max_patience = max_patience
-        self.real_ratio = real_ratio
         self.holdout_ratio = holdout_ratio
-        self.num_members = num_members
+        self.ensemble_num = ensemble_num
+        self.real_ratio = real_ratio 
 
         # Initialize random keys
         self.rng = jax.random.PRNGKey(seed)
-        self.rng, actor_key, critic_key, model_key = jax.random.split(self.rng, 4)
+        self.rng, self.rollout_rng = jax.random.split(self.rng, 2)
+        actor_key, critic_key, model_key = jax.random.split(self.rng, 3)
 
         # Dummy inputs
         dummy_obs = jnp.ones([1, self.obs_dim], dtype=jnp.float32)
         dummy_act = jnp.ones([1, self.act_dim], dtype=jnp.float32)
-        dummy_model_inputs = jnp.ones([self.num_members, self.obs_dim+self.act_dim], dtype=jnp.float32)
+        dummy_model_inputs = jnp.ones([self.ensemble_num, self.obs_dim+self.act_dim], dtype=jnp.float32)
 
         # Initialize the Actor
         self.actor = Actor(self.act_dim)
@@ -196,17 +370,12 @@ class COMBOAgent:
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]
         self.critic_target_params = critic_params
         self.critic_state = train_state.TrainState.create(
-            apply_fn=Critic.apply,
+            apply_fn=self.critic.apply,
             params=critic_params,
             tx=optax.adam(self.lr))
 
         # Initialize the Dynamics Model
-        self.model = GaussianMLP(self.num_members, self.obs_dim+1)
-        model_params = self.model.init(model_key, dummy_model_inputs)["params"]
-        self.model_state = train_state.TrainState.create(
-            apply_fn=GaussianMLP.apply,
-            params=model_params,
-            tx=optax.adamw(learning_rate=self.lr_model, weight_decay=self.weight_decay))
+        self.model = DynamicsModel(env, seed, ensemble_num, elite_num)
 
         # Entropy tuning
         if self.auto_entropy_tuning:
@@ -230,87 +399,21 @@ class COMBOAgent:
                 apply_fn=None,
                 params=self.log_cql_alpha.init(cql_key)["params"],
                 tx=optax.adam(self.lr))
- 
-    def train_model(self, replay_buffer, batch_size=1024, epochs=100):
-        @jax.jit
-        def train_loss_fn(params, x, y):
-            mu, log_var = self.model.apply({'params': params}, x)  # (7, 12)
-            inv_var = jnp.exp(-log_var)
-            mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
-            var_loss = jnp.mean(jnp.mean(log_var, axis=-1), axis=-1)
-            total_loss = mse_loss + var_loss
-            return total_loss, {'mse_loss': mse_loss, 'var_loss': var_loss, 'train_loss': total_loss}
 
-        @jax.jit
-        def val_loss_fn(params, x, y):
-            mu, log_var = jax.lax.stop_gradient(self.model.apply({'params': params}, x))
-            inv_var = jnp.exp(-log_var)
-            mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
-            return mse_loss
-
-        grad_fn = jax.vmap(jax.value_and_grad(train_loss_fn, has_aux=True), in_axes=(None, 1, 1))
-
-        # Preparing inputs and outputs
-        observations = replay_buffer.observations
-        actions = replay_buffer.actions
-        next_observations = replay_buffer.next_observations
-        rewards = replay_buffer.rewards.reshape(-1, 1)
-        delta_observations = next_observations - observations
-        inputs = np.concatenate([observations, actions], axis=-1)
-        targets = np.concatenate([rewards, delta_observations], axis=-1)
-
-        # Split into training and holdout sets
-        num_holdout = int(inputs.shape[0] * self.holdout_ratio)
-        permutation = np.random.permutation(inputs.shape[0])
-        inputs, holdout_inputs = inputs[permutation[num_holdout:]], inputs[permutation[:num_holdout]]
-        targets, holdout_targets = targets[permutation[num_holdout:]], targets[permutation[:num_holdout]]
-        holdout_inputs = np.tile(holdout_inputs[None], [self.num_members, 1, 1])
-        holdout_targets = np.tile(holdout_targets[None], [self.num_members, 1, 1])
-
-        batch_num = int(np.ceil(inputs.shape[0] / batch_size))
-
-        for epoch in trange(epochs, desc='[Training the dynamics model]'):
-            shuffled_idxs = np.concatenate([np.random.permutation(np.arange(inputs.shape[0])).reshape(1, -1)
-                                            for _ in range(self.num_members)], axis=0)  # (7, N)
-            for i in range(batch_num):
-                batch_idxs = shuffled_idxs[:, i*batch_size:(i+1)*batch_size]
-                batch_inputs = inputs[batch_idxs]
-                batch_targets = targets[batch_idxs]
-
-
-            # run validation
-
-            # print log info
-            print(f'Epoch {epoch+1}: ')
-
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def train_model_step(self, model_state, batch_inputs, batch_targets):
-
-        def loss_fn(params: FrozenDict,
-                    x: jnp.ndarray,
-                    y: jnp.ndarray):
-            mu, log_var = self.model.apply({"params": params}, x)
-            inv_var = jnp.exp(-log_var)
-            mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
-            var_loss = jnp.mean(jnp.mean(log_var, axis=-1), axis=-1)
-            train_loss = mse_loss + var_loss
-            return train_loss, {'mse_loss': mse_loss, 'var_loss': var_loss, 'train_loss': train_loss}
-
-        grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
-        (_, log_info), gradients = grad_fn(model_state.params, batch_inputs, batch_targets)
-
-        gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
-        log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
-
-        # Update TrainState
-        model_state = model_state.apply_gradients(grads=gradients)
-
-        return log_info, model_state
-
+        # replay buffer
+        self.batch_size = batch_size
+        self.rollout_batch_size = rollout_batch_size
+        self.real_batch_size = int(real_ratio * batch_size)
+        self.model_batch_size = batch_size - self.real_batch_size
+        self.masks = np.concatenate([np.ones(self.real_batch_size), np.zeros(self.model_batch_size)])
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
-                   batch: Batch,
+                   observations: jnp.array,
+                   actions: jnp.array,
+                   rewards: jnp.array,
+                   discounts: jnp.array,
+                   next_observations: jnp.array,
                    critic_target_params: FrozenDict,
                    actor_state: train_state.TrainState,
                    critic_state: train_state.TrainState,
@@ -321,7 +424,6 @@ class COMBOAgent:
         frozen_actor_params = actor_state.params
         frozen_critic_params = critic_state.params
 
-        observations, actions, rewards, discounts, next_observations = batch
         def loss_fn(actor_params: FrozenDict,
                     critic_params: FrozenDict,
                     alpha_params: FrozenDict,
@@ -330,6 +432,7 @@ class COMBOAgent:
                     reward: jnp.ndarray,
                     discount: jnp.ndarray,
                     next_observation: jnp.ndarray,
+                    mask: jnp.ndarray,
                     rng: jnp.ndarray):
             """compute loss for a single transition"""
             rng, rng1, rng2 = jax.random.split(rng, 3)
@@ -365,47 +468,45 @@ class COMBOAgent:
             target_q = reward + self.gamma * discount * next_q
             critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
 
-            # CQL loss
+            # COMBO CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
+
+            # sample random actions
             cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim))
 
-            # Sample 10 actions with current state
-            repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0), repeats=self.num_random, axis=0)
+            # repeat next observations
             repeat_next_observations = jnp.repeat(jnp.expand_dims(next_observation, axis=0), repeats=self.num_random, axis=0)
-            _, cql_sampled_actions, cql_logp = self.actor.apply({"params": frozen_actor_params}, rng3, repeat_observations)
+            cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params}, repeat_next_observations, cql_random_actions)
             _, cql_next_actions, cql_logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng4, repeat_next_observations)
-
-            cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_random_actions)
-            cql_q1, cql_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_sampled_actions)
-            cql_next_q1, cql_next_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_next_actions)
+            cql_next_q1, cql_next_q2 = self.critic.apply({"params": critic_params}, repeat_next_observations, cql_next_actions)
 
             random_density = np.log(0.5 ** self.act_dim)
-            cql_concat_q1 = jnp.concatenate([jnp.squeeze(cql_random_q1) - random_density,
-                                             jnp.squeeze(cql_next_q1) - cql_logp_next_action,
-                                             jnp.squeeze(cql_q1) - cql_logp])
-            cql_concat_q2 = jnp.concatenate([jnp.squeeze(cql_random_q2) - random_density,
-                                             jnp.squeeze(cql_next_q2) - cql_logp_next_action,
-                                             jnp.squeeze(cql_q2) - cql_logp])
+            cql_concat_q1 = jnp.concatenate([
+                jnp.squeeze(cql_random_q1) - random_density,
+                jnp.squeeze(cql_next_q1) - cql_logp_next_action,
+            ])
+            cql_concat_q2 = jnp.concatenate([
+                jnp.squeeze(cql_random_q2) - random_density,
+                jnp.squeeze(cql_next_q2) - cql_logp_next_action,
+            ])
 
-            cql1_loss = (jax.scipy.special.logsumexp(cql_concat_q1) - q1) * self.min_q_weight
-            cql2_loss = (jax.scipy.special.logsumexp(cql_concat_q2) - q2) * self.min_q_weight
+            # compute logsumexp loss w.r.t model_states
+            cql1_loss = (jax.scipy.special.logsumexp(cql_concat_q1) - q1 * mask / self.real_ratio) * self.min_q_weight
+            cql2_loss = (jax.scipy.special.logsumexp(cql_concat_q2) - q2 * mask / self.real_ratio) * self.min_q_weight
 
-            # Loss weight form Dopamine
             total_loss = critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
+
             log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
                         "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, 
-                        "q1": q1, "q2": q2, "cql_q1": cql_q1.mean(), "cql_q2": cql_q2.mean(),
-                        "cql_next_q1": cql_next_q1.mean(), "cql_next_q2": cql_next_q2.mean(),
+                        "q1": q1, "q2": q2,  "cql_next_q1": cql_next_q1.mean(), "cql_next_q2": cql_next_q2.mean(),
                         "random_q1": cql_random_q1.mean(), "random_q2": cql_random_q2.mean(),
                         "alpha": alpha, "logp": logp, "logp_next_action": logp_next_action}
-            # if self.with_lagrange:
-            #     log_info.update({"cql_alpha": 0.0})
 
             return total_loss, log_info
 
         grad_fn = jax.vmap(
             jax.value_and_grad(loss_fn, argnums=(0, 1, 2), has_aux=True),
-            in_axes=(None, None, None, 0, 0, 0, 0, 0, 0))
+            in_axes=(None, None, None, 0, 0, 0, 0, 0, 0, 0))
         rng = jnp.stack(jax.random.split(key, num=actions.shape[0]))
 
         (_, log_info), gradients = grad_fn(actor_state.params,
@@ -416,6 +517,7 @@ class COMBOAgent:
                                            rewards,
                                            discounts,
                                            next_observations,
+                                           self.masks,
                                            rng)
 
         gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
@@ -445,27 +547,49 @@ class COMBOAgent:
         mean_action, sampled_action, _ = self.actor.apply({"params": params}, sample_rng, observation)
         return rng, jnp.where(eval_mode, mean_action.flatten(), sampled_action.flatten())
 
-    def update_old(self, replay_buffer, batch_size: int = 256):
-        self.update_step += 1
+    def update(self, replay_buffer, model_buffer):
+        # rollout the model
+        # if self.update_step % 1000 == 0:
+        #     observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
+        #     sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
+        #     select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
+        #     for t in range(self.horizon):
+        #         self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
+        #         sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
+        #         next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
+        #         nonterminal_mask = ~dones
+        #         if nonterminal_mask.sum() == 0:
+        #             print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
+        #             break
+        #         model_buffer.add_batch(observations[nonterminal_mask],
+        #                             actions[nonterminal_mask],
+        #                             next_observations[nonterminal_mask],
+        #                             rewards[nonterminal_mask],
+        #                             dones[nonterminal_mask])
+        #         observations = next_observations[nonterminal_mask]
+        #         sample_rng = sample_rng[nonterminal_mask]
 
-        # Sample from the buffer
-        batch = replay_buffer.sample(batch_size)
+        # sample from real & model buffer
+        real_batch = replay_buffer.sample(self.real_batch_size)
+        model_batch = model_buffer.sample(self.model_batch_size)
+        concat_observations = np.concatenate([real_batch.observations, model_batch.observations], axis=0)
+        concat_actions = np.concatenate([real_batch.actions, model_batch.actions], axis=0)
+        concat_rewards = np.concatenate([real_batch.rewards, model_batch.rewards], axis=0)
+        concat_discounts = np.concatenate([real_batch.discounts, model_batch.discounts], axis=0)
+        concat_next_observations = np.concatenate([real_batch.next_observations, model_batch.next_observations], axis=0)
+
+        # CQL training with COMBO
         self.rng, key = jax.random.split(self.rng)
-        if self.with_lagrange:
-            (log_info, self.actor_state, self.critic_state, self.alpha_state, self.cql_alpha_state) =\
-                self.train_step(batch, self.critic_target_params, self.actor_state, self.critic_state,
-                                self.alpha_state, self.cql_alpha_state, key)
-        else:
-            (log_info, self.actor_state, self.critic_state, self.alpha_state) =\
-                self.train_step(batch, self.critic_target_params, self.actor_state, self.critic_state,
-                                self.alpha_state, key)
+        log_info, self.actor_state, self.critic_state, self.alpha_state = self.train_step(
+            concat_observations, concat_actions, concat_rewards, concat_discounts,
+            concat_next_observations, self.critic_target_params, self.actor_state,
+            self.critic_state, self.alpha_state, key
+        )
 
-        # update target network
+        # upate target network
         params = self.critic_state.params
         target_params = self.critic_target_params
         self.critic_target_params = self.update_target_params(params, target_params)
 
-        return log_info
-
-    def update(self, replay_buffer, batch_size: int = 256):
         self.update_step += 1
+        return log_info

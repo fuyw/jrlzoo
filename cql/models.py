@@ -135,7 +135,7 @@ class CQLAgent:
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]
         self.critic_target_params = critic_params
         self.critic_state = train_state.TrainState.create(
-            apply_fn=Critic.apply,
+            apply_fn=DoubleCritic.apply,
             params=critic_params,
             tx=optax.adam(self.lr))
 

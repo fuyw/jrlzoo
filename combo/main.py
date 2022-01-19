@@ -24,7 +24,7 @@ common_params = {
         'deterministic': False,
         'num_networks': 7,
         'num_elites': 5,
-        'real_ratio': 0.05,
+        'real_ratio': 0.5,
         'target_entropy': -3,
         'max_model_t': None,
         'rollout_length': 5,
@@ -102,22 +102,13 @@ def main(args):
     np.random.seed(args.seed)
 
     # TD3 agent
-    agent = COMBOAgent(obs_dim=obs_dim,
-                     act_dim=act_dim,
-                     seed=args.seed,
-                     tau=args.tau,
-                     gamma=args.gamma,
-                     lr=args.lr,
-                     lr_actor=args.lr_actor,
-                     auto_entropy_tuning=args.auto_entropy_tuning,
-                     backup_entropy=args.backup_entropy,
-                     target_entropy=args.target_entropy,
-                     with_lagrange=args.with_lagrange,
-                     lagrange_thresh=args.lagrange_thresh)
+    agent = COMBOAgent(obs_dim=obs_dim, act_dim=act_dim, seed=args.seed)
+    agent.model.load(f'ensemble_models/{args.env}/s{args.seed}')
 
-    # Replay D4RL buffer
+    # Replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
+    model_buffer = ReplayBuffer(obs_dim, act_dim)
 
     # Evaluate the untrained policy
     logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]
@@ -125,13 +116,10 @@ def main(args):
     # Initialize training stats
     start_time = time.time()
 
-    # Train CMOBO models
-     
-
     # Train agent and evaluate policy
     for t in trange(args.max_timesteps):
-        log_info = agent.update(replay_buffer, args.batch_size)
-
+        log_info = agent.update(replay_buffer, replay_buffer)
+        # log_info = agent.update(replay_buffer, model_buffer)
         if (t + 1) % args.eval_freq == 0:
             eval_reward = eval_policy(agent, args.env, args.seed)
             log_info.update({
@@ -143,23 +131,23 @@ def main(args):
             if args.with_lagrange:
                 print(
                     f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.2f}, "
-                    f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, "
-                    f"alpha: {log_info['alpha']:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}, "
-                    f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
-                    f"ood_q1: {log_info['ood_q1']:.2f}, ood_q2: {log_info['ood_q2']:.2f}"
-                )
+                    f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, ")
+                #     f"alpha: {log_info['alpha']:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}, "
+                #     f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
+                #     f"ood_q1: {log_info['ood_q1']:.2f}, ood_q2: {log_info['ood_q2']:.2f}"
+                # )
             else:
                 print(
                     f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.2f}, "
-                    f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, "
-                    f"cql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}, "
-                    f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
-                    f"cql_q1: {log_info['cql_q1']:.2f}, cql_q2: {log_info['cql_q2']:.2f}, "
-                    f"cql_next_q1: {log_info['cql_next_q1']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}, "
-                    f"random_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
-                    f"alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}, "
-                    f"logp_next_action: {log_info['logp_next_action']:.2f}"
-                )
+                    f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, ")
+                #     f"cql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}, "
+                #     f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
+                #     f"cql_q1: {log_info['cql_q1']:.2f}, cql_q2: {log_info['cql_q2']:.2f}, "
+                #     f"cql_next_q1: {log_info['cql_next_q1']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}, "
+                #     f"random_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
+                #     f"alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}, "
+                #     f"logp_next_action: {log_info['logp_next_action']:.2f}"
+                # )
 
     # Save logs
     log_name = f"s{args.seed}"

@@ -8,6 +8,15 @@ hopper-medium-v2 (200)
 Epoch # 1: train_loss = -3.225 mse_loss = 0.954 var_loss = -4.179 val_loss = 0.832
 Epoch # 2: train_loss = -4.888 mse_loss = 0.882 var_loss = -5.770 val_loss = 0.683
 Epoch # 3: train_loss = -5.749 mse_loss = 0.728 var_loss = -6.477 val_loss = 0.805
+
+,epoch,train_loss,mse_loss,var_loss,val_loss
+0,0,-3.3311083347831163,0.9582497705341759,-4.28935813091018,0.8263725
+1,1,-5.125976587379788,0.7877156307083697,-5.9136922026718475,0.6361756
+2,2,-5.902861664145613,0.7139057145381249,-6.616767382652292,0.5067137
+3,3,-6.399586342971547,0.6578104046105423,-7.057396783718837,0.5942637
+4,4,-6.649958247869787,0.6432822032255644,-7.293240511157906,0.6608444
+5,5,-6.920657845373801,0.6321761919121126,-7.552834082809819,0.7145596
+6,6,-7.090212292616254,0.6235076596962811,-7.713719956548204,0.54190445
 """
 from flax import linen as nn
 from flax import serialization
@@ -28,31 +37,6 @@ from models import EnsembleDense, GaussianMLP
 from utils import ReplayBuffer, get_training_data
 
 
-def prepare_training_data(replay_buffer, holdout_ratio=0.1):
-    # load the offline data
-    observations = replay_buffer.observations
-    actions = replay_buffer.actions
-    next_observations = replay_buffer.next_observations
-    rewards = replay_buffer.rewards.reshape(-1, 1)  # reshape for correct shape
-    delta_observations = next_observations - observations
-
-    # prepare for model inputs & outputs
-    inputs = np.concatenate([observations, actions], axis=-1)
-    targets = np.concatenate([rewards, delta_observations], axis=-1)
-
-    # validation dataset
-    num_holdout = int(inputs.shape[0] * holdout_ratio)
-    permutation = np.random.permutation(inputs.shape[0])
-
-    # split the dataset
-    inputs, holdout_inputs = inputs[permutation[num_holdout:]], inputs[permutation[:num_holdout]]
-    targets, holdout_targets = targets[permutation[num_holdout:]], targets[permutation[:num_holdout]]
-    holdout_inputs = np.tile(holdout_inputs[None], [num_member, 1, 1])
-    holdout_targets = np.tile(holdout_targets[None], [num_member, 1, 1])
-
-    return inputs, targets, holdout_inputs, holdout_targets
-
-
 def run(args):
     # Set experiment parameters
     lr = args.lr
@@ -62,7 +46,7 @@ def run(args):
     weight_decay = args.weight_decay
     batch_size = args.batch_size
     num_member = args.num_member
-    holdout_ratio = args.holdout_ratio
+    holdout_num = args.holdout_num
 
     # Initialize the environment
     env = gym.make(args.env)
@@ -112,7 +96,7 @@ def run(args):
 
     # Prepare for the train/val dataset
     inputs, targets, holdout_inputs, holdout_targets = get_training_data(
-        replay_buffer, num_member, holdout_ratio)
+        replay_buffer, num_member, holdout_num)
 
     # Setting training parameters
     patience = 0
@@ -177,7 +161,7 @@ def get_args():
     parser.add_argument("--epochs", default=100, type=int)
     parser.add_argument("--weight_decay", default=3e-5, type=float)
     parser.add_argument("--batch_size", default=1280, type=int)
-    parser.add_argument("--holdout_ratio", default=0.1, type=float)
+    parser.add_argument("--holdout_num", default=1000, type=int)
     parser.add_argument("--max_patience", default=5, type=int)
     parser.add_argument("--model_dir", default="./ensemble_models", type=str)
     parser.add_argument("--log_dir", default="./logs", type=str)
