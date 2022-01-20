@@ -10,6 +10,7 @@ import distrax
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pandas as pd
 import optax
 from static_fn import static_fns
 from tqdm import trange
@@ -130,6 +131,10 @@ class GaussianMLP(nn.Module):
 
 
 class DynamicsModel:
+    """
+    val_loss = 0.455
+    val_loss1 = [0.55001634 0.4690651  0.44378504 0.3747698  0.4047458  0.4849194 0.45814472]
+    """
     def __init__(self,
                  env: str = "hopper-medium-v2",
                  seed: int = 0,
@@ -137,9 +142,9 @@ class DynamicsModel:
                  elite_num: int = 5,
                  holdout_num: int = 1000,
                  lr: float = 1e-3,
-                 weight_decay: float = 3e-5,
+                 weight_decay: float = 1e-5,
                  epochs: int = 100,
-                 batch_size: int = 1280,
+                 batch_size: int = 256,
                  max_patience: int = 5,
                  model_dir: str = "./ensemble_models"):
 
@@ -165,17 +170,20 @@ class DynamicsModel:
         self.replay_buffer.convert_D4RL(d4rl.qlearning_dataset(self.env))
 
         # Initilaize the ensemble model
+        self.save_file = f"{model_dir}/{env}/s{seed}_wd{weight_decay}"
+        self.elite_mask = None
+
         np.random.seed(seed)
         rng = jax.random.PRNGKey(seed)
         _, model_key = jax.random.split(rng, 2)
         self.model = GaussianMLP(ensemble_num=ensemble_num, out_dim=obs_dim+1)
         dummy_model_inputs = jnp.ones([ensemble_num, obs_dim+act_dim], dtype=jnp.float32)
         model_params = self.model.init(model_key, dummy_model_inputs)["params"]
+
         self.model_state = train_state.TrainState.create(
-            apply_fn=self.model.apply, params=model_params,
+            apply_fn=self.model.apply,
+            params=model_params,
             tx=optax.adamw(learning_rate=lr, weight_decay=weight_decay))
-        self.save_file = f"{model_dir}/{env}"
-        self.elite_mask = None
 
     def load(self, filename):
         with open(f"{filename}.ckpt", "rb") as f:
@@ -236,7 +244,7 @@ class DynamicsModel:
                 train_loss.append(log_info["train_loss"].item())
                 mse_loss.append(log_info["mse_loss"].item())
                 var_loss.append(log_info["var_loss"].item())
-        
+
             val_loss = jnp.mean(val_loss_fn(self.model_state.params, holdout_inputs, holdout_targets), axis=0)  # (7,)
             mean_val_loss = jnp.mean(val_loss)
             if mean_val_loss < min_val_loss:
@@ -250,21 +258,24 @@ class DynamicsModel:
                 print(f"Early stopping at epoch {epoch+1}.")
                 break
 
-            res.append((epoch, sum(train_loss)/batch_num, sum(mse_loss)/batch_num, sum(var_loss)/batch_num, mean_val_loss))
-            print(f"Epoch #{epoch+1}: train_loss = {sum(train_loss)/batch_num:.3f} "
+            res.append((epoch, sum(train_loss)/batch_num, sum(mse_loss)/batch_num,
+                        sum(var_loss)/batch_num, mean_val_loss))
+            print(f"Epoch #{epoch+1}: "
+                  f"train_loss = {sum(train_loss)/batch_num:.3f} "
                   f"mse_loss = {sum(mse_loss)/batch_num:.3f} "
                   f"var_loss = {sum(var_loss)/batch_num:.3f} "
-                  f"val_loss = {mean_val_loss:.3f} "
-                  f"val_loss1 = {val_loss}")
+                  f"val_loss = {mean_val_loss:.3f}\n"
+                  f"val_losses = {val_loss}")
 
-        res_df = pd.DataFrame(res, columns=["epoch", "train_loss", "mse_loss", "var_loss", "val_loss"])
-        res_df.to_csv(f"{self.save_file}/s{self.seed}.csv")
-        with open(f"{self.save_file}/s{self.seed}.ckpt", "wb") as f:
+        res_df = pd.DataFrame(res, columns=[
+            "epoch", "train_loss", "mse_loss", "var_loss", "val_loss"])
+        res_df.to_csv(f"{self.save_file}.csv")
+        with open(f"{self.save_file}.ckpt", "wb") as f:
             f.write(serialization.to_bytes(optimal_params))
-        with open(f"{self.save_file}/s{self.seed}_elite_models.txt", "w") as f:
+        with open(f"{self.save_file}_elite_models.txt", "w") as f:
             for idx in elite_models:
                 f.write(f"{idx}\n")
-    
+
     def step(self, key, observations, actions):
         model_idx = jax.random.randint(key, shape=(actions.shape[0],), minval=0, maxval=self.elite_num)
         model_masks = self.elite_mask[model_idx].reshape(-1, self.ensemble_num, 1)
@@ -375,7 +386,8 @@ class COMBOAgent:
             tx=optax.adam(self.lr))
 
         # Initialize the Dynamics Model
-        self.model = DynamicsModel(env, seed, ensemble_num, elite_num)
+        self.model = DynamicsModel(env=env, seed=seed, ensemble_num=ensemble_num,   
+                                   elite_num=elite_num, weight_decay=weight_decay)
 
         # Entropy tuning
         if self.auto_entropy_tuning:

@@ -2,6 +2,7 @@ import collections
 import jax
 import numpy as np
 
+
 Batch = collections.namedtuple(
     "Batch",
     ["observations", "actions", "rewards", "discounts", "next_observations"])

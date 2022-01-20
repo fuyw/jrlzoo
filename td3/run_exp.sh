@@ -4,18 +4,12 @@
 
 envs=(
     "HalfCheetah-v2"
-    # "Walker2d-v2"
+    "Walker2d-v2"
     # "Hopper-v2"
     # "Ant-v2"
 )
 
-seeds=(
-    "8"
-    "0"
-    "2"
-)
-
-for ((i=0;i<10;i+=1))
+for ((i=1;i<2;i+=1))
 do 
     for env in ${envs[*]}
     do

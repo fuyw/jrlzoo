@@ -70,9 +70,10 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", default="hopper-medium-v2")
-    parser.add_argument("--seed", default=0, type=int)
+    parser.add_argument("--seed", default=2, type=int)
     parser.add_argument("--lr_actor", default=3e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
+    parser.add_argument("--weight_decay", default=3e-5, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
     parser.add_argument("--eval_freq", default=int(5e3), type=int)
     parser.add_argument("--batch_size", default=256, type=int)
@@ -94,7 +95,6 @@ def main(args):
     env = gym.make(args.env)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
-    # max_action = float(env.action_space.high[0])
 
     # random seeds
     env.seed(args.seed)
@@ -102,7 +102,11 @@ def main(args):
     np.random.seed(args.seed)
 
     # TD3 agent
-    agent = COMBOAgent(obs_dim=obs_dim, act_dim=act_dim, seed=args.seed)
+    agent = COMBOAgent(env=args.env, obs_dim=obs_dim, act_dim=act_dim,
+                       seed=args.seed, weight_decay=args.weight_decay)
+    agent.model.train()
+    if True:
+        return
     agent.model.load(f'ensemble_models/{args.env}/s{args.seed}')
 
     # Replay buffer
