@@ -39,3 +39,11 @@ class ReplayBuffer:
                       next_observations=jax.device_put(
                           self.next_observations[idx]))
         return batch
+
+    def save(self, fname):
+        np.savez(fname,
+                 observations=self.observations[:self.size],
+                 actions=self.actions[:self.size],
+                 next_observations=self.observations[:self.size],
+                 rewards=self.rewards[:self.size],
+                 discounts=self.discounts[:self.size])

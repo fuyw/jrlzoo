@@ -2,6 +2,7 @@
 __pycache__
 *.png
 logs
+saved_buffers
 saved_models
 benchmarks
 mico
