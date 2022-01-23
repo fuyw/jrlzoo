@@ -36,7 +36,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", default="hopper-medium-v2")
     parser.add_argument("--seed", default=42, type=int)
-    parser.add_argument("--lr_actor", default=3e-4, type=float)
+    parser.add_argument("--lr_actor", default=3e-5, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
     parser.add_argument("--weight_decay", default=5e-5, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
@@ -65,18 +65,18 @@ def main(args):
     np.random.seed(args.seed)
 
     # TD3 agent
-    agent = COMBOAgent(env=args.env, obs_dim=obs_dim, act_dim=act_dim, seed=args.seed)
-    agent.model.train()
-    return 0
+    agent = COMBOAgent(env=args.env, obs_dim=obs_dim, act_dim=act_dim, seed=args.seed,
+                       lr=args.lr, lr_actor=args.lr_actor, target_entropy=args.target_entropy)
+    # agent.model.train()
     agent.model.load(f'{args.model_dir}/{args.env}/s{args.seed}')
 
     # Replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
-    model_buffer = ReplayBuffer(obs_dim, act_dim)
+    model_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(5e5))
 
     # Evaluate the untrained policy
-    logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]
+    logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]  # 2.382196339051178
 
     # Initialize training stats
     start_time = time.time()
@@ -84,6 +84,8 @@ def main(args):
     # Train agent and evaluate policy
     for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, model_buffer)
+        print(eval_policy(agent, args.env, args.seed))
+        return
         if (t + 1) % args.eval_freq == 0:
             eval_reward = eval_policy(agent, args.env, args.seed)
             log_info.update({

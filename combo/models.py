@@ -387,6 +387,7 @@ class DynamicsModel:
     def step(self, key, observations, actions):
         model_idx = jax.random.randint(key, shape=(actions.shape[0],), minval=0, maxval=self.elite_num)
         model_masks = self.elite_mask[model_idx].reshape(-1, self.ensemble_num, 1)
+        print(f'model_idx = {model_idx[:10]}')
 
         @jax.jit
         def rollout(params, rng, observation, action, model_mask):
@@ -595,7 +596,7 @@ class COMBOAgent:
             rng3, rng4 = jax.random.split(rng, 2)
 
             # sample random actions
-            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim))
+            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim), minval=-1.0, maxval=1.0)
 
             # repeat next observations
             repeat_next_observations = jnp.repeat(jnp.expand_dims(next_observation, axis=0), repeats=self.num_random, axis=0)
@@ -680,6 +681,8 @@ class COMBOAgent:
                 self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
                 sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
                 next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
+                print(f'Modeled next_obs: {next_observations[:5]}')
+                return
                 nonterminal_mask = ~dones
                 if nonterminal_mask.sum() == 0:
                     print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
