@@ -137,15 +137,15 @@ class DynamicsModel:
     """
     def __init__(self,
                  env: str = "hopper-medium-v2",
-                 seed: int = 0,
+                 seed: int = 42,
                  ensemble_num: int = 7,
                  elite_num: int = 5,
                  holdout_num: int = 1000,
                  lr: float = 1e-3,
-                 weight_decay: float = 1e-5,
-                 epochs: int = 100,
-                 batch_size: int = 256,
-                 max_patience: int = 5,
+                 weight_decay: float = 5e-5,
+                 epochs: int = 300,
+                 batch_size: int = 1024,
+                 max_patience: int = 10,
                  model_dir: str = "./ensemble_models"):
 
         # Model parameters
@@ -170,7 +170,7 @@ class DynamicsModel:
         self.replay_buffer.convert_D4RL(d4rl.qlearning_dataset(self.env))
 
         # Initilaize the ensemble model
-        self.save_file = f"{model_dir}/{env}/s{seed}_wd{weight_decay}"
+        self.save_file = f"{model_dir}/{env}/s{seed}_b{batch_size}"
         self.elite_mask = None
 
         np.random.seed(seed)
@@ -196,7 +196,7 @@ class DynamicsModel:
         elite_idx = np.loadtxt(f'{filename}_elite_models.txt', dtype=np.int32)[:self.elite_num]
         self.elite_mask = jnp.eye(self.ensemble_num)[elite_idx, :]
 
-    def train(self):
+    def train1(self):
         inputs, targets, holdout_inputs, holdout_targets = get_training_data(
             self.replay_buffer, self.ensemble_num, self.holdout_num)
 
@@ -209,7 +209,9 @@ class DynamicsModel:
         # Loss functions
         @jax.jit
         def loss_fn(params, x, y):
-            mu, log_var = self.model.apply({"params": params}, x)
+            """(1, 14) ==> (7, 12), (7, 12)
+            """
+            mu, log_var = self.model.apply({"params": params}, x)  # (1, ) ==> (7, 256)
             inv_var = jnp.exp(-log_var)
             mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
             var_loss = jnp.mean(jnp.mean(log_var, axis=-1), axis=-1)
@@ -220,8 +222,8 @@ class DynamicsModel:
         def val_loss_fn(params, x, y):
             mu, log_var = jax.lax.stop_gradient(self.model.apply({"params": params}, x))
             inv_var = jnp.exp(-log_var)
-            mse_loss = jnp.mean(jnp.square(mu - y) * inv_var, axis=-1)
-            return mse_loss
+            val_loss = jnp.mean(jnp.square(mu - y) * inv_var, axis=-1)
+            return val_loss
 
         # Wrap loss functions with jax.vmap
         grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
@@ -266,6 +268,112 @@ class DynamicsModel:
                   f"var_loss = {sum(var_loss)/batch_num:.3f} "
                   f"val_loss = {mean_val_loss:.3f}\n"
                   f"val_losses = {val_loss}")
+            
+            if (epoch + 1) % 10 == 0:
+                with open(f"{self.save_file}_e{epoch+1}.ckpt", "wb") as f:
+                    f.write(serialization.to_bytes(optimal_params))
+                with open(f"{self.save_file}_e{epoch+1}_elite_models.txt", "w") as f:
+                    for idx in elite_models:
+                        f.write(f"{idx}\n")
+
+        res_df = pd.DataFrame(res, columns=[
+            "epoch", "train_loss", "mse_loss", "var_loss", "val_loss"])
+        res_df.to_csv(f"{self.save_file}.csv")
+        with open(f"{self.save_file}.ckpt", "wb") as f:
+            f.write(serialization.to_bytes(optimal_params))
+        with open(f"{self.save_file}_elite_models.txt", "w") as f:
+            for idx in elite_models:
+                f.write(f"{idx}\n")
+
+    def train(self):
+        inputs, targets, holdout_inputs, holdout_targets = get_training_data(
+            self.replay_buffer, self.ensemble_num, self.holdout_num)
+
+        patience = 0 
+        batch_num = int(np.ceil(len(inputs) / self.batch_size))
+        min_val_loss = np.inf
+        optial_params = None
+        res = []
+
+        # Loss functions
+        @jax.jit
+        def loss_fn(params, x, y):
+            """
+            x = np.random.normal(size=(7, 128, 14))[:, 0, :]  # (7, 14)
+            y = np.random.normal(size=(7, 128, 12))[:, 0, :]  # (7, 12)
+            mu, log_var = model.model.apply({"params": model.model_state.params}, x)  # (7, 12), (7, 12)
+            """
+            mu, log_var = self.model.apply({"params": params}, x)  # (1, ) ==> (7, 256)
+            inv_var = jnp.exp(-log_var)  # (7, 12)
+            mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
+            var_loss = jnp.mean(jnp.mean(log_var, axis=-1), axis=-1)
+            train_loss = mse_loss + var_loss
+            return train_loss, {"mse_loss": mse_loss, "var_loss": var_loss, "train_loss": train_loss}
+
+        @jax.jit
+        def val_loss_fn(params, x, y):
+            """
+            x = np.random.normal(size=(7, 128, 14))[:, 0, :]
+            y = np.random.normal(size=(7, 128, 12))[:, 0, :]
+            mu, log_var = jax.lax.stop_gradient(model.model.apply({"params": model.model_state.params}, x))  
+            """
+            mu, log_var = jax.lax.stop_gradient(self.model.apply({"params": params}, x))  # (7, 12), (7, 12)
+            inv_var = jnp.exp(-log_var)
+            mse_loss = jnp.mean(jnp.square(mu - y), axis=-1)
+            reward_loss = jnp.mean(jnp.square(mu[:, 0] - y[:, 0]), axis=-1) 
+            state_mse_loss = jnp.mean(jnp.mean(jnp.square(mu[:, 1:] - y[:, 1:]) * inv_var[:, 1:], axis=-1), axis=-1)
+            state_var_loss = jnp.mean(jnp.mean(log_var[:, 1:], axis=-1), axis=-1)
+            state_loss = state_mse_loss + state_var_loss
+            return mse_loss, {"reward_loss": reward_loss, "state_loss": state_loss}
+
+        # Wrap loss functions with jax.vmap
+        grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
+        val_loss_fn = jax.vmap(val_loss_fn, in_axes=(None, 1, 1))
+
+        for epoch in trange(self.epochs):
+            shuffled_idxs = np.concatenate([np.random.permutation(np.arange(
+                inputs.shape[0])).reshape(1, -1) for _ in range(self.ensemble_num)], axis=0)
+            train_loss, mse_loss, var_loss = [], [], []
+            for i in range(batch_num):
+                batch_idxs = shuffled_idxs[:, i*self.batch_size:(i+1)*self.batch_size]
+                batch_inputs = inputs[batch_idxs]  # (7, 256, 14)
+                batch_targets = targets[batch_idxs]  # (7, 256, 12)
+
+                (_, log_info), gradients = grad_fn(self.model_state.params, batch_inputs, batch_targets)
+                log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+                gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
+                self.model_state = self.model_state.apply_gradients(grads=gradients)
+
+                train_loss.append(log_info["train_loss"].item())
+                mse_loss.append(log_info["mse_loss"].item())
+                var_loss.append(log_info["var_loss"].item())
+
+            val_loss, val_info = val_loss_fn(self.model_state.params, holdout_inputs, holdout_targets)
+            val_loss = jnp.mean(val_loss, axis=0)  # (7,)
+            # val_loss = jnp.mean(val_loss_fn(self.model_state.params, holdout_inputs, holdout_targets), axis=0)  # (7,)
+            val_info = jax.tree_map(functools.partial(jnp.mean, axis=0), val_info)
+            mean_val_loss = jnp.mean(val_loss)
+            if mean_val_loss < min_val_loss:
+                optimal_params = self.model_state.params
+                min_val_loss = mean_val_loss
+                elite_models = jnp.argsort(val_loss)  # find elite models
+                patience = 0
+            else:
+                patience += 1
+            if patience == self.max_patience:
+                print(f"Early stopping at epoch {epoch+1}.")
+                break
+
+            res.append((epoch, sum(train_loss)/batch_num, sum(mse_loss)/batch_num,
+                        sum(var_loss)/batch_num, mean_val_loss))
+            print(f"Epoch #{epoch+1}: "
+                  f"train_loss = {sum(train_loss)/batch_num:.3f} "
+                  f"mse_loss = {sum(mse_loss)/batch_num:.3f} "
+                  f"var_loss = {sum(var_loss)/batch_num:.3f} "
+                  f"val_loss = {mean_val_loss:.3f} "
+                  f"val_rew_loss = {val_info['reward_loss']:.3f} "
+                  f"val_state_loss = {val_info['state_loss']:.3f}"
+            )
 
         res_df = pd.DataFrame(res, columns=[
             "epoch", "train_loss", "mse_loss", "var_loss", "val_loss"])
@@ -285,7 +393,7 @@ class DynamicsModel:
             x = jnp.concatenate([observation, action], axis=-1).reshape(1, -1)
             model_mu, model_log_var = self.model.apply({"params": params}, x)
             model_std = jnp.sqrt(jnp.exp(model_log_var))  # (7, 12)
-            model_noise = jax.random.normal(rng, (self.ensemble_num, self.obs_dim+1))  # (7, 12)
+            model_noise = model_std * jax.random.normal(rng, (self.ensemble_num, self.obs_dim+1))  # (7, 12)
 
             reward_noise, observation_noise = jnp.split(model_noise, [1], axis=-1)     # (7, 1), (7, 11)
             reward_mu, observation_mu = jnp.split(model_mu, [1], axis=-1)              # (7, 1), (7, 11)
@@ -326,14 +434,15 @@ class COMBOAgent:
                  # COMBO
                  horizon: int = 5,
                  lr_model: float = 1e-3,
-                 weight_decay: float = 3e-5,
+                 weight_decay: float = 5e-5,
                  real_ratio: float = 0.5,
                  ensemble_num: int = 7,
                  elite_num: int = 5,
                  max_patience: int = 5,
                  batch_size: int = 256,
                  rollout_batch_size: int = 10000,
-                 holdout_ratio: float = 0.1):
+                 holdout_ratio: float = 0.1,
+                 model_dir: str = 'ensemble_models'):
 
         self.update_step = 0
         self.obs_dim = obs_dim
@@ -386,8 +495,10 @@ class COMBOAgent:
             tx=optax.adam(self.lr))
 
         # Initialize the Dynamics Model
-        self.model = DynamicsModel(env=env, seed=seed, ensemble_num=ensemble_num,   
-                                   elite_num=elite_num, weight_decay=weight_decay)
+        self.model = DynamicsModel(env=env, seed=seed,
+                                   ensemble_num=ensemble_num,   
+                                   elite_num=elite_num,
+                                   model_dir=model_dir)
 
         # Entropy tuning
         if self.auto_entropy_tuning:
@@ -561,25 +672,25 @@ class COMBOAgent:
 
     def update(self, replay_buffer, model_buffer):
         # rollout the model
-        # if self.update_step % 1000 == 0:
-        #     observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
-        #     sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
-        #     select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
-        #     for t in range(self.horizon):
-        #         self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
-        #         sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
-        #         next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
-        #         nonterminal_mask = ~dones
-        #         if nonterminal_mask.sum() == 0:
-        #             print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
-        #             break
-        #         model_buffer.add_batch(observations[nonterminal_mask],
-        #                             actions[nonterminal_mask],
-        #                             next_observations[nonterminal_mask],
-        #                             rewards[nonterminal_mask],
-        #                             dones[nonterminal_mask])
-        #         observations = next_observations[nonterminal_mask]
-        #         sample_rng = sample_rng[nonterminal_mask]
+        if self.update_step % 1000 == 0:
+            observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
+            sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
+            select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
+            for t in range(self.horizon):
+                self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
+                sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
+                next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
+                nonterminal_mask = ~dones
+                if nonterminal_mask.sum() == 0:
+                    print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
+                    break
+                model_buffer.add_batch(observations[nonterminal_mask],
+                                       actions[nonterminal_mask],
+                                       next_observations[nonterminal_mask],
+                                       rewards[nonterminal_mask],
+                                       dones[nonterminal_mask])
+                observations = next_observations[nonterminal_mask]
+                sample_rng = sample_rng[nonterminal_mask]
 
         # sample from real & model buffer
         real_batch = replay_buffer.sample(self.real_batch_size)

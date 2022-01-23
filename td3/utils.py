@@ -44,6 +44,6 @@ class ReplayBuffer:
         np.savez(fname,
                  observations=self.observations[:self.size],
                  actions=self.actions[:self.size],
-                 next_observations=self.observations[:self.size],
+                 next_observations=self.next_observations[:self.size],
                  rewards=self.rewards[:self.size],
                  discounts=self.discounts[:self.size])

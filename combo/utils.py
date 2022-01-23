@@ -8,6 +8,36 @@ Batch = collections.namedtuple(
     ["observations", "actions", "rewards", "discounts", "next_observations"])
 
 
+def get_training_data(replay_buffer, ensemble_num=7, holdout_num=1000):
+    """
+    inputs.shape  = (N, obs_dim+act_dim)
+    targets.shape = (N, obs_dim+1) 
+    holdout_inputs.shape  = (E, N, obs_dim+act_dim)
+    holdout_targets.shape = (E, N, obs_dim+1)
+    """
+    # load the offline data
+    observations = replay_buffer.observations
+    actions = replay_buffer.actions
+    next_observations = replay_buffer.next_observations
+    rewards = replay_buffer.rewards.reshape(-1, 1)  # reshape for correct shape
+    delta_observations = next_observations - observations
+
+    # prepare for model inputs & outputs
+    inputs = np.concatenate([observations, actions], axis=-1)
+    targets = np.concatenate([rewards, delta_observations], axis=-1)
+
+    # validation dataset
+    permutation = np.random.permutation(inputs.shape[0])
+
+    # split the dataset
+    inputs, holdout_inputs = inputs[permutation[holdout_num:]], inputs[permutation[:holdout_num]]
+    targets, holdout_targets = targets[permutation[holdout_num:]], targets[permutation[:holdout_num]]
+    holdout_inputs = np.tile(holdout_inputs[None], [ensemble_num, 1, 1])
+    holdout_targets = np.tile(holdout_targets[None], [ensemble_num, 1, 1])
+
+    return inputs, targets, holdout_inputs, holdout_targets
+
+
 class ReplayBuffer:
     def __init__(self, obs_dim: int, act_dim: int, max_size: int = int(1e6)):
         self.max_size = max_size
@@ -44,7 +74,6 @@ class ReplayBuffer:
         self.ptr = (self.ptr + add_num + 1) % self.max_size
         self.size = min(self.size + add_num, self.max_size)
 
-
     def sample(self, batch_size: int) -> Batch:
         idx = np.random.randint(0, self.size, size=batch_size)
         batch = Batch(observations=jax.device_put(self.observations[idx]),
@@ -62,6 +91,16 @@ class ReplayBuffer:
         self.rewards = dataset["rewards"]
         self.discounts = 1. - dataset["terminals"]
         self.size = self.observations.shape[0]
+    
+    def convert_D4RL2(self, dataset):
+        self.observations = dataset["observations"]
+        self.actions = dataset["actions"]
+        self.next_observations = dataset["next_observations"]
+        self.rewards = dataset["rewards"]
+        self.discounts = 1. - dataset["terminals"]
+        self.size = self.observations.shape[0]
+        self.qpos = dataset["qpos"]
+        self.qvel = dataset["qvel"]
 
     def normalize_states(self, eps: float = 1e-3):
         mean = self.observations.mean(0, keepdims=True)
@@ -69,27 +108,3 @@ class ReplayBuffer:
         self.observations = (self.observations - mean)/std
         self.next_observations = (self.next_observations - mean)/std
         return mean, std
-
-
-def get_training_data(replay_buffer, ensemble_num=7, holdout_num=1000):
-    # load the offline data
-    observations = replay_buffer.observations
-    actions = replay_buffer.actions
-    next_observations = replay_buffer.next_observations
-    rewards = replay_buffer.rewards.reshape(-1, 1)  # reshape for correct shape
-    delta_observations = next_observations - observations
-
-    # prepare for model inputs & outputs
-    inputs = np.concatenate([observations, actions], axis=-1)
-    targets = np.concatenate([rewards, delta_observations], axis=-1)
-
-    # validation dataset
-    permutation = np.random.permutation(inputs.shape[0])
-
-    # split the dataset
-    inputs, holdout_inputs = inputs[permutation[holdout_num:]], inputs[permutation[:holdout_num]]
-    targets, holdout_targets = targets[permutation[holdout_num:]], targets[permutation[:holdout_num]]
-    holdout_inputs = np.tile(holdout_inputs[None], [ensemble_num, 1, 1])
-    holdout_targets = np.tile(holdout_targets[None], [ensemble_num, 1, 1])
-
-    return inputs, targets, holdout_inputs, holdout_targets
