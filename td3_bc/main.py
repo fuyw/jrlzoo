@@ -39,7 +39,7 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--algo", default="td3bc")
-    parser.add_argument("--env", default="halfcheetah-medium-expert-v2")
+    parser.add_argument("--env", default="halfcheetah-medium-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)

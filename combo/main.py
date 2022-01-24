@@ -10,7 +10,7 @@ from tqdm import trange
 from models import COMBOAgent
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".4"
 
 
 def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
@@ -66,7 +66,7 @@ def main(args):
 
     # TD3 agent
     agent = COMBOAgent(env=args.env, obs_dim=obs_dim, act_dim=act_dim, seed=args.seed,
-                       lr=args.lr, lr_actor=args.lr_actor, target_entropy=args.target_entropy)
+                       lr=args.lr, lr_actor=args.lr_actor, rollout_batch_size=100)
     # agent.model.train()
     agent.model.load(f'{args.model_dir}/{args.env}/s{args.seed}')
 
@@ -84,8 +84,9 @@ def main(args):
     # Train agent and evaluate policy
     for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, model_buffer)
-        print(eval_policy(agent, args.env, args.seed))
-        return
+        # for i in log_info:
+        #     print(f'{i}\t{log_info[i]}')
+        # return
         if (t + 1) % args.eval_freq == 0:
             eval_reward = eval_policy(agent, args.env, args.seed)
             log_info.update({
@@ -96,15 +97,14 @@ def main(args):
             logs.append(log_info)
             print(
                 f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.2f}, "
-                f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, ")
-            #     f"cql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}, "
-            #     f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
-            #     f"cql_q1: {log_info['cql_q1']:.2f}, cql_q2: {log_info['cql_q2']:.2f}, "
-            #     f"cql_next_q1: {log_info['cql_next_q1']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}, "
-            #     f"random_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
-            #     f"alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}, "
-            #     f"logp_next_action: {log_info['logp_next_action']:.2f}"
-            # )
+                f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, "
+                f"cql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}, "
+                f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
+                f"cql_next_q1: {log_info['cql_next_q1']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}, "
+                f"random_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
+                f"alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}, "
+                f"logp_next_action: {log_info['logp_next_action']:.2f}"
+            )
 
     # Save logs
     log_name = f"s{args.seed}"

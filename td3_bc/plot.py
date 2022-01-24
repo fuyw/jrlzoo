@@ -10,27 +10,10 @@ colors = ["#1f77b4", "#ff7f0e", "#d62728", "#9467bd", "#2ca02c",
           "#8c564b", "#e377c2", "#bcbd22", "#17becf"]
 linestyles = ['solid', 'dashed', 'dashdot', 'dotted']
 
+env_names = ['halfcheetah', 'hopper', 'walker2d']
+levels = ['medium', 'medium-replay', 'medium-expert']
+tasks = [f'{env_name}-{level}-v2' for env_name in env_names for level in levels]
 
-
-envs = ["halfcheetah-medium-v2", "hopper-medium-v2"]
-
-# envs=[
-#     "halfcheetah-random-v0",
-#     "hopper-random-v0",
-#     "walker2d-random-v0",
-#     "halfcheetah-medium-v0",
-#     "hopper-medium-v0",
-#     "walker2d-medium-v0",
-#     "halfcheetah-expert-v0",
-#     "hopper-expert-v0",
-#     "walker2d-expert-v0",
-#     "halfcheetah-medium-expert-v0",
-#     "hopper-medium-expert-v0",
-#     "walker2d-medium-expert-v0",
-#     "halfcheetah-medium-replay-v0",
-#     "hopper-medium-replay-v0",
-#     "walker2d-medium-replay-v0"
-# ]
 
 def smooth(x, window=3):
     y = np.ones(window)
@@ -39,24 +22,19 @@ def smooth(x, window=3):
     return smoothed_x.reshape(-1, 1)
 
 
-# read experiment res with different seeds
-def read_data(env_name='Ant-v2', col='reward', window=7, num=5):
+def read_data(env_name='hopper-medium-v2', col='reward', window=1):
+    rewards = []
     res_lst = []
-    for i in range(num):
+    for i in range(5):
         df = pd.read_csv(f'logs/{env_name}/{i}.csv', index_col=0).set_index('step')
-        x = df[col].values
+        plot_idx = [10000 * i for i in range(101)]
+        res_idx = range(955000, 1005000, 5000)
+        x = df.loc[plot_idx, col].values
         res_lst.append(smooth(x, window=window))
+        rewards.append(df.loc[res_idx, 'reward'].mean())
     res_lst = np.concatenate(res_lst, axis=-1)
-    return res_lst
-
-
-def read_np_data(env_name='Ant-v2', col='reward', window=7):
-    res_lst = []
-    for i in range(3):
-        x = np.load(f'logs/results/TD3_{env_name}_{i}.npy')
-        res_lst.append(smooth(x, window=window))
-    res_lst = np.concatenate(res_lst, axis=-1)
-    return res_lst
+    rewards = np.array(rewards)
+    return res_lst, rewards
 
 
 def plot_ax(ax, data, fill_color, title=None, log=False, label=None):
@@ -68,15 +46,15 @@ def plot_ax(ax, data, fill_color, title=None, log=False, label=None):
         ax.plot(range(len(mu)), mu, color=fill_color, ls='solid', lw=0.6)
     ax.fill_between(range(len(mu)), mu+sigma, mu-sigma, alpha=0.3, edgecolor=fill_color, facecolor=fill_color)
     if title:
-        ax.set_title(title, fontsize=8.5, pad=8)
+        ax.set_title(title, fontsize=8.5, pad=2.5)
     ax.grid(True, alpha=0.3, lw=0.3)
-    ax.xaxis.set_ticks_position('none') 
-    ax.yaxis.set_ticks_position('none') 
-    ax.set_xticks(range(0, 240, 40))
+    ax.xaxis.set_ticks_position('none')
+    ax.yaxis.set_ticks_position('none')
+    ax.set_xticks(range(0, 120, 20))
     ax.set_xticklabels([0, 0.2, 0.4, 0.6, 0.8, 1])
 
 
-def plot_exp(seeds=True):
+def plot_exp():
     # matplotlib plot setting
     mpl.rcParams['xtick.labelsize'] = 7
     mpl.rcParams['ytick.labelsize'] = 7
@@ -84,37 +62,19 @@ def plot_exp(seeds=True):
     mpl.rcParams['xtick.major.pad']='0.1'
     mpl.rcParams['ytick.major.pad']='0'
 
-    envs = ['HalfCheetah', 'Walker2d', 'Hopper']
-    _, axes = plt.subplots(nrows=1, ncols=3, figsize=(12, 4))
+    _, axes = plt.subplots(nrows=3, ncols=3, figsize=(12, 12))
+    plt.subplots_adjust(hspace=0.2, wspace=0.15)
+    for idx, env in enumerate(tasks):
+        ax = axes[idx // 3][idx % 3]
+        data, rewards = read_data(env_name=f'{env}')
+        plot_ax(ax, data, colors[0], title=f'{env}', label=f'{np.mean(rewards):.2f} ({np.std(rewards):.2f})')
+        ax.legend(fontsize=7, loc='lower right')
 
-    for idx, env in enumerate(envs):
-        ax = axes[idx]
-        data_jax = read_data(env_name=f'{env}-v2', num=10)
-        if seeds:
-            for i in range(data_jax.shape[-1]):
-                ax.plot(range(data_jax.shape[0]), data_jax[:, i], label=f'{i}')
-            ax.legend()
-        else:
-            plot_ax(ax, data_jax, colors[0], title=f'{env}')
-        ax.set_xlabel('Steps (1e6)')
-        ax.set_title(f'{env}')
+    # patches = [mpatches.Patch(color=colors[i], label=labels[i]) for i, metric in enumerate(metrics)]
+    # plt.figlegend(handles=patches, loc='upper center', fontsize=8.5, ncol=len(metrics), frameon=False, bbox_to_anchor=(0.5, 0.95), handlelength=0.7)
     plt.tight_layout()
-    plt.savefig('imgs/ten_seeds_td3.png', dpi=720)
-
-
-def plot_one():
-    # env = 'td3bc_halfcheetah-medium-v0'
-    env = 'td3bc_halfcheetah-medium-v2'
-
-    data = read_data(env_name=f'{env}', window=5, num=5)
-    origin_data = np.mean(read_data(env_name=f'{env}', window=1, num=5)[-10:, :], axis=0)
-    mu = np.mean(origin_data)
-    std = np.std(origin_data) 
-    _, ax = plt.subplots()
-    plot_ax(ax, data, colors[0], title=f'{env} {mu:.2f}({std:.2f})')
-    plt.savefig(f'{env}.png')
+    plt.savefig('td3bc.png', dpi=720)
 
 
 if __name__ == '__main__':
-    # plot_exp()
-    plot_one()
+    plot_exp()

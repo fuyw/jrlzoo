@@ -64,14 +64,12 @@ class ReplayBuffer:
     def add_batch(self, observations, actions, next_observations, rewards, dones):
         add_num = len(actions)
         add_idx = np.arange(self.ptr, self.ptr + add_num) % self.max_size
-
         self.observations[add_idx] = observations
         self.actions[add_idx] = actions
         self.next_observations[add_idx] = next_observations
         self.rewards[add_idx] = rewards
         self.discounts[add_idx] = 1 - dones
-
-        self.ptr = (self.ptr + add_num + 1) % self.max_size
+        self.ptr = (self.ptr + add_num) % self.max_size
         self.size = min(self.size + add_num, self.max_size)
 
     def sample(self, batch_size: int) -> Batch:
