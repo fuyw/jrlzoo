@@ -160,12 +160,14 @@ class TD3:
         next_q1, next_q2 = self.critic.apply({"params": critic_target_params},
                                              batch.next_observations,
                                              next_actions)
-        next_q = jnp.minimum(next_q1, next_q2)
+        next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2))
         target_q = batch.rewards + self.gamma * batch.discounts * next_q
 
         def loss_fn(critic_params: frozen_dict.FrozenDict, batch: Batch):
             q1, q2 = self.critic.apply({"params": critic_params},
                                        batch.observations, batch.actions)
+            q1 = jnp.squeeze(q1)
+            q2 = jnp.squeeze(q2)
             critic_loss = ((q1 - target_q)**2 + (q2 - target_q)**2).mean()
             return critic_loss, {
                 "critic_loss": critic_loss,

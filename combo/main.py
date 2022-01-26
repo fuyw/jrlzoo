@@ -10,7 +10,7 @@ from tqdm import trange
 from models import COMBOAgent
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".4"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".3"
 
 
 def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:

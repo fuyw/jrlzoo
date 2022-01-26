@@ -525,10 +525,11 @@ class COMBOAgent:
             ])
 
             # compute logsumexp loss w.r.t model_states
-            cql1_loss = (jax.scipy.special.logsumexp(cql_concat_q1) - q1 * mask / self.real_ratio) * self.min_q_weight
-            cql2_loss = (jax.scipy.special.logsumexp(cql_concat_q2) - q2 * mask / self.real_ratio) * self.min_q_weight
+            # TODO: Fix Here ==> tf.boolean_mask(tf.concat(...), mask)
+            cql1_loss = (jax.scipy.special.logsumexp(cql_concat_q1)*(1-mask) - q1*mask/self.real_ratio) * self.min_q_weight
+            cql2_loss = (jax.scipy.special.logsumexp(cql_concat_q2)*(1-mask) - q2*mask/self.real_ratio) * self.min_q_weight
 
-            total_loss = critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
+            total_loss = 0.5*critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
 
             log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
                         "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, 
@@ -591,11 +592,11 @@ class COMBOAgent:
                 self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
 
                 # random actions
-                actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), 3),
-                                             minval=-1.0, maxval=1.0)
+                # actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), 3),
+                #                              minval=-1.0, maxval=1.0)
 
                 # sample actions with policy pi
-                # sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
+                sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
 
                 next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
                 nonterminal_mask = ~dones

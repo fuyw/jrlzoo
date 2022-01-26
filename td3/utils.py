@@ -16,8 +16,8 @@ class ReplayBuffer:
         self.observations = np.zeros((max_size, obs_dim))
         self.actions = np.zeros((max_size, act_dim))
         self.next_observations = np.zeros((max_size, obs_dim))
-        self.rewards = np.zeros((max_size, 1))
-        self.discounts = np.zeros((max_size, 1))
+        self.rewards = np.zeros(max_size)
+        self.discounts = np.zeros(max_size)
 
     def add(self, observation: np.ndarray, action: np.ndarray,
             next_observation: np.ndarray, reward: float, done: float):

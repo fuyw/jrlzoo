@@ -62,9 +62,9 @@ def plot_exp():
     #     plot_ax(ax, data_jax, colors[0], title=f'{env}', label='jax_td3')
     #     ax.legend(fontsize=7, loc='upper left')
 
-    _, axes = plt.subplots(nrows=1, ncols=2, figsize=(8, 4))
+    _, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 4))
     plt.subplots_adjust(hspace=0.2, wspace=0.15)
-    for idx, env in enumerate(['HalfCheetah', 'Hopper']):
+    for idx, env in enumerate(['HalfCheetah', 'Hopper', 'Walker2d']):
         ax = axes[idx]
         data_jax = read_data(env_name=f'{env}-v2')
         plot_ax(ax, data_jax, colors[0], title=f'{env}')

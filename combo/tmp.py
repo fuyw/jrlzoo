@@ -81,3 +81,85 @@ model_buffer.observations.sum() = -180.0183590060151
 model_buffer.actions.sum() = -50.49959243182093
 model_buffer.rewards = 559.0667119026184
 """
+
+
+def check_agent():
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+    from models import COMBOAgent
+    obs_dim, act_dim = 11, 3
+    agent = COMBOAgent(env='hopper-medium-v2', obs_dim=obs_dim, act_dim=act_dim, seed=42, lr=1e-3, lr_actor=1e-3)
+    agent.model.load(f'ensemble_models/hopper-medium-v2/s2')
+    frozen_actor_params = agent.actor_state.params
+    frozen_critic_params = agent.critic_state.params
+    actor_params = agent.actor_state.params
+    critic_params = agent.critic_state.params
+    alpha_params = agent.alpha_state.params
+    critic_target_params = agent.critic_state.params
+
+    observations = np.random.normal(size=(32, 11))
+    actions = np.random.normal(size=(32, 3))
+    rewards = np.random.normal(size=(32,))
+    next_observations = np.random.normal(size=(32, 11))
+    observation = observations[0]
+    action = actions[0]
+    next_observation = next_observations[0]
+    reward = rewards[0]
+
+    rng = jax.random.PRNGKey(0)
+    rng, rng1, rng2 = jax.random.split(rng, 3)
+
+    # (11) ==> (3), ()
+    _, sampled_action, logp = agent.actor.apply({"params": actor_params}, rng1, observation)
+
+    # Alpha loss ==> ()
+    log_alpha = agent.log_alpha.apply({"params": alpha_params})
+    alpha_loss = -log_alpha * jax.lax.stop_gradient(logp + agent.target_entropy)
+    alpha = jnp.exp(log_alpha)
+
+    # Sampled Q ==> (1)
+    sampled_q1, sampled_q2 = agent.critic.apply({"params": frozen_critic_params},
+                                                observation, sampled_action)
+    sampled_q = jnp.squeeze(jnp.minimum(sampled_q1, sampled_q2))  # ()
+
+    # Actor loss ==> ()
+    alpha = jax.lax.stop_gradient(alpha)
+    actor_loss = (alpha * logp - sampled_q)
+
+    # Critic loss
+    q1, q2 = agent.critic.apply({"params": critic_params}, observation, action)  # (1), (1)
+    q1, q2 = jnp.squeeze(q1), jnp.squeeze(q2)                             # ()
+    _, next_action, logp_next_action = agent.actor.apply(
+        {"params": frozen_actor_params}, rng2, next_observation)          # (3), ()
+    next_q1, next_q2 = agent.critic.apply(
+        {"params": critic_target_params}, next_observation, next_action)  # (1), (1)
+    next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2))                   # ()
+    target_q = reward + 0.99 * next_q                                     # ()
+    critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2                 # ()
+
+    # COMBO CQL loss
+    rng3, rng4 = jax.random.split(rng, 2)
+    cql_random_actions = jax.random.uniform(rng3, shape=(10, 3), minval=-1.0, maxval=1.0)  # (10, 3)
+    repeat_next_observations = jnp.repeat(jnp.expand_dims(next_observation, axis=0),
+                                          repeats=10, axis=0)  # (10, 11)
+    cql_random_q1, cql_random_q2 = agent.critic.apply({"params": critic_params},
+                                                       repeat_next_observations,
+                                                       cql_random_actions)  # (10, 1),  (10, 1)
+    _, cql_next_actions, cql_logp_next_action = agent.actor.apply(
+        {"params": frozen_actor_params}, rng4, repeat_next_observations)  # (10, 3), (10)
+
+    cql_next_q1, cql_next_q2 = agent.critic.apply(
+        {"params": critic_params}, repeat_next_observations, cql_next_actions)  # (10, 1)
+    
+    random_density = np.log(0.5 ** 3)
+    cql_concat_q1 = jnp.concatenate([
+        jnp.squeeze(cql_random_q1) - random_density,
+        jnp.squeeze(cql_next_q1) - cql_logp_next_action,
+    ])  # (20,)
+    cql_concat_q2 = jnp.concatenate([
+        jnp.squeeze(cql_random_q2) - random_density,
+        jnp.squeeze(cql_next_q2) - cql_logp_next_action,
+    ])  # (20,)
+
+    cql1_loss = jax.scipy.special.logsumexp(cql_concat_q1) - q1
