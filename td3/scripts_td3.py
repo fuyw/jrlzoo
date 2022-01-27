@@ -3,13 +3,15 @@ import threading, subprocess
 
 # python main.py --seed 0 --env hopper-medium-v0 --metric uncertainty --sleep 1
 def single_exp(seed='0', env_name='hopper-medium-v0', sleep=1):
-    command = ['python', 'main.py', '--seed', str(seed), '--env', env_name]
+    command = ['python', 'main.py', '--seed', str(seed), '--env', env_name, '--with_qinfo']
     _ = subprocess.Popen(command)
 
 
 def run():
     tasks = [
-        (i, 'Hopper-v2') for i in range(1, 2)
+        (0, 'Hopper-v2'),
+        (0, 'Walker2d-v2'),
+        (0, 'HalfCheetah-v2'),
     ]
 
     threads = []

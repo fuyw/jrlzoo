@@ -1,0 +1,54 @@
+{'env': 'hopper-medium-v2', 'task': 'Hopper', 'seed': 42, 'lr_actor': 3e-05, 'lr': 0.0003, 'weight_decay': 5e-05, 'max_timesteps': 1000000, 'eval_freq': 5000, 'batch_size': 256, 'gamma': 0.99, 'tau': 0.005, 'target_entropy': None, 'auto_entropy_tuning': True, 'log_dir': './logs', 'model_dir': './ensemble_models', 'backup_entropy': False}
+
+
+5000: 5.16, critic_loss: 5028.40, actor_loss: -223.68, alpha_loss: 0.14, cql1_loss: -340.50, cql2_loss: -337.45, q1: 198.43, q2: 198.21, cql_next_q1: 206.65, cql_next_q2: 207.23, random_q1: 176.05, random_q2: 175.89, alpha: 1.24, logp: 2.37, logp_next_action: 2.70
+
+10000: 0.65, critic_loss: 13844.92, actor_loss: -103.80, alpha_loss: 0.05, cql1_loss: -184.19, cql2_loss: -185.66, q1: 68.00, q2: 69.67, cql_next_q1: 65.60, cql_next_q2: 69.15, random_q1: 24.80, random_q2: 28.08, alpha: 1.11, logp: 2.54, logp_next_action: 2.91                                                                    
+
+15000: 1.27, critic_loss: 61275.86, actor_loss: -133.88, alpha_loss: 0.05, cql1_loss: -220.60, cql2_loss: -244.44, q1: 63.49, q2: 62.46, cql_next_q1: 63.18, cql_next_q2: 52.84, random_q1: -18.66, random_q2: -25.60, alpha: 2.16, logp: 2.93, logp_next_action: 3.42
+
+20000: 1.04, critic_loss: 74805.88, actor_loss: 59.54, alpha_loss: -0.27, cql1_loss: 115.16, cql2_loss: 92.05, q1: -132.74, q2: -133.81, cql_next_q1: -116.73, cql_next_q2: -128.61, random_q1: -211.61, random_q2: -224.75, alpha: 2.21, logp: 3.34, logp_next_action: 3.45
+
+25000: 0.82, critic_loss: 25985.54, actor_loss: -11.60, alpha_loss: -0.02, cql1_loss: -0.02, cql2_loss: -21.51, q1: -39.07, q2: -37.66, cql_next_q1: -31.41, cql_next_q2: -34.33, random_q1: -94.43, random_q2: -102.78, alpha: 1.86, logp: 3.04, logp_next_action: 2.92
+
+30000: 0.97, critic_loss: 15584.55, actor_loss: -27.67, alpha_loss: -0.11, cql1_loss: -14.57, cql2_loss: -10.80, q1: -3.55, q2: -4.42, cql_next_q1: 3.14, cql_next_q2: 1.42, random_q1: -49.99, random_q2: -49.41, alpha: 1.48, logp: 3.27, logp_next_action: 3.06
+
+35000: 1.25, critic_loss: 71570.44, actor_loss: -292.17, alpha_loss: -1.11, cql1_loss: -581.14, cql2_loss: -619.97, q1: 188.85, q2: 191.10, cql_next_q1: 207.09, cql_next_q2: 192.36, random_q1: 71.61, random_q2: 60.33, alpha: 4.38, logp: 3.75, logp_next_action: 3.85
+
+40000: 0.59, critic_loss: 157469.14, actor_loss: -443.70, alpha_loss: -0.42, cql1_loss: -370.60, cql2_loss: -348.75, q1: 328.99, q2: 329.19, cql_next_q1: 371.29, cql_next_q2: 381.48, random_q1: 216.34, random_q2: 211.41, alpha: 5.95, logp: 3.24, logp_next_action: 4.12
+
+45000: 0.84, critic_loss: 99159.38, actor_loss: -119.21, alpha_loss: 0.44, cql1_loss: 91.72, cql2_loss: 69.61, q1: 47.75, q2: 50.22, cql_next_q1: 51.19, cql_next_q2: 45.04, random_q1: -83.98, random_q2: -86.69, alpha: 5.20, logp: 2.73, logp_next_action: 2.78
+
+50000: 0.84, critic_loss: 330776.69, actor_loss: -21.21, alpha_loss: 0.06, cql1_loss: -14.11, cql2_loss: -113.87, q1: -61.11, q2: -57.62, cql_next_q1: -85.29, cql_next_q2: -117.23, random_q1: -215.50, random_q2: -255.68, alpha: 3.39, logp: 2.95, logp_next_action: 2.93
+
+55000: 0.94, critic_loss: 159883.03, actor_loss: 233.51, alpha_loss: 0.39, cql1_loss: 338.60, cql2_loss: 337.60, q1: -300.53, q2: -299.45, cql_next_q1: -303.37, cql_next_q2: -307.29, random_q1: -381.21, random_q2: -391.45, alpha: 2.66, logp: 2.60, logp_next_action: 2.41
+
+60000: 0.79, critic_loss: 88668.19, actor_loss: 95.14, alpha_loss: 0.03, cql1_loss: -17.62, cql2_loss: 52.27, q1: -175.52, q2: -174.27, cql_next_q1: -179.90, cql_next_q2: -153.24, random_q1: -280.81, random_q2: -261.55, alpha: 2.44, logp: 2.97, logp_next_action: 2.74                         
+
+65000: 0.91, critic_loss: 110425.30, actor_loss: 24.48, alpha_loss: 0.19, cql1_loss: -80.99, cql2_loss: -150.94, q1: -125.03, q2: -117.17, cql_next_q1: -122.94, cql_next_q2: -138.28, random_q1: -257.56, random_q2: -266.41, alpha: 2.46, logp: 2.78, logp_next_action: 2.80
+
+70000: 2.98, critic_loss: 450669.03, actor_loss: 109.39, alpha_loss: -0.20, cql1_loss: -32.08, cql2_loss: -135.54, q1: -198.43, q2: -192.53, cql_next_q1: -224.79, cql_next_q2: -254.49, random_q1: -352.02, random_q2: -381.57, alpha: 2.69, logp: 3.20, logp_next_action: 3.27
+
+75000: 0.98, critic_loss: 52785.67, actor_loss: 51.93, alpha_loss: 0.40, cql1_loss: 51.77, cql2_loss: 42.69, q1: -121.83, q2: -123.69, cql_next_q1: -116.63, cql_next_q2: -125.57, random_q1: -212.33, random_q2: -216.40, alpha: 2.46, logp: 2.55, logp_next_action: 2.34
+
+80000: 0.83, critic_loss: 99914.99, actor_loss: 55.26, alpha_loss: -0.18, cql1_loss: 114.70, cql2_loss: 72.56, q1: -143.46, q2: -150.06, cql_next_q1: -133.79, cql_next_q2: -145.85, random_q1: -241.13, random_q2: -268.39, alpha: 2.60, logp: 3.19, logp_next_action: 2.83
+
+85000: 0.78, critic_loss: 727700.75, actor_loss: 119.97, alpha_loss: 0.24, cql1_loss: 191.87, cql2_loss: 70.38, q1: -178.94, q2: -176.56, cql_next_q1: -161.57, cql_next_q2: -191.33, random_q1: -263.19, random_q2: -304.86, alpha: 2.88, logp: 2.77, logp_next_action: 2.93
+
+90000: 0.83, critic_loss: 143943.97, actor_loss: 66.44, alpha_loss: -0.20, cql1_loss: 125.10, cql2_loss: 25.68, q1: -174.88, q2: -175.60, cql_next_q1: -150.61, cql_next_q2: -187.62, random_q1: -309.22, random_q2: -356.52, alpha: 2.42, logp: 3.23, logp_next_action: 3.18
+
+95000: 3.83, critic_loss: 314761.25, actor_loss: 80.08, alpha_loss: -1.03, cql1_loss: 5.32, cql2_loss: -28.48, q1: -219.42, q2: -228.84, cql_next_q1: -217.12, cql_next_q2: -247.98, random_q1: -426.97, random_q2: -457.51, alpha: 5.34, logp: 3.61, logp_next_action: 3.20
+
+100000: 0.60, critic_loss: 173591.36, actor_loss: -39.91, alpha_loss: -1.30, cql1_loss: -0.88, cql2_loss: -40.85, q1: -89.33, q2: -89.70, cql_next_q1: -52.99, cql_next_q2: -72.27, random_q1: -342.15, random_q2: -371.99, alpha: 5.02, logp: 3.81, logp_next_action: 3.70
+
+105000: 0.61, critic_loss: 739850.94, actor_loss: -245.21, alpha_loss: -0.35, cql1_loss: -216.75, cql2_loss: -323.03, q1: 158.38, q2: 151.98, cql_next_q1: 141.43, cql_next_q2: 92.57, random_q1: -87.52, random_q2: -135.38, alpha: 7.29, logp: 3.18, logp_next_action: 2.80
+
+110000: 0.67, critic_loss: 839712.56, actor_loss: -491.76, alpha_loss: -1.15, cql1_loss: 247.44, cql2_loss: 184.09, q1: 456.01, q2: 457.82, cql_next_q1: 583.03, cql_next_q2: 568.47, random_q1: 336.27, random_q2: 310.28, alpha: 7.99, logp: 3.55, logp_next_action: 3.59
+
+115000: 1.18, critic_loss: 3061194.50, actor_loss: -1601.62, alpha_loss: -1.76, cql1_loss: 239.20, cql2_loss: 116.12, q1: 1512.32, q2: 1521.38, cql_next_q1: 1732.10, cql_next_q2: 1718.68, random_q1: 1305.14, random_q2: 1258.45, alpha: 16.46, logp: 3.63, logp_next_action: 3.72
+
+120000: 1.02, critic_loss: 5976077.00, actor_loss: -3544.64, alpha_loss: -0.09, cql1_loss: -1461.84, cql2_loss: -1616.40, q1: 3529.46, q2: 3542.66, cql_next_q1: 3787.20, cql_next_q2: 3771.52, random_q1: 3349.73, random_q2: 3346.12, alpha: 24.25, logp: 3.03, logp_next_action: 3.06
+
+125000: 1.25, critic_loss: 6814912.00, actor_loss: -4717.59, alpha_loss: 1.85, cql1_loss: -2973.53, cql2_loss: -3065.47, q1: 4781.42, q2: 4771.76, cql_next_q1: 5047.44, cql_next_q2: 4997.95, random_q1: 4569.66, random_q2: 4544.36, alpha: 26.84, logp:2.44, logp_next_action: 2.58
+
+130000: 2.03, critic_loss: 8476994.00, actor_loss: -3837.61, alpha_loss: -0.56, cql1_loss: -1671.42, cql2_loss: -1692.94, q1: 3901.43, q2: 3894.24, cql_next_q1: 4094.07, cql_next_q2: 4071.36, random_q1: 3594.07, random_q2: 3599.90, alpha: 31.13, logp: 3.16, logp_next_action: 2.69

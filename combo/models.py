@@ -151,7 +151,7 @@ class DynamicsModel:
         # Model parameters
         self.seed = seed
         self.lr = lr
-        self.static_fn = static_fns[env.split('-')[0]]
+        self.static_fn = static_fns[env.split('-')[0].lower()]
         self.weight_decay = weight_decay
         self.ensemble_num = ensemble_num
         self.elite_num = elite_num

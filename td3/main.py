@@ -111,11 +111,13 @@ def main(args):
                 np.random.normal(0, max_action * args.expl_noise,
                                  size=act_dim)).clip(-max_action, max_action)
 
+        if args.with_qinfo:
+            env_state = env.sim.get_state()
         next_obs, reward, done, _ = env.step(action)
         done_bool = float(
             done) if episode_timesteps < env._max_episode_steps else 0
+
         if args.with_qinfo:
-            env_state = env.sim.get_state()
             replay_buffer.add(obs, action, next_obs, reward, done_bool,
                               env_state.qpos, env_state.qvel)
         else:
