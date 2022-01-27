@@ -81,6 +81,23 @@ def plot_exp(seeds=True):
     plt.savefig('imgs/ten_seeds_td3.png', dpi=720)
 
 
+def compare_logs(fname1, fname2, save_name, cols=['reward', 'critic_loss', 'q1', 'q2']):
+    df1 = pd.read_csv(fname1)
+    df2 = pd.read_csv(fname2)
+    _, axes = plt.subplots(nrows=2, ncols=2, figsize=(8, 8))
+    for idx, col in enumerate(cols):
+        ax = axes[idx//2][idx%2]
+        ax.plot(df1['step'].values, df1[col].values, label='1')
+        ax.plot(df2['step'].values, df2[col].values, label='2')
+        ax.legend()
+        ax.set_title(col)
+    plt.savefig(f'{save_name}.png')
+
+
 
 if __name__ == '__main__':
-    plot_exp()
+    # plot_exp()
+    for env in ['HalfCheetah', 'Hopper', 'Walker2d']:
+        fname1 = f'/usr/local/data/yuweifu/jaxrl/td3/logs/{env}-v2_/0.csv'
+        fname2 = f'/usr/local/data/yuweifu/jaxrl/td3/logs/{env}-v2/0.csv'
+        compare_logs(fname1, fname2, env.lower())

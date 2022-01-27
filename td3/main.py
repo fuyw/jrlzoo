@@ -6,7 +6,7 @@ import pandas as pd
 from tqdm import trange
 
 from models import TD3
-from utils import ReplayBuffer
+from utils import ReplayBuffer, InfoBuffer
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
@@ -37,7 +37,7 @@ def eval_policy(agent: TD3,
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="HalfCheetah-v2")
+    parser.add_argument("--env", default="Hopper-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--start_timesteps", default=int(25e3), type=int)
@@ -52,6 +52,7 @@ def get_args():
     parser.add_argument("--policy_freq", default=2, type=int)
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
+    parser.add_argument("--with_qinfo", default=False, action="store_true")
     args = parser.parse_args()
     return args
 
@@ -81,7 +82,13 @@ def main(args):
                 seed=args.seed)
 
     # Replay buffer
-    replay_buffer = ReplayBuffer(obs_dim, act_dim)
+    if args.with_qinfo:
+        env_state = env.sim.get_state()
+        qpos_dim = len(env_state.qpos)
+        qvel_dim = len(env_state.qvel)
+        replay_buffer = InfoBuffer(obs_dim, act_dim, qpos_dim, qvel_dim)
+    else:
+        replay_buffer = ReplayBuffer(obs_dim, act_dim)
 
     # Evaluate the untrained policy
     logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]
@@ -107,8 +114,12 @@ def main(args):
         next_obs, reward, done, _ = env.step(action)
         done_bool = float(
             done) if episode_timesteps < env._max_episode_steps else 0
-        replay_buffer.add(obs, action, next_obs, reward, done_bool)
-
+        if args.with_qinfo:
+            env_state = env.sim.get_state()
+            replay_buffer.add(obs, action, next_obs, reward, done_bool,
+                              env_state.qpos, env_state.qvel)
+        else:
+            replay_buffer.add(obs, action, next_obs, reward, done_bool)
         obs = next_obs
         episode_reward += reward
 
@@ -147,6 +158,10 @@ def main(args):
     os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{args.seed}.csv")
+
+    # Save buffers
+    os.makedirs(f'saved_buffers/{args.env}', exist_ok=True)
+    replay_buffer.save(f"saved_buffers/{args.env}/s{args.seed}")
 
 
 if __name__ == "__main__":
