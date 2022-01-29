@@ -236,7 +236,7 @@ class CQLAgent:
             if self.backup_entropy:
                 next_q -= alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
-            critic_loss = 0.5*(q1 - target_q)**2 + 0.5*(q2 - target_q)**2
+            critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
 
             # CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
@@ -264,19 +264,19 @@ class CQLAgent:
             cql2_loss = (jax.scipy.special.logsumexp(cql_concat_q2) - q2) * self.min_q_weight
 
             # Loss weight form Dopamine
-            total_loss = critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
+            total_loss = 0.5*critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
             log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
                         "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, 
-                        "q1": q1,
-                        "q2": q2,
-                        "target_q": target_q,
-                        "cql_q1": cql_q1.mean(), "cql_q2": cql_q2.mean(),
-                        "sampled_q": sampled_q.mean(),
+                        "q1": q1, "q2": q2, "target_q": target_q, "sampled_q": sampled_q.mean(),
+                        "cql_q1_avg": cql_q1.mean(), "cql_q1_min": cql_q1.min(), "cql_q1_max": cql_q1.max(),
+                        "cql_q2_avg": cql_q2.mean(), "cql_q2_min": cql_q2.min(), "cql_q2_max": cql_q2.max(),
                         "cql_concat_q1_avg": cql_concat_q1.mean(), "cql_concat_q1_min": cql_concat_q1.min(), "cql_concat_q1_max": cql_concat_q1.max(),
                         "cql_concat_q2_avg": cql_concat_q2.mean(), "cql_concat_q2_min": cql_concat_q2.min(), "cql_concat_q2_max": cql_concat_q2.max(),
                         "cql_logp": cql_logp.mean(), "cql_logp_next_action": cql_logp_next_action.mean(),
-                        "cql_next_q1": cql_next_q1.mean(), "cql_next_q2": cql_next_q2.mean(),
-                        "random_q1": cql_random_q1.mean(), "random_q2": cql_random_q2.mean(),
+                        "cql_next_q1_avg": cql_next_q1.mean(), "cql_next_q1_min": cql_next_q1.min(), "cql_next_q1_max": cql_next_q1.max(),
+                        "cql_next_q2_avg": cql_next_q2.mean(), "cql_next_q2_min": cql_next_q2.min(), "cql_next_q2_max": cql_next_q2.max(),
+                        "random_q1_avg": cql_random_q1.mean(), "random_q1_min": cql_random_q1.min(), "random_q1_max": cql_random_q1.max(),
+                        "random_q2_avg": cql_random_q2.mean(), "random_q2_min": cql_random_q2.min(), "random_q2_max": cql_random_q2.max(),
                         "alpha": alpha, "logp": logp, "logp_next_action": logp_next_action}
 
             return total_loss, log_info

@@ -2,6 +2,7 @@ import d4rl
 import gym
 import jax
 import json
+import logging
 import os
 import time
 import numpy as np
@@ -58,13 +59,22 @@ def get_args():
 
 
 def main(args):
+    # Log setting
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        filename=f'logs/{args.env}/cql_s{args.seed}.log',
+                        filemode='w',
+                        force=True)
+    logger = logging.getLogger()
+
     # Env parameters
     env = gym.make(args.env)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     # max_action = float(env.action_space.high[0])
 
-    # random seeds
+    # Random seeds
     env.seed(args.seed)
     env.action_space.seed(args.seed)
     env.observation_space.seed(args.seed)
@@ -125,7 +135,7 @@ def main(args):
             logs.append(log_info)
             fix_q1, fix_q2 = agent.critic.apply({"params": agent.critic_state.params}, fix_obs, fix_act)
             _, fix_a = agent.select_action(agent.actor_state.params, jax.random.PRNGKey(0), fix_obs, True)
-            print(
+            logger.info(
                 f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}\n"
                 f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}\n"
                 f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
@@ -133,13 +143,16 @@ def main(args):
                 f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}\n" 
                 f"\tcql_concat_q1_avg: {log_info['cql_concat_q1_avg']:.2f}, cql_concat_q1_min: {log_info['cql_concat_q1_min']:.2f}, cql_concat_q1_max: {log_info['cql_concat_q1_max']:.2f}\n"
                 f"\tcql_concat_q2_avg: {log_info['cql_concat_q2_avg']:.2f}, cql_concat_q2_min: {log_info['cql_concat_q2_min']:.2f}, cql_concat_q2_max: {log_info['cql_concat_q2_max']:.2f}\n"
-                f"\tcql_q1: {log_info['cql_q1']:.2f}, cql_next_q1: {log_info['cql_next_q1']:.2f}, random_q1: {log_info['random_q1']:.2f} \n"
-                f"\tcql_q2: {log_info['cql_q2']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}, random_q2: {log_info['random_q2']:.2f} \n"
+                f"\tcql_q1_avg: {log_info['cql_q1_avg']:.2f}, cql_q1_min: {log_info['cql_q1_min']:.2f}, cql_q1_max: {log_info['cql_q1_max']:.2f}\n"
+                f"\tcql_q2_avg: {log_info['cql_q2_avg']:.2f}, cql_q2_min: {log_info['cql_q2_min']:.2f}, cql_q2_max: {log_info['cql_q2_max']:.2f}\n"
+                f"\tcql_next_q1_avg: {log_info['cql_next_q1_avg']:.2f}, cql_next_q1_min: {log_info['cql_next_q1_min']:.2f}, cql_next_q1_max: {log_info['cql_next_q1_max']:.2f}\n"
+                f"\tcql_next_q2_avg: {log_info['cql_next_q2_avg']:.2f}, cql_next_q2_min: {log_info['cql_next_q2_min']:.2f}, cql_next_q2_max: {log_info['cql_next_q2_max']:.2f}\n"
+                f"\trandom_q1_avg: {log_info['random_q1_avg']:.2f}, random_q1_min: {log_info['random_q1_min']:.2f}, random_q1_max: {log_info['random_q1_max']:.2f}\n"
+                f"\trandom_q2_avg: {log_info['random_q2_avg']:.2f}, random_q2_min: {log_info['random_q2_min']:.2f}, random_q2_max: {log_info['random_q2_max']:.2f}\n"
                 f"\tlogp_next_action: {log_info['logp_next_action']:.2f}, cql_logp: {log_info['cql_logp']:.2f} cql_logp_next_action: {log_info['cql_logp_next_action']:.2f}\n"
                 f"\tbatch_rewards: {log_info['batch_rewards']:.2f}, batch_discounts: {log_info['batch_discounts']:.2f}, batch_obs: {log_info['batch_obs']:.2f}, buffer_size: {replay_buffer.size}\n"
-                f"\tfix_q1: {fix_q1.squeeze().mean().item():.2f}, fix_q2: {fix_q2.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n"
+                f"\tfix_q1: {fix_q1.squeeze().mean().item():.2f}, fix_q2: {fix_q2.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n\n"
             )
-
 
     # Save logs
     log_name = f"s{args.seed}"
