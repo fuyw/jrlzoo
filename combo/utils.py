@@ -174,17 +174,32 @@ class InfoBuffer:
         self.size = len(self.actions)
 
 
-def check_replay_buffer(replay_buffer):
+def check_replay_buffer():
+    import gym
+    task = 'Hopper'
+    env = gym.make(f'{task}-v2')
+    obs_dim = env.observation_space.shape[0]
+    act_dim = env.action_space.shape[0]
+    env_state = env.sim.get_state()
+    qpos_dim = len(env_state.qpos)
+    qvel_dim = len(env_state.qvel)
+    replay_buffer = InfoBuffer(obs_dim, act_dim, qpos_dim, qvel_dim)
+    replay_buffer.load(f'saved_buffers/{task}-v2/s0.npz')
+
     L = replay_buffer.size
+    _ = env.reset()
     env_state = env.sim.get_state()
     error_lst = []
-    for i in trange(L):
+    for i in trange(100):
         env_state.qpos[:] = replay_buffer.qpos[i]
         env_state.qvel[:] = replay_buffer.qvel[i]
         env.sim.set_state(env_state)
         act = replay_buffer.actions[i]
         next_obs, reward, done, _ = env.step(act)
-        if np.allclose(replay_buffer.next_observations[i], next_obs) and np.allclose(replay_buffer.rewards[i], reward) :
-            pass
-        else:
-            error_lst.append(i)
+        obs_error = abs(replay_buffer.next_observations[i] - next_obs).sum()
+        rew_error = abs(replay_buffer.rewards[i] - reward)
+        print((i, obs_error, rew_error))
+        # if np.allclose(replay_buffer.next_observations[i], next_obs) and np.allclose(replay_buffer.rewards[i], reward):
+        #     pass
+        # else:
+        #     error_lst.append(i)

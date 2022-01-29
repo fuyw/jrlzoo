@@ -83,7 +83,8 @@ def main(args):
 
     # Train agent and evaluate policy
     for t in trange(args.max_timesteps):
-        log_info = agent.update(replay_buffer, model_buffer)
+        # log_info = agent.update(replay_buffer, model_buffer)
+        log_info = agent.update(replay_buffer, replay_buffer)
         # for i in log_info:
         #     print(f'{i}\t{log_info[i]}')
         # return

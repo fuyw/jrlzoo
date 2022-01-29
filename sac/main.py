@@ -8,7 +8,7 @@ from tqdm import trange
 from models import SACAgent
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".25"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 
 def eval_policy(agent: SACAgent,
@@ -35,12 +35,12 @@ def eval_policy(agent: SACAgent,
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="Hopper-v2")
+    parser.add_argument("--env", default="HalfCheetah-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--start_timesteps", default=int(25e3), type=int)
-    parser.add_argument("--max_timesteps", default=int(1e6), type=int)
-    parser.add_argument("--eval_freq", default=int(5e3), type=int)
+    parser.add_argument("--max_timesteps", default=int(3e6), type=int)
+    parser.add_argument("--eval_freq", default=int(1.5e4), type=int)
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)

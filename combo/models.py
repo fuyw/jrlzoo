@@ -584,32 +584,32 @@ class COMBOAgent:
 
     def update(self, replay_buffer, model_buffer):
         # rollout the model
-        if self.update_step % 1000 == 0:
-            observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
-            sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
-            select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
-            for t in range(self.horizon):
-                self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
+        # if self.update_step % 1000 == 0:
+        #     observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
+        #     sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
+        #     select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
+        #     for t in range(self.horizon):
+        #         self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
 
-                # random actions
-                # actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), 3),
-                #                              minval=-1.0, maxval=1.0)
+        #         # random actions
+        #         # actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), 3),
+        #         #                              minval=-1.0, maxval=1.0)
 
-                # sample actions with policy pi
-                sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
+        #         # sample actions with policy pi
+        #         sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
 
-                next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
-                nonterminal_mask = ~dones
-                if nonterminal_mask.sum() == 0:
-                    print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
-                    break
-                model_buffer.add_batch(observations[nonterminal_mask],
-                                       actions[nonterminal_mask],
-                                       next_observations[nonterminal_mask],
-                                       rewards[nonterminal_mask],
-                                       dones[nonterminal_mask])
-                observations = next_observations[nonterminal_mask]
-                sample_rng = sample_rng[nonterminal_mask]
+        #         next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
+        #         nonterminal_mask = ~dones
+        #         if nonterminal_mask.sum() == 0:
+        #             print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
+        #             break
+        #         model_buffer.add_batch(observations[nonterminal_mask],
+        #                                actions[nonterminal_mask],
+        #                                next_observations[nonterminal_mask],
+        #                                rewards[nonterminal_mask],
+        #                                dones[nonterminal_mask])
+        #         observations = next_observations[nonterminal_mask]
+        #         sample_rng = sample_rng[nonterminal_mask]
 
         # sample from real & model buffer
         real_batch = replay_buffer.sample(self.real_batch_size)

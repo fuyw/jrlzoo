@@ -163,6 +163,21 @@ class CQLAgent:
                 tx=optax.adam(self.lr))
 
     @functools.partial(jax.jit, static_argnames=("self"))
+    def update_target_params(self, params: FrozenDict, target_params: FrozenDict):
+        def _update(param, target_param):
+            return self.tau * param + (1 - self.tau) * target_param
+
+        updated_params = jax.tree_multimap(_update, params, target_params)
+        return updated_params
+
+    @functools.partial(jax.jit, static_argnames=("self"))
+    def select_action(self, params: FrozenDict, rng: Any, observation: np.ndarray, eval_mode: bool = False) -> jnp.ndarray:
+        observation = jax.device_put(observation[None])
+        rng, sample_rng = jax.random.split(rng)
+        mean_action, sampled_action, _ = self.actor.apply({"params": params}, sample_rng, observation)
+        return rng, jnp.where(eval_mode, mean_action.flatten(), sampled_action.flatten())
+
+    @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
                    batch: Batch,
                    critic_target_params: FrozenDict,
@@ -175,7 +190,11 @@ class CQLAgent:
         frozen_actor_params = actor_state.params
         frozen_critic_params = critic_state.params
 
-        observations, actions, rewards, discounts, next_observations = batch
+        observations = batch.observations
+        actions = batch.actions
+        rewards = batch.rewards
+        discounts = batch.discounts
+        next_observations = batch.next_observations
         def loss_fn(actor_params: FrozenDict,
                     critic_params: FrozenDict,
                     alpha_params: FrozenDict,
@@ -248,7 +267,14 @@ class CQLAgent:
             total_loss = critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
             log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
                         "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, 
-                        "q1": q1, "q2": q2, "target_q": target_q, "cql_q1": cql_q1.mean(), "cql_q2": cql_q2.mean(),
+                        "q1": q1,
+                        "q2": q2,
+                        "target_q": target_q,
+                        "cql_q1": cql_q1.mean(), "cql_q2": cql_q2.mean(),
+                        "sampled_q": sampled_q.mean(),
+                        "cql_concat_q1_avg": cql_concat_q1.mean(), "cql_concat_q1_min": cql_concat_q1.min(), "cql_concat_q1_max": cql_concat_q1.max(),
+                        "cql_concat_q2_avg": cql_concat_q2.mean(), "cql_concat_q2_min": cql_concat_q2.min(), "cql_concat_q2_max": cql_concat_q2.max(),
+                        "cql_logp": cql_logp.mean(), "cql_logp_next_action": cql_logp_next_action.mean(),
                         "cql_next_q1": cql_next_q1.mean(), "cql_next_q2": cql_next_q2.mean(),
                         "random_q1": cql_random_q1.mean(), "random_q2": cql_random_q2.mean(),
                         "alpha": alpha, "logp": logp, "logp_next_action": logp_next_action}
@@ -282,25 +308,46 @@ class CQLAgent:
 
         return log_info, actor_state, critic_state, alpha_state
 
+    def update(self, replay_buffer, batch_size: int = 256):
+        self.update_step += 1
+
+        # Sample from the buffer
+        batch = replay_buffer.sample(batch_size)
+        self.rng, key = jax.random.split(self.rng)
+        (log_info, self.actor_state, self.critic_state, self.alpha_state) = self.train_step(
+            batch, self.critic_target_params, self.actor_state, self.critic_state, self.alpha_state, key)
+        log_info['batch_rewards'] = batch.rewards.mean().item()
+        log_info['batch_discounts'] = batch.discounts.mean().item()
+        log_info['batch_obs'] = abs(batch.observations).sum(1).mean().item()
+
+        # update target network
+        params = self.critic_state.params
+        target_params = self.critic_target_params
+        self.critic_target_params = self.update_target_params(params, target_params)
+
+        return log_info
+
     @functools.partial(jax.jit, static_argnames=("self"))
-    def train_step_lag(self,
+    def train_step1(self,
                    batch: Batch,
                    critic_target_params: FrozenDict,
                    actor_state: train_state.TrainState,
                    critic_state: train_state.TrainState,
                    alpha_state: train_state.TrainState,
-                   cql_alpha_state: train_state.TrainState,
                    key: jnp.ndarray):
 
         # For use in loss_fn without apply gradients
         frozen_actor_params = actor_state.params
         frozen_critic_params = critic_state.params
 
-        observations, actions, rewards, discounts, next_observations = batch
+        observations = batch.observations
+        actions = batch.actions
+        rewards = batch.rewards
+        discounts = batch.discounts
+        next_observations = batch.next_observations
         def loss_fn(actor_params: FrozenDict,
                     critic_params: FrozenDict,
                     alpha_params: FrozenDict,
-                    cql_alpha_params: FrozenDict,
                     observation: jnp.ndarray,
                     action: jnp.ndarray,
                     reward: jnp.ndarray,
@@ -334,13 +381,16 @@ class CQLAgent:
             # Use frozen_actor_params to avoid affect Actor parameters
             _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng2, next_observation)
             next_q1, next_q2 = self.critic.apply({"params": critic_target_params}, next_observation, next_action)
-            next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2)) - alpha * logp_next_action
+
+            next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2))
+            if self.backup_entropy:
+                next_q -= alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
-            critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
+            critic_loss = 0.5*(q1 - target_q)**2 + 0.5*(q2 - target_q)**2
 
             # CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
-            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim))
+            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim), minval=-1.0, maxval=1.0)
 
             # Sample 10 actions with current state
             repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0), repeats=self.num_random, axis=0)
@@ -360,43 +410,35 @@ class CQLAgent:
                                              jnp.squeeze(cql_next_q2) - cql_logp_next_action,
                                              jnp.squeeze(cql_q2) - cql_logp])
 
-            cql_ood_q1 = jax.scipy.special.logsumexp(cql_concat_q1)
-            cql_ood_q2 = jax.scipy.special.logsumexp(cql_concat_q2)
-
-            cql1_loss = cql_ood_q1 * self.min_q_weight
-            cql2_loss = cql_odd_q2 * self.min_q_weight
-
-            if self.with_lagrange:
-                log_cql_alpha = self.log_cql_alpha.apply({"params": cql_alpha_params})
-                cql_alpha = jnp.clip(jnp.exp(log_cql_alpha), 0.0, 1000000.0)
-                cql1_loss = cql_alpha * (cql1_loss - self.target_action_gap)
-                cql2_loss = cql_alpha * (cql2_loss - self.target_action_gap)
-                cql_alpha_loss = (-cql1_loss - cql2_loss) * 0.5
-
-            cql1_loss -= q1.mean() * self.min_q_weight
-            cql2_loss -= q2.mean() * self.min_q_weight
+            cql1_loss = jax.scipy.special.logsumexp(cql_concat_q1) * self.min_q_weight
+            cql2_loss = jax.scipy.special.logsumexp(cql_concat_q2) * self.min_q_weight
 
             # Loss weight form Dopamine
-            total_loss = 0.5 * critic_loss + actor_loss + alpha_loss + cql_alpha_loss + cql1_loss + cql2_loss
-            log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss,
-                        "alpha_loss": alpha_loss, "cql_loss": (cql1_loss+cql2_loss)/2, 
-                        "alpha": alpha, "cql_alpha": cql_alpha,
-                        "q1": q1, "q2": q2,
-                        "ood_q1": cql_ood_q1, "ood_q2": cql_ood_q2}
-            if self.with_lagrange:
-                log_info.update({"cql_alpha": 0.0})
+            total_loss = critic_loss + actor_loss + alpha_loss # + cql1_loss + cql2_loss
+            log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
+                        "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, 
+                        "q1": q1,
+                        "q2": q2,
+                        "target_q": target_q,
+                        "cql_q1": cql_q1.mean(), "cql_q2": cql_q2.mean(),
+                        "sampled_q": sampled_q.mean(),
+                        "cql_concat_q1_avg": cql_concat_q1.mean(), "cql_concat_q1_min": cql_concat_q1.min(), "cql_concat_q1_max": cql_concat_q1.max(),
+                        "cql_concat_q2_avg": cql_concat_q2.mean(), "cql_concat_q2_min": cql_concat_q2.min(), "cql_concat_q2_max": cql_concat_q2.max(),
+                        "cql_logp": cql_logp.mean(), "cql_logp_next_action": cql_logp_next_action.mean(),
+                        "cql_next_q1": cql_next_q1.mean(), "cql_next_q2": cql_next_q2.mean(),
+                        "random_q1": cql_random_q1.mean(), "random_q2": cql_random_q2.mean(),
+                        "alpha": alpha, "logp": logp, "logp_next_action": logp_next_action}
 
             return total_loss, log_info
 
         grad_fn = jax.vmap(
-            jax.value_and_grad(loss_fn, argnums=(0, 1, 2, 3), has_aux=True),
-            in_axes=(None, None, None, None, 0, 0, 0, 0, 0, 0))
+            jax.value_and_grad(loss_fn, argnums=(0, 1, 2), has_aux=True),
+            in_axes=(None, None, None, 0, 0, 0, 0, 0, 0))
         rng = jnp.stack(jax.random.split(key, num=actions.shape[0]))
 
         (_, log_info), gradients = grad_fn(actor_state.params,
                                            critic_state.params,
                                            alpha_state.params,
-                                           cql_alpha_state.params,
                                            observations,
                                            actions,
                                            rewards,
@@ -407,39 +449,28 @@ class CQLAgent:
         gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
         log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
 
-        actor_grads, critic_grads, alpha_grads, cql_alpha_grads = gradients
+        actor_grads, critic_grads, alpha_grads = gradients
 
         # Update TrainState
         actor_state = actor_state.apply_gradients(grads=actor_grads)
         critic_state = critic_state.apply_gradients(grads=critic_grads)
         alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
-        cql_alpha_state = cql_alpha_state.apply_gradients(grads=cql_alpha_grads)
 
-        return log_info, actor_state, critic_state, alpha_state, cql_alpha_state
+        return log_info, actor_state, critic_state, alpha_state
 
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def update_target_params(self, params: FrozenDict, target_params: FrozenDict):
-        def _update(param, target_param):
-            return self.tau * param + (1 - self.tau) * target_param
-
-        updated_params = jax.tree_multimap(_update, params, target_params)
-        return updated_params
-
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def select_action(self, params: FrozenDict, rng: Any, observation: np.ndarray, eval_mode: bool = False) -> jnp.ndarray:
-        observation = jax.device_put(observation[None])
-        rng, sample_rng = jax.random.split(rng)
-        mean_action, sampled_action, _ = self.actor.apply({"params": params}, sample_rng, observation)
-        return rng, jnp.where(eval_mode, mean_action.flatten(), sampled_action.flatten())
-
-    def update(self, replay_buffer, batch_size: int = 256):
+    def update1(self, replay_buffer, batch_size: int = 256):
         self.update_step += 1
 
         # Sample from the buffer
         batch = replay_buffer.sample(batch_size)
         self.rng, key = jax.random.split(self.rng)
-        (log_info, self.actor_state, self.critic_state, self.alpha_state) = self.train_step(
+        (log_info, self.actor_state, self.critic_state, self.alpha_state) = self.train_step1(
             batch, self.critic_target_params, self.actor_state, self.critic_state, self.alpha_state, key)
+        log_info['batch_rewards'] = batch.rewards.mean().item()
+        log_info['batch_rewards_min'] = batch.rewards.min().item()
+        log_info['batch_rewards_max'] = batch.rewards.max().item()
+        log_info['batch_discounts'] = batch.discounts.mean().item()
+        log_info['batch_obs'] = abs(batch.observations).sum(1).mean().item()
 
         # update target network
         params = self.critic_state.params

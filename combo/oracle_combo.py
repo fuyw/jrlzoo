@@ -200,16 +200,10 @@ class OracleAgent:
             cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim), minval=-1.0, maxval=1.0)
 
             # repeat next observations
-            repeat_next_observations = jnp.repeat(jnp.expand_dims(next_observation, axis=0),
-                                                  repeats=self.num_random, axis=0)
-            cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params},
-                                                             repeat_next_observations,
-                                                             cql_random_actions)
-            _, cql_next_actions, cql_logp_next_action = self.actor.apply({"params": frozen_actor_params},
-                                                                         rng4, repeat_next_observations)
-            cql_next_q1, cql_next_q2 = self.critic.apply({"params": critic_params},
-                                                         repeat_next_observations,
-                                                         cql_next_actions)
+            repeat_next_observations = jnp.repeat(jnp.expand_dims(next_observation, axis=0), repeats=self.num_random, axis=0)
+            cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params}, repeat_next_observations, cql_random_actions)
+            _, cql_next_actions, cql_logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng4, repeat_next_observations)
+            cql_next_q1, cql_next_q2 = self.critic.apply({"params": critic_params}, repeat_next_observations, cql_next_actions)
 
             random_density = np.log(0.5 ** self.act_dim)
             cql_concat_q1 = jnp.concatenate([
@@ -229,10 +223,11 @@ class OracleAgent:
             total_loss = 0.5*critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
 
             log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
-                        "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, 
+                        "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, "sampled_q": sampled_q.mean(), "target_q": target_q.mean(),
                         "q1": q1, "q2": q2,  "cql_next_q1": cql_next_q1.mean(), "cql_next_q2": cql_next_q2.mean(),
                         "random_q1": cql_random_q1.mean(), "random_q2": cql_random_q2.mean(),
-                        "alpha": alpha, "logp": logp, "logp_next_action": logp_next_action}
+                        "alpha": alpha, "logp": logp, "logp_next_action": logp_next_action,
+                        "cql_logp_next_action": cql_logp_next_action.mean()}
 
             return total_loss, log_info
 
@@ -280,12 +275,13 @@ class OracleAgent:
         return rng, jnp.where(eval_mode, mean_action.flatten(), sampled_action.flatten())
 
     def update(self, replay_buffer, model_buffer):
-        if self.update_step % 1000 == 0:
+        self.rollout_batch_size = 30
+        if self.update_step % 1 == 0: 
             sampled_batch = replay_buffer.sample(self.rollout_batch_size)
-            for i in trange(self.rollout_batch_size, desc='[Rollout the model]'):
+            _ = self.env.reset()
+            env_state = self.env.sim.get_state()
+            for i in range(self.rollout_batch_size):
                 # reset the env state
-                _ = self.env.reset()
-                env_state = self.env.sim.get_state()
                 env_state.qpos[:] = sampled_batch.qpos[i]
                 env_state.qvel[:] = sampled_batch.qvel[i]
                 self.env.sim.set_state(env_state)
@@ -302,14 +298,7 @@ class OracleAgent:
         # sample from real & model buffer
         real_batch = replay_buffer.sample(self.real_batch_size)
         model_batch = model_buffer.sample(self.model_batch_size)
-
-        # print(f'real_batch.rewards.sum() = {real_batch.rewards.sum()}')
-        # print(f'real_batch.actions.sum() = {real_batch.actions.reshape(-1).sum()}')
-        # print(f'model_batch.rewards.sum() = {model_batch.rewards.sum()}')
-        # print(f'model_batch.actions.sum() = {model_batch.actions.reshape(-1).sum()}')
-        # print(f'model_buffers.rewards.sum() = {model_buffer.rewards.sum()}')
-        # print(f'model_buffers.actions.sum() = {model_buffer.actions.reshape(-1).sum()}')
-        # print(f'model.size = {model_buffer.size}')
+        # model_batch = replay_buffer.sample(self.real_batch_size)
 
         concat_observations = np.concatenate([real_batch.observations, model_batch.observations], axis=0)
         concat_actions = np.concatenate([real_batch.actions, model_batch.actions], axis=0)
@@ -324,6 +313,40 @@ class OracleAgent:
             concat_next_observations, self.critic_target_params, self.actor_state,
             self.critic_state, self.alpha_state, key
         )
+        log_info['batch_rewards'] = real_batch.rewards.mean().item()
+        log_info['batch_discounts'] = real_batch.discounts.mean().item()
+        log_info['batch_act'] = abs(real_batch.actions).sum(1).mean().item()
+        log_info['model_rewards'] = model_batch.rewards.mean().item()
+        log_info['model_discounts'] = model_batch.discounts.mean().item()
+        log_info['model_act'] = abs(model_batch.actions).sum(1).mean().item()
+
+        # upate target network
+        params = self.critic_state.params
+        target_params = self.critic_target_params
+        self.critic_target_params = self.update_target_params(params, target_params)
+
+        self.update_step += 1
+        return log_info
+
+    def update1(self, replay_buffer, model_buffer):
+        real_batch = replay_buffer.sample(self.real_batch_size)
+        model_batch = replay_buffer.sample(self.model_batch_size)
+
+        concat_observations = np.concatenate([real_batch.observations, model_batch.observations], axis=0)
+        concat_actions = np.concatenate([real_batch.actions, model_batch.actions], axis=0)
+        concat_rewards = np.concatenate([real_batch.rewards, model_batch.rewards], axis=0)
+        concat_discounts = np.concatenate([real_batch.discounts, model_batch.discounts], axis=0)
+        concat_next_observations = np.concatenate([real_batch.next_observations, model_batch.next_observations], axis=0)
+
+        # CQL training with COMBO
+        self.rng, key = jax.random.split(self.rng)
+        log_info, self.actor_state, self.critic_state, self.alpha_state = self.train_step(
+            concat_observations, concat_actions, concat_rewards, concat_discounts,
+            concat_next_observations, self.critic_target_params, self.actor_state,
+            self.critic_state, self.alpha_state, key
+        )
+        log_info['batch_rewards'] = real_batch.rewards.mean().item()
+        log_info['model_rewards'] = model_batch.rewards.mean().item()
 
         # upate target network
         params = self.critic_state.params
@@ -377,7 +400,8 @@ def get_args():
 
 def main(args):
     # Env parameters
-    env = gym.make(f"{args.task}-v2")
+    # env = gym.make(f"{args.task}-v2")
+    env = gym.make(f"hopper-medium-v2")
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
 
@@ -390,12 +414,21 @@ def main(args):
     agent = OracleAgent(env=args.env, obs_dim=obs_dim, act_dim=act_dim, seed=args.seed,
                         lr=args.lr, lr_actor=args.lr_actor, rollout_batch_size=10000)
 
+    fix_obs = np.random.normal(size=(128, obs_dim))
+    fix_act = np.random.normal(size=(128, act_dim))
+
     # Replay buffer
     env_state = env.sim.get_state()
     qpos_dim = len(env_state.qpos)
     qvel_dim = len(env_state.qvel)
+
+    # Replay buffer
     replay_buffer = InfoBuffer(obs_dim, act_dim, qpos_dim, qvel_dim)
     replay_buffer.load(f'saved_buffers/{args.task}-v2/s0.npz')
+
+    # replay_buffer = ReplayBuffer(obs_dim, act_dim)
+    # replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
+
     model_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(5e5))
 
     # Evaluate the untrained policy
@@ -406,9 +439,9 @@ def main(args):
 
     # Train agent and evaluate policy
     for t in trange(args.max_timesteps):
-        log_info = agent.update(replay_buffer, model_buffer)
+        log_info = agent.update1(replay_buffer, model_buffer)
 
-        if (t + 1) % args.eval_freq == 0:
+        if (t + 1) % 5000 == 0:
             eval_reward = eval_policy(agent, args.env, args.seed)
             log_info.update({
                 "step": t+1,
@@ -416,15 +449,19 @@ def main(args):
                 "time": (time.time() - start_time) / 60
             })
             logs.append(log_info)
+            fix_q1, fix_q2 = agent.critic.apply({"params": agent.critic_state.params}, fix_obs, fix_act)
             print(
-                f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.2f}, "
-                f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, "
-                f"cql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}, "
-                f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
-                f"cql_next_q1: {log_info['cql_next_q1']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}, "
-                f"random_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
-                f"alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}, "
-                f"logp_next_action: {log_info['logp_next_action']:.2f}"
+                f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}\n"
+                f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}\n"
+                f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
+                f"\tcritic_loss: {log_info['critic_loss']:.2f}, q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, target_q: {log_info['target_q']:.2f}\n"
+                f"\tcql_next_q1: {log_info['cql_next_q1']:.2f}, random_q1: {log_info['random_q1']:.2f} \n"
+                f"\tcql_next_q2: {log_info['cql_next_q2']:.2f}, random_q2: {log_info['random_q2']:.2f} \n"
+                f"\tlogp_next_action: {log_info['logp_next_action']:.2f},  cql_logp_next_action: {log_info['cql_logp_next_action']:.2f}\n"
+                f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}\n" 
+                f"\tbatch_rewards: {log_info['batch_rewards']:.2f}, batch_discounts: {log_info['batch_discounts']:.2f}, batch_act: {log_info['batch_act']:.2f}\n"
+                f"\tmodel_rewards: {log_info['model_rewards']:.2f}, model_discounts: {log_info['model_discounts']:.2f}, model_act: {log_info['model_act']:.2f}\n"
+                f"\tfix_q1: {fix_q1.squeeze().mean().item():.2f}, fix_q2: {fix_q2.squeeze().mean().item():.2f}\n"
             )
 
     # Save logs
@@ -442,3 +479,4 @@ if __name__ == "__main__":
     os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
     os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     main(args)
+
