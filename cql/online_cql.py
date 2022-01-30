@@ -2,6 +2,7 @@ import d4rl
 import gym
 import jax
 import json
+import logging
 import os
 import time
 import numpy as np
@@ -42,10 +43,11 @@ def get_args():
     parser.add_argument("--lr_actor", default=1e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
-    parser.add_argument("--eval_freq", default=int(2.5e3), type=int)
+    parser.add_argument("--eval_freq", default=int(1e3), type=int)
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
+    parser.add_argument("--min_q_weight", default=3.0, type=float)
     parser.add_argument("--target_entropy", default=None, type=float)
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
@@ -58,6 +60,17 @@ def get_args():
 
 
 def main(args):
+    exp_name = f'd4rl_online_cql0_s{args.seed}_alpha{args.min_q_weight}'
+
+    # Log setting
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        filename=f'logs/{args.env}/{exp_name}.log',
+                        filemode='w',
+                        force=True)
+    logger = logging.getLogger()
+
     # Env parameters
     env = gym.make(args.env)
     obs_dim = env.observation_space.shape[0]
@@ -82,18 +95,18 @@ def main(args):
                      auto_entropy_tuning=args.auto_entropy_tuning,
                      backup_entropy=args.backup_entropy,
                      target_entropy=args.target_entropy,
+                     min_q_weight=args.min_q_weight,
                      with_lagrange=args.with_lagrange,
                      lagrange_thresh=args.lagrange_thresh)
     print(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
     print(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
 
+    # Replay D4RL buffer
+    # offline_buffer = ReplayBuffer(obs_dim, act_dim)
+    # offline_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
+    replay_buffer = ReplayBuffer(obs_dim, act_dim)
     fix_obs = np.random.normal(size=(128, obs_dim))
     fix_act = np.random.normal(size=(128, act_dim))
-
-    # Replay D4RL buffer
-    offline_buffer = ReplayBuffer(obs_dim, act_dim)
-    offline_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
-    replay_buffer = ReplayBuffer(obs_dim, act_dim)
 
     # Evaluate the untrained policy
     logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]
@@ -107,7 +120,8 @@ def main(args):
 
     # Train agent and evaluate policy
     sample_rng = jax.random.PRNGKey(20)
-    for t in trange(args.max_timesteps):
+    # for t in trange(args.max_timesteps):
+    for t in trange(int(1.5e5)):
         episode_timesteps += 1
         if t < 25e3:
             action = env.action_space.sample()
@@ -131,7 +145,7 @@ def main(args):
             episode_timesteps = 0
 
         if t >= 25e3:
-            log_info = agent.update1(replay_buffer, args.batch_size)
+            log_info = agent.update(replay_buffer, args.batch_size)
             # log_info = agent.update(offline_buffer, args.batch_size)
 
             # save some evaluate time
@@ -145,35 +159,37 @@ def main(args):
                 logs.append(log_info)
                 fix_q1, fix_q2 = agent.critic.apply({"params": agent.critic_state.params}, fix_obs, fix_act)
                 _, fix_a = agent.select_action(agent.actor_state.params, jax.random.PRNGKey(0), fix_obs, True)
-                print(
-                    f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}\n"
+                logger.info(
+                    f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
                     f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}\n"
                     f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
                     f"\tcritic_loss: {log_info['critic_loss']:.2f}, q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, target_q: {log_info['target_q']:.2f}\n"
                     f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}\n" 
+                    f"\tlogsumexp_cql_concat_q1: {log_info['logsumexp_cql_concat_q1']:.2f}, "
+                    f"logsumexp_cql_concat_q2: {log_info['logsumexp_cql_concat_q2']:.2f}\n"
                     f"\tcql_concat_q1_avg: {log_info['cql_concat_q1_avg']:.2f}, cql_concat_q1_min: {log_info['cql_concat_q1_min']:.2f}, cql_concat_q1_max: {log_info['cql_concat_q1_max']:.2f}\n"
                     f"\tcql_concat_q2_avg: {log_info['cql_concat_q2_avg']:.2f}, cql_concat_q2_min: {log_info['cql_concat_q2_min']:.2f}, cql_concat_q2_max: {log_info['cql_concat_q2_max']:.2f}\n"
-                    f"\tcql_q1: {log_info['cql_q1']:.2f}, cql_next_q1: {log_info['cql_next_q1']:.2f}, random_q1: {log_info['random_q1']:.2f} \n"
-                    f"\tcql_q2: {log_info['cql_q2']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}, random_q2: {log_info['random_q2']:.2f} \n"
+                    f"\tcql_q1_avg: {log_info['cql_q1_avg']:.2f}, cql_q1_min: {log_info['cql_q1_min']:.2f}, cql_q1_max: {log_info['cql_q1_max']:.2f}\n"
+                    f"\tcql_q2_avg: {log_info['cql_q2_avg']:.2f}, cql_q2_min: {log_info['cql_q2_min']:.2f}, cql_q2_max: {log_info['cql_q2_max']:.2f}\n"
+                    f"\tcql_next_q1_avg: {log_info['cql_next_q1_avg']:.2f}, cql_next_q1_min: {log_info['cql_next_q1_min']:.2f}, cql_next_q1_max: {log_info['cql_next_q1_max']:.2f}\n"
+                    f"\tcql_next_q2_avg: {log_info['cql_next_q2_avg']:.2f}, cql_next_q2_min: {log_info['cql_next_q2_min']:.2f}, cql_next_q2_max: {log_info['cql_next_q2_max']:.2f}\n"
+                    f"\trandom_q1_avg: {log_info['random_q1_avg']:.2f}, random_q1_min: {log_info['random_q1_min']:.2f}, random_q1_max: {log_info['random_q1_max']:.2f}\n"
+                    f"\trandom_q2_avg: {log_info['random_q2_avg']:.2f}, random_q2_min: {log_info['random_q2_min']:.2f}, random_q2_max: {log_info['random_q2_max']:.2f}\n"
                     f"\tlogp_next_action: {log_info['logp_next_action']:.2f}, cql_logp: {log_info['cql_logp']:.2f} cql_logp_next_action: {log_info['cql_logp_next_action']:.2f}\n"
-                    f"\tbatch_rewards: {log_info['batch_rewards']:.2f}, batch_rewards_min: {log_info['batch_rewards_min']:.2f}, batch_rewards_max: {log_info['batch_rewards_max']:.2f}\n"
-                    f"\tbatch_discounts: {log_info['batch_discounts']:.2f}, batch_obs: {log_info['batch_obs']:.2f}, buffer_size: {replay_buffer.size}\n"
-                    f"\tfix_q1: {fix_q1.squeeze().mean().item():.2f}, fix_q2: {fix_q2.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n"
-                    f'\tEpisode {episode_num}: steps = {episode_timesteps}, reward = {episode_reward:.2f}'
+                    f"\tbatch_rewards: {log_info['batch_rewards']:.2f}, batch_discounts: {log_info['batch_discounts']:.2f}, batch_obs: {log_info['batch_obs']:.2f}, buffer_size: {replay_buffer.size}\n"
+                    f"\tfix_q1: {fix_q1.squeeze().mean().item():.2f}, fix_q2: {fix_q2.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n\n"
                 )
-            log_df = pd.DataFrame(logs)
-            log_df.to_csv(f"tune_online_cql.csv")
 
     # Save logs
-    log_name = f"s{args.seed}"
-    os.makedirs(args.log_dir, exist_ok=True)
-    os.makedirs(args.model_dir, exist_ok=True)
-    os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
-    os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
+    # log_name = f"s{args.seed}"
+    # os.makedirs(args.log_dir, exist_ok=True)
+    # os.makedirs(args.model_dir, exist_ok=True)
+    # os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
+    # os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"{args.log_dir}/{args.env}/{log_name}.csv")
-    with open(f"{args.log_dir}/{args.env}/{log_name}.json", "w") as f:
-        json.dump(vars(args), f)
+    log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
+    # with open(f"{args.log_dir}/{args.env}/{log_name}.json", "w") as f:
+    #     json.dump(vars(args), f)
     # agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
 
 

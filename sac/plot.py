@@ -75,5 +75,18 @@ def plot_exp():
     plt.savefig('sac.png', dpi=720)
 
 
+def plot_single_env(env='HalfCheetah-v2'):
+    fnames = os.listdir(f'logs/{env}')    
+    _, axes = plt.subplots(nrows=2, ncols=3, figsize=(12, 9))
+    for fname in fnames:
+        df = pd.read_csv(f'logs/{env}/{fname}', index_col=0)
+        for idx, col in enumerate(['reward', 'q1', 'alpha', 'critic_loss', 'actor_loss', 'alpha_loss']):
+            ax = axes[idx // 3][idx % 3]
+            ax.plot(df['step'].values, df[col].values)
+            ax.set_title(f'{col}')
+    plt.savefig(f'{env}.png')
+
+
 if __name__ == '__main__':
-    plot_exp()
+    # plot_exp()
+    plot_single_env('HalfCheetah-v2')

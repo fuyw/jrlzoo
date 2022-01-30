@@ -76,5 +76,20 @@ def plot_exp():
     plt.savefig('cql.png', dpi=720)
 
 
+def plot_cql_min_q_weight():
+    prefix_name = 'd4rl_online_cql0_s0'
+    _, axes = plt.subplots(nrows=2, ncols=5, figsize=(20, 9))
+    for min_q_weight in [1.0, 3.0, 5.0]:
+        df = pd.read_csv(f'logs/hopper-medium-v2/{prefix_name}_alpha{min_q_weight}.csv', index_col=0)
+        for idx, col in enumerate(['reward', 'actor_loss', 'critic_loss', 'cql1_loss', 'cql2_loss', 'q1',
+                                   'q2', 'logsumexp_cql_concat_q1', 'logsumexp_cql_concat_q2', 'random_q1_avg']):
+            ax = axes[idx // 5][idx % 5]
+            ax.plot(df['step'].values, df[col].values, label=str(min_q_weight))
+            ax.legend()
+            ax.set_title(col)
+    plt.savefig(f'{prefix_name}.png')
+        
+
 if __name__ == '__main__':
-    plot_exp()
+    # plot_exp()
+    plot_cql_min_q_weight()

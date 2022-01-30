@@ -110,10 +110,6 @@ def main(args):
     fix_obs = np.random.normal(size=(128, obs_dim))
     fix_act = np.random.normal(size=(128, act_dim))
 
-    # Replay D4RL buffer
-    # replay_buffer = ReplayBuffer(obs_dim, act_dim)
-    # replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
-
     # Evaluate the untrained policy
     logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]
 
@@ -121,7 +117,8 @@ def main(args):
     start_time = time.time()
 
     # Train agent and evaluate policy
-    for t in trange(args.max_timesteps):
+    # for t in trange(args.max_timesteps):
+    for t in trange(int(1.5e5)):
         log_info = agent.update(replay_buffer, args.batch_size)
 
         # save some evaluate time
@@ -136,7 +133,7 @@ def main(args):
             fix_q1, fix_q2 = agent.critic.apply({"params": agent.critic_state.params}, fix_obs, fix_act)
             _, fix_a = agent.select_action(agent.actor_state.params, jax.random.PRNGKey(0), fix_obs, True)
             logger.info(
-                f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}\n"
+                f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
                 f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}\n"
                 f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
                 f"\tcritic_loss: {log_info['critic_loss']:.2f}, q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, target_q: {log_info['target_q']:.2f}\n"

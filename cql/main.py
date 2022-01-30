@@ -47,6 +47,7 @@ def get_args():
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
+    parser.add_argument("--min_q_weight", default=1.0, type=float)
     parser.add_argument("--target_entropy", default=None, type=float)
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
@@ -59,13 +60,16 @@ def get_args():
 
 
 def main(args):
+    exp_name = f'd4rl_cql0_s{args.seed}_alpha{args.min_q_weight}'
+
     # Log setting
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s - %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S',
-                        filename=f'logs/{args.env}/cql_s{args.seed}.log',
-                        filemode='a')
-    logger = logging.getLogger(__name__)
+                        filename=f'logs/{args.env}/{exp_name}.log',
+                        filemode='w',
+                        force=True)
+    logger = logging.getLogger()
 
     # Env parameters
     env = gym.make(args.env)
@@ -92,6 +96,7 @@ def main(args):
                      auto_entropy_tuning=args.auto_entropy_tuning,
                      backup_entropy=args.backup_entropy,
                      target_entropy=args.target_entropy,
+                     min_q_weight=args.min_q_weight,
                      with_lagrange=args.with_lagrange,
                      lagrange_thresh=args.lagrange_thresh)
     print(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
@@ -110,7 +115,8 @@ def main(args):
     start_time = time.time()
 
     # Train agent and evaluate policy
-    for t in trange(args.max_timesteps):
+    # for t in trange(args.max_timesteps):
+    for t in trange(int(1.5e5)):
         log_info = agent.update(replay_buffer, args.batch_size)
 
         # save some evaluate time
@@ -125,11 +131,13 @@ def main(args):
             fix_q1, fix_q2 = agent.critic.apply({"params": agent.critic_state.params}, fix_obs, fix_act)
             _, fix_a = agent.select_action(agent.actor_state.params, jax.random.PRNGKey(0), fix_obs, True)
             logger.info(
-                f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}\n"
+                f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
                 f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}\n"
                 f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
                 f"\tcritic_loss: {log_info['critic_loss']:.2f}, q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, target_q: {log_info['target_q']:.2f}\n"
                 f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}\n" 
+                f"\tlogsumexp_cql_concat_q1: {log_info['logsumexp_cql_concat_q1']:.2f}, "
+                f"logsumexp_cql_concat_q2: {log_info['logsumexp_cql_concat_q2']:.2f}\n"
                 f"\tcql_concat_q1_avg: {log_info['cql_concat_q1_avg']:.2f}, cql_concat_q1_min: {log_info['cql_concat_q1_min']:.2f}, cql_concat_q1_max: {log_info['cql_concat_q1_max']:.2f}\n"
                 f"\tcql_concat_q2_avg: {log_info['cql_concat_q2_avg']:.2f}, cql_concat_q2_min: {log_info['cql_concat_q2_min']:.2f}, cql_concat_q2_max: {log_info['cql_concat_q2_max']:.2f}\n"
                 f"\tcql_q1_avg: {log_info['cql_q1_avg']:.2f}, cql_q1_min: {log_info['cql_q1_min']:.2f}, cql_q1_max: {log_info['cql_q1_max']:.2f}\n"
@@ -144,14 +152,13 @@ def main(args):
             )
 
     # Save logs
-    log_name = f"s{args.seed}"
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
     os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"{args.log_dir}/{args.env}/{log_name}.csv")
-    with open(f"{args.log_dir}/{args.env}/{log_name}.json", "w") as f:
+    log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
+    with open(f"{args.log_dir}/{args.env}/{exp_name}.json", "w") as f:
         json.dump(vars(args), f)
     # agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
 
