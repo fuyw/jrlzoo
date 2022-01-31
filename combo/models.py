@@ -308,7 +308,7 @@ class DynamicsModel:
             reward_noise, observation_noise = jnp.split(model_noise, [1], axis=-1)     # (7, 1), (7, 11)
             reward_mu, observation_mu = jnp.split(model_mu, [1], axis=-1)              # (7, 1), (7, 11)
             model_next_observation = observation + jnp.sum(
-                model_mask*(observation_mu + observation_noise), axis=0)              # (1, 11)
+                model_mask * (observation_mu + observation_noise), axis=0)              # (1, 11)
             model_reward = jnp.sum(model_mask * (reward_mu + reward_noise), axis=0)   # (1, 1)
             return model_next_observation, model_reward
 
@@ -327,12 +327,13 @@ class COMBOAgent:
                  seed: int = 42,
                  tau: float = 0.005,
                  gamma: float = 0.99,
-                 lr: float = 3e-5,
-                 lr_actor: float = 3e-4,
+                 lr: float = 3e-4,
+                 lr_actor: float = 3e-5,
                  auto_entropy_tuning: bool = True,
                  target_entropy: Optional[float] = None,
                  backup_entropy: bool = False,
                  num_random: int = 10,
+                 min_q_weight: float = 3.0,
                  with_lagrange: bool = False,
                  lagrange_thresh: int = 5.0,
 
@@ -418,7 +419,7 @@ class COMBOAgent:
         # CQL parameters
         self.num_random = num_random
         self.with_lagrange = with_lagrange
-        self.min_q_weight = 3.0 if not with_lagrange else 1.0
+        self.min_q_weight = min_q_weight if not with_lagrange else 1.0
         if self.with_lagrange:
             self.target_action_gap = lagrange_thresh
             self.rng, cql_key = jax.random.split(self.rng, 2)
@@ -493,7 +494,10 @@ class COMBOAgent:
             if self.backup_entropy:
                 next_q -= alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
-            critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
+            critic_loss1 = 0.5 * (q1 - target_q)**2
+            critic_loss2 = 0.5 * (q2 - target_q)**2
+            critic_loss = critic_loss1 + critic_loss2
+
 
             # COMBO CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
@@ -527,13 +531,14 @@ class COMBOAgent:
             ood_q2 = jax.scipy.special.logsumexp(cql_concat_q2)
 
             # compute logsumexp loss w.r.t model_states
-            # TODO: Fix Here ==> tf.boolean_mask(tf.concat(...), mask)
-            cql1_loss = (ood_q1*(1-mask) - q1*mask) / self.real_ratio * self.min_q_weight
-            cql2_loss = (ood_q2*(1-mask) - q2*mask) / self.real_ratio * self.min_q_weight
+            cql1_loss = (ood_q1*(1-mask) - q1*mask) * self.min_q_weight / self.real_ratio
+            cql2_loss = (ood_q2*(1-mask) - q2*mask) * self.min_q_weight / self.real_ratio
 
-            total_loss = 0.5*critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
+            total_loss = alpha_loss + actor_loss + critic_loss + cql1_loss + cql2_loss
 
             log_info = {
+                "critic_loss1": critic_loss1,
+                "critic_loss2": critic_loss2,
                 "critic_loss": critic_loss,
                 "actor_loss": actor_loss,
                 "alpha_loss": alpha_loss,
@@ -592,6 +597,12 @@ class COMBOAgent:
             'critic_loss_min': log_info['critic_loss'].min(),
             'critic_loss_max': log_info['critic_loss'].max(),
             'critic_loss_std': log_info['critic_loss'].std(),
+            'critic_loss1_min': log_info['critic_loss1'].min(),
+            'critic_loss1_max': log_info['critic_loss1'].max(),
+            'critic_loss1_std': log_info['critic_loss1'].std(),
+            'critic_loss2_min': log_info['critic_loss2'].min(),
+            'critic_loss2_max': log_info['critic_loss2'].max(),
+            'critic_loss2_std': log_info['critic_loss2'].std(),
             'cql1_loss_min': log_info['cql1_loss'].min(),
             'cql1_loss_max': log_info['cql1_loss'].max(),
             'cql1_loss_std': log_info['cql1_loss'].std(),
@@ -673,9 +684,9 @@ class COMBOAgent:
         )
 
         log_info['real_batch_rewards'] = real_batch.rewards.sum()
-        log_info['real_batch_actions'] = real_batch.actions.reshape(-1).sum()
+        log_info['real_batch_actions'] = abs(real_batch.actions).reshape(-1).sum()
         log_info['model_batch_rewards'] = model_batch.rewards.sum()
-        log_info['model_batch_actions'] = model_batch.actions.reshape(-1).sum()
+        log_info['model_batch_actions'] = abs(model_batch.actions).reshape(-1).sum()
         log_info['model_buffer_size'] = model_buffer.size
 
         # upate target network

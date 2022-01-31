@@ -57,7 +57,8 @@ def get_args():
 
 def main(args):
     exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}'
-    print('#'*30 + f'\n# Running experiment for: {exp_name} #\n' + '#'*30)
+    exp_info = f'# Running experiment for: {exp_name} #'
+    print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
     # Log setting
     logging.basicConfig(level=logging.INFO,
@@ -80,7 +81,7 @@ def main(args):
 
     # TD3 agent
     agent = COMBOAgent(env=args.env, obs_dim=obs_dim, act_dim=act_dim, seed=args.seed,
-                       lr=args.lr, lr_actor=args.lr_actor, rollout_batch_size=100)
+                       lr=args.lr, lr_actor=args.lr_actor, rollout_batch_size=10000)
     # agent.model.train()
     agent.model.load(f'{args.model_dir}/{args.env}/s{args.seed}')
 
@@ -96,12 +97,10 @@ def main(args):
     start_time = time.time()
 
     # Train agent and evaluate policy
+    # for t in trange(int(2.5e5)):
     for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, model_buffer)
         # log_info = agent.update(replay_buffer, replay_buffer)
-        # for i in log_info:
-        #     print(f'{i}\t{log_info[i]}')
-        # return
         if (t + 1) % args.eval_freq == 0:
             eval_reward = eval_policy(agent, args.env, args.seed)
             log_info.update({
@@ -117,6 +116,12 @@ def main(args):
 
                 f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, "
                 f"critic_loss_max: {log_info['critic_loss_max']:.2f}, critic_loss_std: {log_info['critic_loss_std']:.2f}\n"
+
+                f"\tcritic_loss1: {log_info['critic_loss1']:.2f}, critic_loss1_min: {log_info['critic_loss1_min']:.2f}, "
+                f"critic_loss1_max: {log_info['critic_loss1_max']:.2f}, critic_loss1_std: {log_info['critic_loss1_std']:.2f}\n"
+
+                f"\tcritic_loss2: {log_info['critic_loss2']:.2f}, critic_loss2_min: {log_info['critic_loss2_min']:.2f}, "
+                f"critic_loss2_max: {log_info['critic_loss2_max']:.2f}, critic_loss2_std: {log_info['critic_loss2_std']:.2f}\n"
 
                 f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql1_loss_min: {log_info['cql1_loss_min']:.2f} "
                 f"cql1_loss_max: {log_info['cql1_loss_max']:.2f}, cql1_loss_std: {log_info['cql1_loss_std']:.2f}\n"
@@ -142,7 +147,7 @@ def main(args):
                 f"logp_next_action: {log_info['logp_next_action']:.2f}\n"
 
                 f"\treal_batch_rewards: {log_info['real_batch_rewards']:.2f}, real_batch_actions: {log_info['real_batch_actions']:.2f}\n"
-                f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, model_batch_actions: {log_info['model_batch_actions']:.2f}, 'model_buffer_size': {log_info['model_buffer_size']:.0f}\n"
+                f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, model_batch_actions: {log_info['model_batch_actions']:.2f}, model_buffer_size: {log_info['model_buffer_size']:.0f}\n"
             )
 
 
