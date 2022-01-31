@@ -15,7 +15,10 @@ from utils import ReplayBuffer
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 
-def eval_policy(agent: CQLAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
+def eval_policy(agent: CQLAgent,
+                env_name: str,
+                seed: int,
+                eval_episodes: int = 10) -> float:
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
     eval_rng = jax.random.PRNGKey(seed + 100)
@@ -25,7 +28,9 @@ def eval_policy(agent: CQLAgent, env_name: str, seed: int, eval_episodes: int = 
         obs, done = eval_env.reset(), False
         while not done:
             t += 1
-            eval_rng, action = agent.select_action(agent.actor_state.params, eval_rng, np.array(obs), True)
+            eval_rng, action = agent.select_action(agent.actor_state.params,
+                                                   eval_rng, np.array(obs),
+                                                   True)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -43,24 +48,30 @@ def get_args():
     parser.add_argument("--lr_actor", default=1e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
-    parser.add_argument("--eval_freq", default=int(1e3), type=int)
+    parser.add_argument("--eval_freq", default=int(2), type=int)
+    # parser.add_argument("--eval_freq", default=int(1e3), type=int)
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
-    parser.add_argument("--min_q_weight", default=1.0, type=float)
+    parser.add_argument("--min_q_weight", default=5.0, type=float)
     parser.add_argument("--target_entropy", default=None, type=float)
-    parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
+    parser.add_argument("--auto_entropy_tuning",
+                        default=True,
+                        action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
     parser.add_argument("--backup_entropy", default=False, action="store_true")
     parser.add_argument("--with_lagrange", default=False, action="store_true")
     parser.add_argument("--lagrange_thresh", default=5.0, type=float)
+    parser.add_argument("--subtract_likelihood",
+                        default=False,
+                        action="store_true")
     args = parser.parse_args()
     return args
 
 
 def main(args):
-    exp_name = f'd4rl_cql0_s{args.seed}_alpha{args.min_q_weight}'
+    exp_name = f'd4rl_cql{int(args.subtract_likelihood)}_s{args.seed}_alpha{args.min_q_weight}_early'
 
     # Log setting
     logging.basicConfig(level=logging.INFO,
@@ -98,9 +109,10 @@ def main(args):
                      target_entropy=args.target_entropy,
                      min_q_weight=args.min_q_weight,
                      with_lagrange=args.with_lagrange,
+                     subtract_likelihood=args.subtract_likelihood,
                      lagrange_thresh=args.lagrange_thresh)
-    print(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
-    print(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
+    # print(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
+    # print(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
 
     # Replay D4RL buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
@@ -116,30 +128,54 @@ def main(args):
 
     # Train agent and evaluate policy
     # for t in trange(args.max_timesteps):
-    for t in trange(int(1.5e5)):
+    # for t in trange(int(1.5e5)):
+    for t in trange(5000):
         log_info = agent.update(replay_buffer, args.batch_size)
 
         # save some evaluate time
-        if ((t+1) >= int(9.5e5) and (t + 1) % args.eval_freq == 0) or ((t+1) <= int(9.5e5) and (t + 1) % (2*args.eval_freq) == 0):
-            eval_reward = eval_policy(agent, args.env, args.seed)
+        if ((t + 1) >= int(9.5e5) and
+            (t + 1) % args.eval_freq == 0) or ((t + 1) <= int(9.5e5) and
+                                               (t + 1) %
+                                               (2 * args.eval_freq) == 0):
+            eval_reward = np.NaN
+            # eval_reward = eval_policy(agent, args.env, args.seed)
             log_info.update({
-                "step": t+1,
+                "step": t + 1,
                 "reward": eval_reward,
                 "time": (time.time() - start_time) / 60
             })
             logs.append(log_info)
-            fix_q1, fix_q2 = agent.critic.apply({"params": agent.critic_state.params}, fix_obs, fix_act)
-            _, fix_a = agent.select_action(agent.actor_state.params, jax.random.PRNGKey(0), fix_obs, True)
+            fix_q1, fix_q2 = agent.critic.apply(
+                {"params": agent.critic_state.params}, fix_obs, fix_act)
+            _, fix_a = agent.select_action(agent.actor_state.params,
+                                           jax.random.PRNGKey(0), fix_obs,
+                                           True)
             logger.info(
                 f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
                 f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}\n"
                 f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
-                f"\tcritic_loss: {log_info['critic_loss']:.2f}, q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, target_q: {log_info['target_q']:.2f}\n"
-                f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}\n" 
-                f"\tlogsumexp_cql_concat_q1: {log_info['logsumexp_cql_concat_q1']:.2f}, "
-                f"logsumexp_cql_concat_q2: {log_info['logsumexp_cql_concat_q2']:.2f}\n"
+                f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, "
+                f"critic_loss_max: {log_info['critic_loss_max']:.2f}, critic_loss_std: {log_info['critic_loss_std']:.2f}\n"
+                f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql1_loss_min: {log_info['cql1_loss_min']:.2f} "
+                f"cql1_loss_max: {log_info['cql1_loss_max']:.2f}, cql1_loss_std: {log_info['cql1_loss_std']:.2f}\n"
+                f"\tcql2_loss: {log_info['cql2_loss']:.2f}, cql2_loss_min: {log_info['cql2_loss_min']:.2f} "
+                f"cql2_loss_max: {log_info['cql2_loss_max']:.2f}, cql2_loss_std: {log_info['cql2_loss_std']:.2f}\n"
+                f"\ttarget_q: {log_info['target_q']:.2f}, target_q_min: {log_info['target_q_min']:.2f} "
+                f"target_q_max: {log_info['target_q_max']:.2f}, target_q_std: {log_info['target_q_std']:.2f}\n"
+                f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}, q1_std: {log_info['q1_std']:.2f}\n"
+                f"\tq2: {log_info['q2']:.2f}, q2_min: {log_info['q2_min']:.2f}, q2_max: {log_info['q2_max']:.2f}, q2_std: {log_info['q2_std']:.2f}\n"
+                f"\tood_q1: {log_info['ood_q1']:.2f}, ood_q1_min: {log_info['ood_q1_min']:.2f}, "
+                f"ood_q1_max: {log_info['ood_q1_max']:.2f}, ood_q1_std: {log_info['ood_q1_std']:.2f}\n"
+                f"\tood_q2: {log_info['ood_q2']:.2f}, ood_q2_min: {log_info['ood_q2_min']:.2f}, "
+                f"ood_q2_max: {log_info['ood_q2_max']:.2f}, ood_q2_std: {log_info['ood_q2_std']:.2f}\n"
                 f"\tcql_concat_q1_avg: {log_info['cql_concat_q1_avg']:.2f}, cql_concat_q1_min: {log_info['cql_concat_q1_min']:.2f}, cql_concat_q1_max: {log_info['cql_concat_q1_max']:.2f}\n"
                 f"\tcql_concat_q2_avg: {log_info['cql_concat_q2_avg']:.2f}, cql_concat_q2_min: {log_info['cql_concat_q2_min']:.2f}, cql_concat_q2_max: {log_info['cql_concat_q2_max']:.2f}\n"
+                f"\trandom_q1_IS_avg: {log_info['random_q1_IS_avg']:.2f}, random_q1_IS_min: {log_info['random_q1_IS_min']:.2f}, random_q1_IS_max: {log_info['random_q1_IS_max']:.2f}\n"
+                f"\tq1_IS_avg: {log_info['q1_IS_avg']:.2f}, q1_IS_min: {log_info['q1_IS_min']:.2f}, q1_IS_max: {log_info['q1_IS_max']:.2f}\n"
+                f"\tnext_q1_IS_avg: {log_info['next_q1_IS_avg']:.2f}, next_q1_IS_min: {log_info['next_q1_IS_min']:.2f}, next_q1_IS_max: {log_info['next_q1_IS_max']:.2f}\n"
+                f"\trandom_q2_IS_avg: {log_info['random_q2_IS_avg']:.2f}, random_q2_IS_min: {log_info['random_q2_IS_min']:.2f}, random_q2_IS_max: {log_info['random_q2_IS_max']:.2f}\n"
+                f"\tq2_IS_avg: {log_info['q2_IS_avg']:.2f}, q2_IS_min: {log_info['q2_IS_min']:.2f}, q2_IS_max: {log_info['q2_IS_max']:.2f}\n"
+                f"\tnext_q2_IS_avg: {log_info['next_q2_IS_avg']:.2f}, next_q2_IS_min: {log_info['next_q2_IS_min']:.2f}, next_q2_IS_max: {log_info['next_q2_IS_max']:.2f}\n"
                 f"\tcql_q1_avg: {log_info['cql_q1_avg']:.2f}, cql_q1_min: {log_info['cql_q1_min']:.2f}, cql_q1_max: {log_info['cql_q1_max']:.2f}\n"
                 f"\tcql_q2_avg: {log_info['cql_q2_avg']:.2f}, cql_q2_min: {log_info['cql_q2_min']:.2f}, cql_q2_max: {log_info['cql_q2_max']:.2f}\n"
                 f"\tcql_next_q1_avg: {log_info['cql_next_q1_avg']:.2f}, cql_next_q1_min: {log_info['cql_next_q1_min']:.2f}, cql_next_q1_max: {log_info['cql_next_q1_max']:.2f}\n"

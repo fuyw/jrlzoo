@@ -18,14 +18,16 @@ def convert_log(input_name, output_name):
     df = pd.read_csv(input_name, index_col=0)
     with open(output_name, 'w') as f:
         for i in range(1, len(df)):
-            (step, reward, alpha_loss, alpha, logp, actor_loss, sampled_q, critic_loss, q1, q2,
-            target_q, cql1_loss, cql2_loss, cql_q1, cql_next_q1, random_q1, cql_q2,
-            cql_next_q2, random_q2, logp_next_action, cql_logp, cql_logp_next_action) = df.iloc[i][[
-                'step', 'reward', 'alpha_loss', 'alpha', 'logp', 'actor_loss',
-                'sampled_q', 'critic_loss', 'q1', 'q2', 'target_q', 'cql1_loss',
-                'cql2_loss', 'cql_q1', 'cql_next_q1', 'random_q1', 'cql_q2',
-                'cql_next_q2', 'random_q2', 'logp_next_action', 'cql_logp',
-                'cql_logp_next_action']]
+            (step, reward, alpha_loss, alpha, logp, actor_loss, sampled_q,
+             critic_loss, q1, q2, target_q, cql1_loss, cql2_loss, cql_q1,
+             cql_next_q1, random_q1, cql_q2, cql_next_q2, random_q2,
+             logp_next_action, cql_logp, cql_logp_next_action) = df.iloc[i][[
+                 'step', 'reward', 'alpha_loss', 'alpha', 'logp', 'actor_loss',
+                 'sampled_q', 'critic_loss', 'q1', 'q2', 'target_q',
+                 'cql1_loss', 'cql2_loss', 'cql_q1', 'cql_next_q1',
+                 'random_q1', 'cql_q2', 'cql_next_q2', 'random_q2',
+                 'logp_next_action', 'cql_logp', 'cql_logp_next_action'
+             ]]
             step = int(step)
             if step % 5000 == 0:
                 f.write(

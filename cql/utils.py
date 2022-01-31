@@ -6,10 +6,10 @@ Batch = collections.namedtuple(
     "Batch",
     ["observations", "actions", "rewards", "discounts", "next_observations"])
 
-
-QBatch = collections.namedtuple(
-    "QBatch",
-    ["observations", "actions", "rewards", "discounts", "next_observations", "qpos", "qvel"])
+QBatch = collections.namedtuple("QBatch", [
+    "observations", "actions", "rewards", "discounts", "next_observations",
+    "qpos", "qvel"
+])
 
 
 class ReplayBuffer:
@@ -56,14 +56,18 @@ class ReplayBuffer:
     def normalize_states(self, eps: float = 1e-3):
         mean = self.observations.mean(0, keepdims=True)
         std = self.observations.std(0, keepdims=True) + eps
-        self.observations = (self.observations - mean)/std
-        self.next_observations = (self.next_observations - mean)/std
+        self.observations = (self.observations - mean) / std
+        self.next_observations = (self.next_observations - mean) / std
         return mean, std
 
 
 class InfoBuffer:
-    def __init__(self, obs_dim: int, act_dim: int, qpos_dim: int = None,
-                 qvel_dim: int = None, max_size: int = int(1e6)):
+    def __init__(self,
+                 obs_dim: int,
+                 act_dim: int,
+                 qpos_dim: int = None,
+                 qvel_dim: int = None,
+                 max_size: int = int(1e6)):
         self.max_size = max_size
         self.ptr = 0
         self.size = 0
@@ -96,7 +100,8 @@ class InfoBuffer:
                        actions=jax.device_put(self.actions[idx]),
                        rewards=jax.device_put(self.rewards[idx]),
                        discounts=jax.device_put(self.discounts[idx]),
-                       next_observations=jax.device_put(self.next_observations[idx]),
+                       next_observations=jax.device_put(
+                           self.next_observations[idx]),
                        qpos=self.qpos[idx],
                        qvel=self.qvel[idx])
         return batch

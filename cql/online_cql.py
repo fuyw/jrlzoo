@@ -15,7 +15,10 @@ from utils import ReplayBuffer
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 
-def eval_policy(agent: CQLAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
+def eval_policy(agent: CQLAgent,
+                env_name: str,
+                seed: int,
+                eval_episodes: int = 10) -> float:
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
     eval_rng = jax.random.PRNGKey(seed + 100)
@@ -25,7 +28,9 @@ def eval_policy(agent: CQLAgent, env_name: str, seed: int, eval_episodes: int = 
         obs, done = eval_env.reset(), False
         while not done:
             t += 1
-            eval_rng, action = agent.select_action(agent.actor_state.params, eval_rng, np.array(obs), True)
+            eval_rng, action = agent.select_action(agent.actor_state.params,
+                                                   eval_rng, np.array(obs),
+                                                   True)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -47,9 +52,11 @@ def get_args():
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
-    parser.add_argument("--min_q_weight", default=3.0, type=float)
+    parser.add_argument("--min_q_weight", default=5.0, type=float)
     parser.add_argument("--target_entropy", default=None, type=float)
-    parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
+    parser.add_argument("--auto_entropy_tuning",
+                        default=True,
+                        action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
     parser.add_argument("--backup_entropy", default=False, action="store_true")
@@ -98,8 +105,12 @@ def main(args):
                      min_q_weight=args.min_q_weight,
                      with_lagrange=args.with_lagrange,
                      lagrange_thresh=args.lagrange_thresh)
-    print(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
-    print(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
+    print(
+        f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}"
+    )
+    print(
+        f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}"
+    )
 
     # Replay D4RL buffer
     # offline_buffer = ReplayBuffer(obs_dim, act_dim)
@@ -110,7 +121,7 @@ def main(args):
 
     # Evaluate the untrained policy
     logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]
-    
+
     # Initialize training stats
     obs, done = env.reset(), False
     episode_num = 0
@@ -121,19 +132,22 @@ def main(args):
     # Train agent and evaluate policy
     sample_rng = jax.random.PRNGKey(20)
     # for t in trange(args.max_timesteps):
-    for t in trange(int(1.5e5)):
+    for t in trange(int(1e5)):
         episode_timesteps += 1
         if t < 25e3:
             action = env.action_space.sample()
         else:
-            sample_rng, action = agent.select_action(agent.actor_state.params, sample_rng, np.array(obs), False)
+            sample_rng, action = agent.select_action(agent.actor_state.params,
+                                                     sample_rng, np.array(obs),
+                                                     False)
             # if np.random.random() < 0.99:
             #     sample_rng, action = agent.select_action(agent.actor_state.params, sample_rng, np.array(obs), False)
             # else:
             #     action = env.action_space.sample()
 
         next_obs, reward, done, _ = env.step(action)
-        done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
+        done_bool = float(
+            done) if episode_timesteps < env._max_episode_steps else 0
         replay_buffer.add(obs, action, next_obs, reward, done_bool)
         obs = next_obs
         episode_reward += reward
@@ -149,22 +163,28 @@ def main(args):
             # log_info = agent.update(offline_buffer, args.batch_size)
 
             # save some evaluate time
-            if ((t+1) >= int(9.5e5) and (t + 1) % args.eval_freq == 0) or ((t+1) <= int(9.5e5) and (t + 1) % (2*args.eval_freq) == 0):
+            if ((t + 1) >= int(9.5e5) and
+                (t + 1) % args.eval_freq == 0) or ((t + 1) <= int(9.5e5) and
+                                                   (t + 1) %
+                                                   (2 * args.eval_freq) == 0):
                 eval_reward = eval_policy(agent, args.env, args.seed)
                 log_info.update({
-                    "step": t+1,
+                    "step": t + 1,
                     "reward": eval_reward,
                     "time": (time.time() - start_time) / 60
                 })
                 logs.append(log_info)
-                fix_q1, fix_q2 = agent.critic.apply({"params": agent.critic_state.params}, fix_obs, fix_act)
-                _, fix_a = agent.select_action(agent.actor_state.params, jax.random.PRNGKey(0), fix_obs, True)
+                fix_q1, fix_q2 = agent.critic.apply(
+                    {"params": agent.critic_state.params}, fix_obs, fix_act)
+                _, fix_a = agent.select_action(agent.actor_state.params,
+                                               jax.random.PRNGKey(0), fix_obs,
+                                               True)
                 logger.info(
                     f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
                     f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}\n"
                     f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
                     f"\tcritic_loss: {log_info['critic_loss']:.2f}, q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, target_q: {log_info['target_q']:.2f}\n"
-                    f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}\n" 
+                    f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}\n"
                     f"\tlogsumexp_cql_concat_q1: {log_info['logsumexp_cql_concat_q1']:.2f}, "
                     f"logsumexp_cql_concat_q2: {log_info['logsumexp_cql_concat_q2']:.2f}\n"
                     f"\tcql_concat_q1_avg: {log_info['cql_concat_q1_avg']:.2f}, cql_concat_q1_min: {log_info['cql_concat_q1_min']:.2f}, cql_concat_q1_max: {log_info['cql_concat_q1_max']:.2f}\n"
