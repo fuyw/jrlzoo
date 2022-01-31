@@ -48,8 +48,7 @@ def get_args():
     parser.add_argument("--lr_actor", default=1e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
-    parser.add_argument("--eval_freq", default=int(2), type=int)
-    # parser.add_argument("--eval_freq", default=int(1e3), type=int)
+    parser.add_argument("--eval_freq", default=int(1e3), type=int)
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
@@ -63,15 +62,14 @@ def get_args():
     parser.add_argument("--backup_entropy", default=False, action="store_true")
     parser.add_argument("--with_lagrange", default=False, action="store_true")
     parser.add_argument("--lagrange_thresh", default=5.0, type=float)
-    parser.add_argument("--subtract_likelihood",
-                        default=False,
-                        action="store_true")
+    parser.add_argument("--subtract_likelihood", default=False, action="store_true")
     args = parser.parse_args()
     return args
 
 
 def main(args):
-    exp_name = f'd4rl_cql{int(args.subtract_likelihood)}_s{args.seed}_alpha{args.min_q_weight}_early'
+    exp_name = f'd4rl_cql{int(args.subtract_likelihood)}_s{args.seed}_alpha{args.min_q_weight}'
+    print('#'*30 + f'\n# Running experiment for: {exp_name} #\n' + '#'*30)
 
     # Log setting
     logging.basicConfig(level=logging.INFO,
@@ -86,7 +84,6 @@ def main(args):
     env = gym.make(args.env)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
-    # max_action = float(env.action_space.high[0])
 
     # random seeds
     env.seed(args.seed)
@@ -128,8 +125,8 @@ def main(args):
 
     # Train agent and evaluate policy
     # for t in trange(args.max_timesteps):
-    # for t in trange(int(1.5e5)):
-    for t in trange(5000):
+    # for t in trange(5000):
+    for t in trange(int(1.5e5)):
         log_info = agent.update(replay_buffer, args.batch_size)
 
         # save some evaluate time
@@ -137,8 +134,8 @@ def main(args):
             (t + 1) % args.eval_freq == 0) or ((t + 1) <= int(9.5e5) and
                                                (t + 1) %
                                                (2 * args.eval_freq) == 0):
-            eval_reward = np.NaN
-            # eval_reward = eval_policy(agent, args.env, args.seed)
+            # eval_reward = np.NaN
+            eval_reward = eval_policy(agent, args.env, args.seed)
             log_info.update({
                 "step": t + 1,
                 "reward": eval_reward,

@@ -489,7 +489,6 @@ class COMBOAgent:
             # Use frozen_actor_params to avoid affect Actor parameters
             _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng2, next_observation)
             next_q1, next_q2 = self.critic.apply({"params": critic_target_params}, next_observation, next_action)
-
             next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2))
             if self.backup_entropy:
                 next_q -= alpha * logp_next_action
@@ -524,18 +523,36 @@ class COMBOAgent:
                 jnp.squeeze(cql_next_q2) - cql_logp_next_action,
             ])
 
+            ood_q1 = jax.scipy.special.logsumexp(cql_concat_q1)
+            ood_q2 = jax.scipy.special.logsumexp(cql_concat_q2)
+
             # compute logsumexp loss w.r.t model_states
             # TODO: Fix Here ==> tf.boolean_mask(tf.concat(...), mask)
-            cql1_loss = (jax.scipy.special.logsumexp(cql_concat_q1)*(1-mask) - q1*mask/self.real_ratio) * self.min_q_weight
-            cql2_loss = (jax.scipy.special.logsumexp(cql_concat_q2)*(1-mask) - q2*mask/self.real_ratio) * self.min_q_weight
+            cql1_loss = (ood_q1*(1-mask) - q1*mask) / self.real_ratio * self.min_q_weight
+            cql2_loss = (ood_q2*(1-mask) - q2*mask) / self.real_ratio * self.min_q_weight
 
             total_loss = 0.5*critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
 
-            log_info = {"critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss,
-                        "cql1_loss": cql1_loss, "cql2_loss": cql2_loss, 
-                        "q1": q1, "q2": q2,  "cql_next_q1": cql_next_q1.mean(), "cql_next_q2": cql_next_q2.mean(),
-                        "random_q1": cql_random_q1.mean(), "random_q2": cql_random_q2.mean(),
-                        "alpha": alpha, "logp": logp, "logp_next_action": logp_next_action}
+            log_info = {
+                "critic_loss": critic_loss,
+                "actor_loss": actor_loss,
+                "alpha_loss": alpha_loss,
+                "cql1_loss": cql1_loss,
+                "cql2_loss": cql2_loss, 
+                "q1": q1,
+                "q2": q2,
+                "target_q": target_q,
+                "sampled_q": sampled_q,
+                "ood_q1": ood_q1,
+                "ood_q2": ood_q2,
+                "cql_next_q1": cql_next_q1.mean(),
+                "cql_next_q2": cql_next_q2.mean(),
+                "random_q1": cql_random_q1.mean(),
+                "random_q2": cql_random_q2.mean(),
+                "alpha": alpha,
+                "logp": logp,
+                "logp_next_action": logp_next_action
+            }
 
             return total_loss, log_info
 
@@ -556,8 +573,34 @@ class COMBOAgent:
                                            rng)
 
         gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
+        extra_log_info = {
+            'q1_min': log_info['q1'].min(),
+            'q1_max': log_info['q1'].max(),
+            'q1_std': log_info['q1'].std(),
+            'q2_min': log_info['q2'].min(),
+            'q2_max': log_info['q2'].max(),
+            'q2_std': log_info['q2'].std(),
+            'target_q_min': log_info['target_q'].min(),
+            'target_q_max': log_info['target_q'].max(),
+            'target_q_std': log_info['target_q'].std(),
+            'ood_q1_min': log_info['ood_q1'].min(),
+            'ood_q1_max': log_info['ood_q1'].max(),
+            'ood_q1_std': log_info['ood_q1'].std(),
+            'ood_q2_min': log_info['ood_q2'].min(),
+            'ood_q2_max': log_info['ood_q2'].max(),
+            'ood_q2_std': log_info['ood_q2'].std(),
+            'critic_loss_min': log_info['critic_loss'].min(),
+            'critic_loss_max': log_info['critic_loss'].max(),
+            'critic_loss_std': log_info['critic_loss'].std(),
+            'cql1_loss_min': log_info['cql1_loss'].min(),
+            'cql1_loss_max': log_info['cql1_loss'].max(),
+            'cql1_loss_std': log_info['cql1_loss'].std(),
+            'cql2_loss_min': log_info['cql2_loss'].min(),
+            'cql2_loss_max': log_info['cql2_loss'].max(),
+            'cql2_loss_std': log_info['cql2_loss'].std(),
+        }
         log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
-
+        log_info.update(extra_log_info)
         actor_grads, critic_grads, alpha_grads = gradients
 
         # Update TrainState
@@ -584,44 +627,36 @@ class COMBOAgent:
 
     def update(self, replay_buffer, model_buffer):
         # rollout the model
-        # if self.update_step % 1000 == 0:
-        #     observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
-        #     sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
-        #     select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
-        #     for t in range(self.horizon):
-        #         self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
+        if self.update_step % 1000 == 0:
+            observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
+            sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
+            select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
+            for t in range(self.horizon):
+                self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
 
-        #         # random actions
-        #         # actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), 3),
-        #         #                              minval=-1.0, maxval=1.0)
+                # random actions
+                actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), 3),
+                                             minval=-1.0, maxval=1.0)
 
-        #         # sample actions with policy pi
-        #         sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
+                # sample actions with policy pi
+                # sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
 
-        #         next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
-        #         nonterminal_mask = ~dones
-        #         if nonterminal_mask.sum() == 0:
-        #             print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
-        #             break
-        #         model_buffer.add_batch(observations[nonterminal_mask],
-        #                                actions[nonterminal_mask],
-        #                                next_observations[nonterminal_mask],
-        #                                rewards[nonterminal_mask],
-        #                                dones[nonterminal_mask])
-        #         observations = next_observations[nonterminal_mask]
-        #         sample_rng = sample_rng[nonterminal_mask]
+                next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
+                nonterminal_mask = ~dones
+                if nonterminal_mask.sum() == 0:
+                    print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
+                    break
+                model_buffer.add_batch(observations[nonterminal_mask],
+                                       actions[nonterminal_mask],
+                                       next_observations[nonterminal_mask],
+                                       rewards[nonterminal_mask],
+                                       dones[nonterminal_mask])
+                observations = next_observations[nonterminal_mask]
+                sample_rng = sample_rng[nonterminal_mask]
 
         # sample from real & model buffer
         real_batch = replay_buffer.sample(self.real_batch_size)
         model_batch = model_buffer.sample(self.model_batch_size)
-
-        # print(f'real_batch.rewards.sum() = {real_batch.rewards.sum()}')
-        # print(f'real_batch.actions.sum() = {real_batch.actions.reshape(-1).sum()}')
-        # print(f'model_batch.rewards.sum() = {model_batch.rewards.sum()}')
-        # print(f'model_batch.actions.sum() = {model_batch.actions.reshape(-1).sum()}')
-        # print(f'model_buffers.rewards.sum() = {model_buffer.rewards.sum()}')
-        # print(f'model_buffers.actions.sum() = {model_buffer.actions.reshape(-1).sum()}')
-        # print(f'model.size = {model_buffer.size}')
 
         concat_observations = np.concatenate([real_batch.observations, model_batch.observations], axis=0)
         concat_actions = np.concatenate([real_batch.actions, model_batch.actions], axis=0)
@@ -636,6 +671,12 @@ class COMBOAgent:
             concat_next_observations, self.critic_target_params, self.actor_state,
             self.critic_state, self.alpha_state, key
         )
+
+        log_info['real_batch_rewards'] = real_batch.rewards.sum()
+        log_info['real_batch_actions'] = real_batch.actions.reshape(-1).sum()
+        log_info['model_batch_rewards'] = model_batch.rewards.sum()
+        log_info['model_batch_actions'] = model_batch.actions.reshape(-1).sum()
+        log_info['model_buffer_size'] = model_buffer.size
 
         # upate target network
         params = self.critic_state.params

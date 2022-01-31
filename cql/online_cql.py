@@ -61,13 +61,15 @@ def get_args():
     parser.add_argument("--model_dir", default="./saved_models", type=str)
     parser.add_argument("--backup_entropy", default=False, action="store_true")
     parser.add_argument("--with_lagrange", default=False, action="store_true")
+    parser.add_argument("--subtract_likelihood", default=False, action="store_true")
     parser.add_argument("--lagrange_thresh", default=5.0, type=float)
     args = parser.parse_args()
     return args
 
 
 def main(args):
-    exp_name = f'd4rl_online_cql0_s{args.seed}_alpha{args.min_q_weight}'
+    exp_name = f'd4rl_online_cql{int(args.subtract_likelihood)}_s{args.seed}_alpha{args.min_q_weight}'
+    print('#'*50 + f'\n\tRunning experiment for: {exp_name}\n' + '#'*50)
 
     # Log setting
     logging.basicConfig(level=logging.INFO,
@@ -104,13 +106,14 @@ def main(args):
                      target_entropy=args.target_entropy,
                      min_q_weight=args.min_q_weight,
                      with_lagrange=args.with_lagrange,
+                     subtract_likelihood=args.subtract_likelihood,
                      lagrange_thresh=args.lagrange_thresh)
-    print(
-        f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}"
-    )
-    print(
-        f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}"
-    )
+    # print(
+    #     f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}"
+    # )
+    # print(
+    #     f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}"
+    # )
 
     # Replay D4RL buffer
     # offline_buffer = ReplayBuffer(obs_dim, act_dim)
@@ -132,7 +135,7 @@ def main(args):
     # Train agent and evaluate policy
     sample_rng = jax.random.PRNGKey(20)
     # for t in trange(args.max_timesteps):
-    for t in trange(int(1e5)):
+    for t in trange(int(1.5e5)):
         episode_timesteps += 1
         if t < 25e3:
             action = env.action_space.sample()
@@ -183,12 +186,28 @@ def main(args):
                     f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
                     f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}\n"
                     f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
-                    f"\tcritic_loss: {log_info['critic_loss']:.2f}, q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, target_q: {log_info['target_q']:.2f}\n"
-                    f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}\n"
-                    f"\tlogsumexp_cql_concat_q1: {log_info['logsumexp_cql_concat_q1']:.2f}, "
-                    f"logsumexp_cql_concat_q2: {log_info['logsumexp_cql_concat_q2']:.2f}\n"
+                    f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, "
+                    f"critic_loss_max: {log_info['critic_loss_max']:.2f}, critic_loss_std: {log_info['critic_loss_std']:.2f}\n"
+                    f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql1_loss_min: {log_info['cql1_loss_min']:.2f} "
+                    f"cql1_loss_max: {log_info['cql1_loss_max']:.2f}, cql1_loss_std: {log_info['cql1_loss_std']:.2f}\n"
+                    f"\tcql2_loss: {log_info['cql2_loss']:.2f}, cql2_loss_min: {log_info['cql2_loss_min']:.2f} "
+                    f"cql2_loss_max: {log_info['cql2_loss_max']:.2f}, cql2_loss_std: {log_info['cql2_loss_std']:.2f}\n"
+                    f"\ttarget_q: {log_info['target_q']:.2f}, target_q_min: {log_info['target_q_min']:.2f} "
+                    f"target_q_max: {log_info['target_q_max']:.2f}, target_q_std: {log_info['target_q_std']:.2f}\n"
+                    f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}, q1_std: {log_info['q1_std']:.2f}\n"
+                    f"\tq2: {log_info['q2']:.2f}, q2_min: {log_info['q2_min']:.2f}, q2_max: {log_info['q2_max']:.2f}, q2_std: {log_info['q2_std']:.2f}\n"
+                    f"\tood_q1: {log_info['ood_q1']:.2f}, ood_q1_min: {log_info['ood_q1_min']:.2f}, "
+                    f"ood_q1_max: {log_info['ood_q1_max']:.2f}, ood_q1_std: {log_info['ood_q1_std']:.2f}\n"
+                    f"\tood_q2: {log_info['ood_q2']:.2f}, ood_q2_min: {log_info['ood_q2_min']:.2f}, "
+                    f"ood_q2_max: {log_info['ood_q2_max']:.2f}, ood_q2_std: {log_info['ood_q2_std']:.2f}\n"
                     f"\tcql_concat_q1_avg: {log_info['cql_concat_q1_avg']:.2f}, cql_concat_q1_min: {log_info['cql_concat_q1_min']:.2f}, cql_concat_q1_max: {log_info['cql_concat_q1_max']:.2f}\n"
                     f"\tcql_concat_q2_avg: {log_info['cql_concat_q2_avg']:.2f}, cql_concat_q2_min: {log_info['cql_concat_q2_min']:.2f}, cql_concat_q2_max: {log_info['cql_concat_q2_max']:.2f}\n"
+                    f"\trandom_q1_IS_avg: {log_info['random_q1_IS_avg']:.2f}, random_q1_IS_min: {log_info['random_q1_IS_min']:.2f}, random_q1_IS_max: {log_info['random_q1_IS_max']:.2f}\n"
+                    f"\tq1_IS_avg: {log_info['q1_IS_avg']:.2f}, q1_IS_min: {log_info['q1_IS_min']:.2f}, q1_IS_max: {log_info['q1_IS_max']:.2f}\n"
+                    f"\tnext_q1_IS_avg: {log_info['next_q1_IS_avg']:.2f}, next_q1_IS_min: {log_info['next_q1_IS_min']:.2f}, next_q1_IS_max: {log_info['next_q1_IS_max']:.2f}\n"
+                    f"\trandom_q2_IS_avg: {log_info['random_q2_IS_avg']:.2f}, random_q2_IS_min: {log_info['random_q2_IS_min']:.2f}, random_q2_IS_max: {log_info['random_q2_IS_max']:.2f}\n"
+                    f"\tq2_IS_avg: {log_info['q2_IS_avg']:.2f}, q2_IS_min: {log_info['q2_IS_min']:.2f}, q2_IS_max: {log_info['q2_IS_max']:.2f}\n"
+                    f"\tnext_q2_IS_avg: {log_info['next_q2_IS_avg']:.2f}, next_q2_IS_min: {log_info['next_q2_IS_min']:.2f}, next_q2_IS_max: {log_info['next_q2_IS_max']:.2f}\n"
                     f"\tcql_q1_avg: {log_info['cql_q1_avg']:.2f}, cql_q1_min: {log_info['cql_q1_min']:.2f}, cql_q1_max: {log_info['cql_q1_max']:.2f}\n"
                     f"\tcql_q2_avg: {log_info['cql_q2_avg']:.2f}, cql_q2_min: {log_info['cql_q2_min']:.2f}, cql_q2_max: {log_info['cql_q2_max']:.2f}\n"
                     f"\tcql_next_q1_avg: {log_info['cql_next_q1_avg']:.2f}, cql_next_q1_min: {log_info['cql_next_q1_min']:.2f}, cql_next_q1_max: {log_info['cql_next_q1_max']:.2f}\n"

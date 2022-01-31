@@ -1,6 +1,7 @@
 import d4rl
 import gym
 import jax
+import logging
 import os
 import time
 import numpy as np
@@ -45,6 +46,7 @@ def get_args():
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
     parser.add_argument("--target_entropy", default=None, type=float)
+    parser.add_argument("--min_q_weight", default=3.0, type=float)
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./ensemble_models", type=str)
@@ -54,6 +56,18 @@ def get_args():
 
 
 def main(args):
+    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}'
+    print('#'*30 + f'\n# Running experiment for: {exp_name} #\n' + '#'*30)
+
+    # Log setting
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        filename=f'{args.log_dir}/{args.env}/{exp_name}.log',
+                        filemode='w',
+                        force=True)
+    logger = logging.getLogger()
+
     # Env parameters
     env = gym.make(args.env)
     obs_dim = env.observation_space.shape[0]
@@ -83,8 +97,8 @@ def main(args):
 
     # Train agent and evaluate policy
     for t in trange(args.max_timesteps):
-        # log_info = agent.update(replay_buffer, model_buffer)
-        log_info = agent.update(replay_buffer, replay_buffer)
+        log_info = agent.update(replay_buffer, model_buffer)
+        # log_info = agent.update(replay_buffer, replay_buffer)
         # for i in log_info:
         #     print(f'{i}\t{log_info[i]}')
         # return
@@ -96,16 +110,48 @@ def main(args):
                 "time": (time.time() - start_time) / 60
             })
             logs.append(log_info)
-            print(
-                f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.2f}, "
-                f"actor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}, "
-                f"cql1_loss: {log_info['cql1_loss']:.2f}, cql2_loss: {log_info['cql2_loss']:.2f}, "
-                f"q1: {log_info['q1']:.2f}, q2: {log_info['q2']:.2f}, "
-                f"cql_next_q1: {log_info['cql_next_q1']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}, "
-                f"random_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
-                f"alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}, "
-                f"logp_next_action: {log_info['logp_next_action']:.2f}"
+            logger.info(
+                f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
+                f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}\n"
+                f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
+
+                f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, "
+                f"critic_loss_max: {log_info['critic_loss_max']:.2f}, critic_loss_std: {log_info['critic_loss_std']:.2f}\n"
+
+                f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql1_loss_min: {log_info['cql1_loss_min']:.2f} "
+                f"cql1_loss_max: {log_info['cql1_loss_max']:.2f}, cql1_loss_std: {log_info['cql1_loss_std']:.2f}\n"
+
+                f"\tcql2_loss: {log_info['cql2_loss']:.2f}, cql2_loss_min: {log_info['cql2_loss_min']:.2f} "
+                f"cql2_loss_max: {log_info['cql2_loss_max']:.2f}, cql2_loss_std: {log_info['cql2_loss_std']:.2f}\n"
+
+                f"\ttarget_q: {log_info['target_q']:.2f}, target_q_min: {log_info['target_q_min']:.2f} "
+                f"target_q_max: {log_info['target_q_max']:.2f}, target_q_std: {log_info['target_q_std']:.2f}\n"
+
+                f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}, q1_std: {log_info['q1_std']:.2f}\n"
+
+                f"\tq2: {log_info['q2']:.2f}, q2_min: {log_info['q2_min']:.2f}, q2_max: {log_info['q2_max']:.2f}, q2_std: {log_info['q2_std']:.2f}\n"
+
+                f"\tood_q1: {log_info['ood_q1']:.2f}, ood_q1_min: {log_info['ood_q1_min']:.2f}, "
+                f"ood_q1_max: {log_info['ood_q1_max']:.2f}, ood_q1_std: {log_info['ood_q1_std']:.2f}\n"
+
+                f"\tood_q2: {log_info['ood_q2']:.2f}, ood_q2_min: {log_info['ood_q2_min']:.2f}, "
+                f"ood_q2_max: {log_info['ood_q2_max']:.2f}, ood_q2_std: {log_info['ood_q2_std']:.2f}\n"
+
+                f"\tcql_next_q1: {log_info['cql_next_q1']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}\n"
+                f"\trandom_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
+                f"logp_next_action: {log_info['logp_next_action']:.2f}\n"
+
+                f"\treal_batch_rewards: {log_info['real_batch_rewards']:.2f}, real_batch_actions: {log_info['real_batch_actions']:.2f}\n"
+                f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, model_batch_actions: {log_info['model_batch_actions']:.2f}, 'model_buffer_size': {log_info['model_buffer_size']:.0f}\n"
             )
+
+
+        # log_info['real_batch_rewards'] = real_batch.rewards.sum()
+        # log_info['real_batch_actions'] = real_batch.actions.reshape(-1).sum()
+        # log_info['model_batch_rewards'] = model_batch.rewards.sum()
+        # log_info['model_batch_actions'] = model_batch.actions.reshape(-1).sum()
+        # log_info['model_buffer_size'] = model_buffer.size
+
 
     # Save logs
     log_name = f"s{args.seed}"

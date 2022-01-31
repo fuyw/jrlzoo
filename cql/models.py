@@ -346,7 +346,7 @@ class CQLAgent:
                 "q1": q1,
                 "q2": q2,
                 "target_q": target_q,
-                "sampled_q": sampled_q.mean(),
+                "sampled_q": sampled_q,
                 "ood_q1": ood_q1,
                 "ood_q2": ood_q2,
                 "cql_q1_avg": cql_q1.mean(),

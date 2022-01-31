@@ -104,8 +104,7 @@ def plot_cql_min_q_weight(prefix_name):
         df['critic_loss'] /= 2
         for idx, col in enumerate([
                 'reward', 'actor_loss', 'critic_loss', 'cql1_loss',
-                'cql2_loss', 'q1', 'q2', 'logsumexp_cql_concat_q1',
-                'logsumexp_cql_concat_q2'
+                'cql2_loss', 'q1', 'q2', 'ood_q1', 'ood_q2'
         ]):
             ax = axes[idx // 5][idx % 5]
             ax.plot(df['step'].values, df[col].values, label=str(min_q_weight))
@@ -128,10 +127,8 @@ def plot_cql_min_q_weight(prefix_name):
 
         idx = 3 + idx
         ax = axes[idx // 5][idx % 5]
-        ax.plot(df['step'].values,
-                df['logsumexp_cql_concat_q2'].values,
-                label='ood_q1')
-        ax.plot(df['step'].values, df['q2'].values, label='q1')
+        ax.plot(df['step'].values, df['ood_q1'].values, label='ood_q1')
+        ax.plot(df['step'].values, df['q1'].values, label='q1')
         ax.legend()
         ax.set_title(f'min_q_weight = {min_q_weight}')
     # axes[-1, -1].axis('off')
@@ -153,14 +150,15 @@ def compare_cql_critic_losses():
     plt.savefig(f'imgs/d4rl_cql0_s0_early.png')
 
 
-
 if __name__ == '__main__':
     # plot_exp()
 
-    # for prefix_name in [
-    #         'd4rl_online_cql0_s0', 'd4rl_online_cql1_s0', 'd4rl_cql0_s0',
-    #         'd4rl_cql1_s0'
-    # ]:
-    #     plot_cql_min_q_weight(prefix_name)
+    for prefix_name in [
+            'd4rl_online_cql0_s0',
+            'd4rl_cql0_s0',
+            'd4rl_online_cql1_s0',
+            'd4rl_cql1_s0'
+    ]:
+        plot_cql_min_q_weight(prefix_name)
 
-    compare_cql_critic_losses()
+    # compare_cql_critic_losses()
