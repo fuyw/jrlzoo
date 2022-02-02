@@ -97,10 +97,8 @@ def main(args):
     start_time = time.time()
 
     # Train agent and evaluate policy
-    # for t in trange(int(2.5e5)):
     for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, model_buffer)
-        # log_info = agent.update(replay_buffer, replay_buffer)
         if (t + 1) % args.eval_freq == 0:
             eval_reward = eval_policy(agent, args.env, args.seed)
             log_info.update({
@@ -142,26 +140,18 @@ def main(args):
                 f"\tood_q2: {log_info['ood_q2']:.2f}, ood_q2_min: {log_info['ood_q2_min']:.2f}, "
                 f"ood_q2_max: {log_info['ood_q2_max']:.2f}, ood_q2_std: {log_info['ood_q2_std']:.2f}\n"
 
-                f"\tcql_next_q1: {log_info['cql_next_q1']:.2f}, cql_next_q2: {log_info['cql_next_q2']:.2f}\n"
+                f"\tcql_q1: {log_info['cql_q1']:.2f}, cql_q2: {log_info['cql_q2']:.2f}\n"
                 f"\trandom_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
                 f"logp_next_action: {log_info['logp_next_action']:.2f}\n"
 
                 f"\treal_batch_rewards: {log_info['real_batch_rewards']:.2f}, real_batch_actions: {log_info['real_batch_actions']:.2f}\n"
                 f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, model_batch_actions: {log_info['model_batch_actions']:.2f}, model_buffer_size: {log_info['model_buffer_size']:.0f}\n"
+                f"\tmodel_buffer_size: {log_info['model_buffer_size']:.0f}, model_buffer_ptr: {log_info['model_buffer_ptr']:.0f}\n"
             )
 
-
-        # log_info['real_batch_rewards'] = real_batch.rewards.sum()
-        # log_info['real_batch_actions'] = real_batch.actions.reshape(-1).sum()
-        # log_info['model_batch_rewards'] = model_batch.rewards.sum()
-        # log_info['model_batch_actions'] = model_batch.actions.reshape(-1).sum()
-        # log_info['model_buffer_size'] = model_buffer.size
-
-
     # Save logs
-    log_name = f"s{args.seed}"
     log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"{args.log_dir}/{args.env}/{log_name}.csv")
+    log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
     # agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
 
 

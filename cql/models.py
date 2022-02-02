@@ -269,11 +269,8 @@ class CQLAgent:
 
             # CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
-            cql_random_actions = jax.random.uniform(rng3,
-                                                    shape=(self.num_random,
-                                                           self.act_dim),
-                                                    minval=-1.0,
-                                                    maxval=1.0)
+            cql_random_actions = jax.random.uniform(
+                rng3, shape=(self.num_random, self.act_dim), minval=-1.0, maxval=1.0)
 
             # Sample 10 actions with current state
             repeat_observations = jnp.repeat(jnp.expand_dims(observation,

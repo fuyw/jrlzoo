@@ -18,7 +18,7 @@ from utils import Batch, ReplayBuffer, get_training_data
 
 
 LOG_STD_MAX = 2.
-LOG_STD_MIN = -20.
+LOG_STD_MIN = -5.
 
 kernel_initializer = jax.nn.initializers.glorot_uniform()
 
@@ -30,7 +30,8 @@ class Actor(nn.Module):
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc1")(observation))
         x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc2")(x))
-        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="fc3")(x)
+        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc3")(x))
+        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="output")(x)
 
         mu, log_std = jnp.split(x, 2, axis=-1)
         log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
@@ -47,13 +48,14 @@ class Actor(nn.Module):
 
 class Critic(nn.Module):
     hid_dim: int = 256
+    layer_num: int = 3
 
     @nn.compact
     def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observation, action], axis=-1)
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")(x))
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc2")(q))
-        q = nn.Dense(1, kernel_init=kernel_initializer, name="fc3")(q)
+        for i in range(self.layer_num):
+            x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc{i+1}")(x))
+        q = nn.Dense(1, kernel_init=kernel_initializer, name="output")(x)
         return q
 
 
@@ -427,7 +429,7 @@ class COMBOAgent:
             self.cql_alpha_state = train_state.TrainState.create(
                 apply_fn=None,
                 params=self.log_cql_alpha.init(cql_key)["params"],
-                tx=optax.adam(self.lr))
+                tx=optax.adam(self.lr_actor))
 
         # replay buffer
         self.batch_size = batch_size
@@ -473,13 +475,13 @@ class COMBOAgent:
             log_alpha = self.log_alpha.apply({"params": alpha_params})
             alpha_loss = -log_alpha * jax.lax.stop_gradient(logp + self.target_entropy)
             alpha = jnp.exp(log_alpha)
+            alpha = jax.lax.stop_gradient(alpha)  # stop gradient to avoid affect Alpha parameters
 
             # We use frozen_params so that gradients can flow back to the actor without being used to update the critic.
             sampled_q1, sampled_q2 = self.critic.apply({"params": frozen_critic_params}, observation, sampled_action)
             sampled_q = jnp.squeeze(jnp.minimum(sampled_q1, sampled_q2))
 
             # Actor loss
-            alpha = jax.lax.stop_gradient(alpha)  # stop gradient to avoid affect Alpha parameters
             actor_loss = (alpha * logp - sampled_q)
 
             # Critic loss
@@ -501,41 +503,45 @@ class COMBOAgent:
 
             # COMBO CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
-
-            # sample random actions
-            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim), minval=-1.0, maxval=1.0)
+            cql_random_actions = jax.random.uniform(
+                rng3, shape=(self.num_random, self.act_dim), minval=-1.0, maxval=1.0)
 
             # repeat next observations
-            repeat_next_observations = jnp.repeat(jnp.expand_dims(next_observation, axis=0),
-                                                  repeats=self.num_random, axis=0)
+            repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0),
+                                             repeats=self.num_random, axis=0)
+
+            # sample actions with actor
+            _, cql_sampled_actions, cql_logp = self.actor.apply(
+                {"params": frozen_actor_params}, rng3, repeat_observations)
+
+            # random q values
             cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params},
-                                                             repeat_next_observations,
+                                                             repeat_observations,
                                                              cql_random_actions)
-            _, cql_next_actions, cql_logp_next_action = self.actor.apply({"params": frozen_actor_params},
-                                                                         rng4, repeat_next_observations)
-            cql_next_q1, cql_next_q2 = self.critic.apply({"params": critic_params},
-                                                         repeat_next_observations,
-                                                         cql_next_actions)
+
+            # cql q values
+            cql_q1, cql_q2 = self.critic.apply({"params": critic_params},
+                                                repeat_observations,
+                                                cql_sampled_actions)
 
             random_density = np.log(0.5 ** self.act_dim)
             cql_concat_q1 = jnp.concatenate([
                 jnp.squeeze(cql_random_q1) - random_density,
-                jnp.squeeze(cql_next_q1) - cql_logp_next_action,
+                jnp.squeeze(cql_q1) - cql_logp,
             ])
             cql_concat_q2 = jnp.concatenate([
                 jnp.squeeze(cql_random_q2) - random_density,
-                jnp.squeeze(cql_next_q2) - cql_logp_next_action,
+                jnp.squeeze(cql_q2) - cql_logp,
             ])
 
             ood_q1 = jax.scipy.special.logsumexp(cql_concat_q1)
             ood_q2 = jax.scipy.special.logsumexp(cql_concat_q2)
 
-            # compute logsumexp loss w.r.t model_states
-            cql1_loss = (ood_q1*(1-mask) / self.real_ratio - q1*mask) * self.min_q_weight 
-            cql2_loss = (ood_q2*(1-mask) / self.real_ratio - q2*mask) * self.min_q_weight
+            # compute logsumexp loss w.r.t model_states 
+            cql1_loss = (ood_q1*(1-mask) - q1*mask) * self.min_q_weight / self.real_ratio
+            cql2_loss = (ood_q2*(1-mask) - q2*mask) * self.min_q_weight / self.real_ratio
 
             total_loss = alpha_loss + actor_loss + critic_loss + cql1_loss + cql2_loss
-
             log_info = {
                 "critic_loss1": critic_loss1,
                 "critic_loss2": critic_loss2,
@@ -550,8 +556,8 @@ class COMBOAgent:
                 "sampled_q": sampled_q,
                 "ood_q1": ood_q1,
                 "ood_q2": ood_q2,
-                "cql_next_q1": cql_next_q1.mean(),
-                "cql_next_q2": cql_next_q2.mean(),
+                "cql_q1": cql_q1.mean(),
+                "cql_q2": cql_q2.mean(),
                 "random_q1": cql_random_q1.mean(),
                 "random_q2": cql_random_q2.mean(),
                 "alpha": alpha,
@@ -640,15 +646,14 @@ class COMBOAgent:
         # rollout the model
         if self.update_step % 1000 == 0:
             observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
-            sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
-            select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
+            # sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
+            # select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
             for t in range(self.horizon):
                 self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
 
                 # random actions
                 actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), 3),
                                              minval=-1.0, maxval=1.0)
-
                 # sample actions with policy pi
                 # sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
 
@@ -657,13 +662,13 @@ class COMBOAgent:
                 if nonterminal_mask.sum() == 0:
                     print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
                     break
-                model_buffer.add_batch(observations[nonterminal_mask],
-                                       actions[nonterminal_mask],
-                                       next_observations[nonterminal_mask],
-                                       rewards[nonterminal_mask],
-                                       dones[nonterminal_mask])
+                model_buffer.add_batch(observations,
+                                       actions,
+                                       next_observations,
+                                       rewards,
+                                       dones)
                 observations = next_observations[nonterminal_mask]
-                sample_rng = sample_rng[nonterminal_mask]
+                # sample_rng = sample_rng[nonterminal_mask]
 
         # sample from real & model buffer
         real_batch = replay_buffer.sample(self.real_batch_size)
@@ -688,6 +693,7 @@ class COMBOAgent:
         log_info['model_batch_rewards'] = model_batch.rewards.sum()
         log_info['model_batch_actions'] = abs(model_batch.actions).reshape(-1).sum()
         log_info['model_buffer_size'] = model_buffer.size
+        log_info['model_buffer_ptr'] = model_buffer.ptr
 
         # upate target network
         params = self.critic_state.params
