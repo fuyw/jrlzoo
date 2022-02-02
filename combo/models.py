@@ -688,13 +688,6 @@ class COMBOAgent:
             self.critic_state, self.alpha_state, key
         )
 
-        log_info['real_batch_rewards'] = real_batch.rewards.sum()
-        log_info['real_batch_actions'] = abs(real_batch.actions).reshape(-1).sum()
-        log_info['model_batch_rewards'] = model_batch.rewards.sum()
-        log_info['model_batch_actions'] = abs(model_batch.actions).reshape(-1).sum()
-        log_info['model_buffer_size'] = model_buffer.size
-        log_info['model_buffer_ptr'] = model_buffer.ptr
-
         # upate target network
         params = self.critic_state.params
         target_params = self.critic_target_params

@@ -143,10 +143,6 @@ def main(args):
                 f"\tcql_q1: {log_info['cql_q1']:.2f}, cql_q2: {log_info['cql_q2']:.2f}\n"
                 f"\trandom_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
                 f"logp_next_action: {log_info['logp_next_action']:.2f}\n"
-
-                f"\treal_batch_rewards: {log_info['real_batch_rewards']:.2f}, real_batch_actions: {log_info['real_batch_actions']:.2f}\n"
-                f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, model_batch_actions: {log_info['model_batch_actions']:.2f}, model_buffer_size: {log_info['model_buffer_size']:.0f}\n"
-                f"\tmodel_buffer_size: {log_info['model_buffer_size']:.0f}, model_buffer_ptr: {log_info['model_buffer_ptr']:.0f}\n"
             )
 
     # Save logs
