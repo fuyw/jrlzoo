@@ -30,5 +30,7 @@ x1 = jnp.repeat(jnp.expand_dims(x[0], axis=0), repeats=7, axis=0)  # (7, 14)
 
 model_mu, model_log_var = model.model.apply({"params": model.model_state.params}, x0)
 model_mu1, model_log_var1 = model.model.apply({"params": model.model_state.params}, x1)
+print(model_mu - model_mu1)
 
-model_mu - model_mu1
+z1, z2 = model.model.apply({"params": model.model_state.params}, np.random.normal(size=(7, 14)))
+
