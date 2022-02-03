@@ -51,12 +51,13 @@ def get_args():
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
     parser.add_argument("--backup_entropy", default=False, action="store_true")
+    parser.add_argument("--rollout_random", default=True, action="store_true")
     args = parser.parse_args()
     return args
 
 
 def main(args):
-    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}'
+    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}_random{int(args.rollout_random)}'
     exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
@@ -82,7 +83,8 @@ def main(args):
 
     # TD3 agent
     agent = COMBOAgent(env=args.env, obs_dim=obs_dim, act_dim=act_dim, seed=args.seed,
-                       lr=args.lr, lr_actor=args.lr_actor, rollout_batch_size=10000)
+                       lr=args.lr, lr_actor=args.lr_actor, rollout_batch_size=10000,
+                       rollout_random=args.rollout_random)
 
     # Train the dynamics model
     agent.model.train()

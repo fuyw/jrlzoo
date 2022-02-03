@@ -274,7 +274,7 @@ class DynamicsModel:
 
             res.append((epoch, sum(train_loss)/batch_num, sum(mse_loss)/batch_num,
                         sum(var_loss)/batch_num, mean_val_loss))
-            print(f"Epoch #{epoch+1}: "
+            print(f"Epoch #{epoch+1}:\t"
                   f"train_loss={sum(train_loss)/batch_num:.3f}\t"
                   f"mse_loss={sum(mse_loss)/batch_num:.3f}\t"
                   f"var_loss={sum(var_loss)/batch_num:.3f}\t"
@@ -348,6 +348,7 @@ class COMBOAgent:
                  batch_size: int = 256,
                  rollout_batch_size: int = 10000,
                  holdout_ratio: float = 0.1,
+                 rollout_random: bool = False,
                  model_dir: str = 'saved_models'):
 
         self.update_step = 0
@@ -372,6 +373,7 @@ class COMBOAgent:
         self.holdout_ratio = holdout_ratio
         self.ensemble_num = ensemble_num
         self.real_ratio = real_ratio 
+        self.rollout_random = rollout_random
 
         # Initialize random keys
         self.rng = jax.random.PRNGKey(seed)
@@ -435,6 +437,9 @@ class COMBOAgent:
         self.real_batch_size = int(real_ratio * batch_size)
         self.model_batch_size = batch_size - self.real_batch_size
         self.masks = np.concatenate([np.ones(self.real_batch_size), np.zeros(self.model_batch_size)])
+
+        # vmap select_action
+        self.select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
@@ -644,16 +649,17 @@ class COMBOAgent:
         # rollout the model
         if self.update_step % 1000 == 0:
             observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
-            # sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
+            sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
             # select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
             for t in range(self.horizon):
                 self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
-
-                # random actions
-                actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), self.act_dim),
-                                             minval=-1.0, maxval=1.0)
-                # sample actions with policy pi
-                # sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
+                if self.rollout_random:
+                    # random actions
+                    actions = np.random.uniform(low=-1.0, high=1.0, size=(len(observations), self.act_dim))
+                    # actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), self.act_dim), minval=-1.0, maxval=1.0)
+                else:
+                    # sample actions with policy pi
+                    sample_rng, actions = self.select_action(self.actor_state.params, sample_rng, observations, False)
 
                 next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
                 nonterminal_mask = ~dones
@@ -666,7 +672,7 @@ class COMBOAgent:
                                        rewards,
                                        dones)
                 observations = next_observations[nonterminal_mask]
-                # sample_rng = sample_rng[nonterminal_mask]
+                sample_rng = sample_rng[nonterminal_mask]
 
         # sample from real & model buffer
         real_batch = replay_buffer.sample(self.real_batch_size)
