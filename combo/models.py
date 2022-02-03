@@ -145,10 +145,10 @@ class DynamicsModel:
                  holdout_num: int = 1000,
                  lr: float = 1e-3,
                  weight_decay: float = 5e-5,
-                 epochs: int = 300,
+                 epochs: int = 200,
                  batch_size: int = 1024,
                  max_patience: int = 10,
-                 model_dir: str = "./ensemble_models"):
+                 model_dir: str = "./saved_models"):
 
         # Model parameters
         self.seed = seed
@@ -172,7 +172,7 @@ class DynamicsModel:
         self.replay_buffer.convert_D4RL(d4rl.qlearning_dataset(self.env))
 
         # Initilaize the ensemble model
-        self.save_file = f"{model_dir}/{env}/s{seed}_b{batch_size}"
+        self.save_file = f"{model_dir}/{env}/s{seed}"
         self.elite_mask = None
 
         np.random.seed(seed+10)
@@ -196,7 +196,7 @@ class DynamicsModel:
             tx=optax.adamw(learning_rate=self.lr,
             weight_decay=self.weight_decay))
         elite_idx = np.loadtxt(f'{filename}_elite_models.txt', dtype=np.int32)[:self.elite_num]
-        self.elite_mask = jnp.eye(self.ensemble_num)[elite_idx, :]
+        self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
 
     def train(self):
         inputs, targets, holdout_inputs, holdout_targets = get_training_data(
@@ -263,7 +263,6 @@ class DynamicsModel:
 
             val_loss, val_info = val_loss_fn(self.model_state.params, holdout_inputs, holdout_targets)
             val_loss = jnp.mean(val_loss, axis=0)  # (7,)
-            # val_loss = jnp.mean(val_loss_fn(self.model_state.params, holdout_inputs, holdout_targets), axis=0)  # (7,)
             val_info = jax.tree_map(functools.partial(jnp.mean, axis=0), val_info)
             mean_val_loss = jnp.mean(val_loss)
             if mean_val_loss < min_val_loss:
@@ -296,6 +295,10 @@ class DynamicsModel:
         with open(f"{self.save_file}_elite_models.txt", "w") as f:
             for idx in elite_models:
                 f.write(f"{idx}\n")
+
+        elite_idx = elite_models.to_py()[:self.elite_num]
+        self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
+        print(f'Elite mask is:\n{self.elite_mask}')
 
     def step(self, key, observations, actions):
         model_idx = jax.random.randint(key, shape=(actions.shape[0],), minval=0, maxval=self.elite_num)
@@ -350,7 +353,7 @@ class COMBOAgent:
                  batch_size: int = 256,
                  rollout_batch_size: int = 10000,
                  holdout_ratio: float = 0.1,
-                 model_dir: str = 'ensemble_models'):
+                 model_dir: str = 'saved_models'):
 
         self.update_step = 0
         self.obs_dim = obs_dim

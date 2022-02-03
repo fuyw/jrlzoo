@@ -11,7 +11,7 @@ from tqdm import trange
 from models import COMBOAgent
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".3"
+# os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".3"
 
 
 def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
@@ -49,7 +49,7 @@ def get_args():
     parser.add_argument("--min_q_weight", default=3.0, type=float)
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
-    parser.add_argument("--model_dir", default="./ensemble_models", type=str)
+    parser.add_argument("--model_dir", default="./saved_models", type=str)
     parser.add_argument("--backup_entropy", default=False, action="store_true")
     args = parser.parse_args()
     return args
@@ -82,8 +82,12 @@ def main(args):
     # TD3 agent
     agent = COMBOAgent(env=args.env, obs_dim=obs_dim, act_dim=act_dim, seed=args.seed,
                        lr=args.lr, lr_actor=args.lr_actor, rollout_batch_size=10000)
-    # agent.model.train()
-    agent.model.load(f'{args.model_dir}/{args.env}/s{args.seed}')
+
+    # Train the dynamics model
+    agent.model.train()
+
+    # Load the trained dynamics model
+    # agent.model.load(f'{args.model_dir}/{args.env}/s{args.seed}')
 
     # Replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
@@ -148,7 +152,7 @@ def main(args):
     # Save logs
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
-    # agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
+    agent.save(f"{args.model_dir}/{args.env}/combo_{args.seed}")
 
 
 if __name__ == "__main__":
