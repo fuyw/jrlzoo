@@ -133,10 +133,6 @@ class GaussianMLP(nn.Module):
 
 
 class DynamicsModel:
-    """
-    val_loss = 0.455
-    val_loss1 = [0.55001634 0.4690651  0.44378504 0.3747698  0.4047458  0.4849194 0.45814472]
-    """
     def __init__(self,
                  env: str = "hopper-medium-v2",
                  seed: int = 42,
@@ -173,7 +169,7 @@ class DynamicsModel:
 
         # Initilaize the ensemble model
         self.save_file = f"{model_dir}/{env}/s{seed}"
-        self.elite_mask = None
+        self.elite_mask = np.eye(self.ensemble_num)[range(elite_num), :]
 
         np.random.seed(seed+10)
         rng = jax.random.PRNGKey(seed+10)
@@ -279,13 +275,12 @@ class DynamicsModel:
             res.append((epoch, sum(train_loss)/batch_num, sum(mse_loss)/batch_num,
                         sum(var_loss)/batch_num, mean_val_loss))
             print(f"Epoch #{epoch+1}: "
-                  f"train_loss = {sum(train_loss)/batch_num:.3f} "
-                  f"mse_loss = {sum(mse_loss)/batch_num:.3f} "
-                  f"var_loss = {sum(var_loss)/batch_num:.3f} "
-                  f"val_loss = {mean_val_loss:.3f} "
-                  f"val_rew_loss = {val_info['reward_loss']:.3f} "
-                  f"val_state_loss = {val_info['state_loss']:.3f}"
-            )
+                  f"train_loss={sum(train_loss)/batch_num:.3f}\t"
+                  f"mse_loss={sum(mse_loss)/batch_num:.3f}\t"
+                  f"var_loss={sum(var_loss)/batch_num:.3f}\t"
+                  f"val_loss={mean_val_loss:.3f}\t"
+                  f"val_rew_loss={val_info['reward_loss']:.3f}\t"
+                  f"val_state_loss={val_info['state_loss']:.3f}")
 
         res_df = pd.DataFrame(res, columns=[
             "epoch", "train_loss", "mse_loss", "var_loss", "val_loss"])
