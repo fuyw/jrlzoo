@@ -57,7 +57,7 @@ def get_args():
 
 def main(args):
     exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}'
-    exp_info = f'# Running experiment for: {exp_name} #'
+    exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
     # Log setting
@@ -152,7 +152,7 @@ def main(args):
     # Save logs
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
-    agent.save(f"{args.model_dir}/{args.env}/combo_{args.seed}")
+    # agent.save(f"{args.model_dir}/{args.env}/combo_{args.seed}")
 
 
 if __name__ == "__main__":
