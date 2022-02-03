@@ -693,3 +693,31 @@ class COMBOAgent:
 
         self.update_step += 1
         return log_info
+
+    # def save(self, filename):
+    #     critic_file = filename + '_critic.ckpt'
+    #     with open(critic_file, 'wb') as f:
+    #         f.write(serialization.to_bytes(self.critic_state.params))
+    #     actor_file = filename + '_actor.ckpt'
+    #     with open(actor_file, 'wb') as f:
+    #         f.write(serialization.to_bytes(self.actor_state.params))
+
+    # def load(self, filename):
+    #     critic_file = filename + '_critic.ckpt'
+    #     with open(critic_file, 'rb') as f:
+    #         critic_params = serialization.from_bytes(
+    #             self.critic_state.params, f.read())
+    #     self.critic_state = train_state.TrainState.create(
+    #         apply_fn=Critic.apply,
+    #         params=critic_params,
+    #         tx=optax.adam(learning_rate=self.learning_rate))
+
+    #     actor_file = filename + '_actor.ckpt'
+    #     with open(actor_file, 'rb') as f:
+    #         actor_params = serialization.from_bytes(
+    #             self.actor_state.params, f.read())
+    #     self.actor_state = train_state.TrainState.create(
+    #         apply_fn=Actor.apply,
+    #         params=actor_params,
+    #         tx=optax.adam(learning_rate=self.learning_rate)
+    #     )

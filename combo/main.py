@@ -85,10 +85,10 @@ def main(args):
                        lr=args.lr, lr_actor=args.lr_actor, rollout_batch_size=10000)
 
     # Train the dynamics model
-    # agent.model.train()
+    agent.model.train()
 
     # Load the trained dynamics model
-    agent.model.load(f'{args.model_dir}/{args.env}/s{args.seed}')
+    # agent.model.load(f'{args.model_dir}/{args.env}/s{args.seed}')
 
     # Replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
