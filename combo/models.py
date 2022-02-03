@@ -650,7 +650,7 @@ class COMBOAgent:
                 self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
 
                 # random actions
-                actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), 3),
+                actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), self.act_dim),
                                              minval=-1.0, maxval=1.0)
                 # sample actions with policy pi
                 # sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)

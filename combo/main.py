@@ -68,6 +68,7 @@ def main(args):
                         filemode='w',
                         force=True)
     logger = logging.getLogger()
+    logger.info(f"\nArguments:\n{vars(args)}")
 
     # Env parameters
     env = gym.make(args.env)
@@ -84,10 +85,10 @@ def main(args):
                        lr=args.lr, lr_actor=args.lr_actor, rollout_batch_size=10000)
 
     # Train the dynamics model
-    agent.model.train()
+    # agent.model.train()
 
     # Load the trained dynamics model
-    # agent.model.load(f'{args.model_dir}/{args.env}/s{args.seed}')
+    agent.model.load(f'{args.model_dir}/{args.env}/s{args.seed}')
 
     # Replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
@@ -157,7 +158,6 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args()
-    print(f"\nArguments:\n{vars(args)}")
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
