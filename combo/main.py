@@ -11,7 +11,7 @@ from tqdm import trange
 from models import COMBOAgent
 from utils import ReplayBuffer
 
-# os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".3"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".25"
 
 
 def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
@@ -35,10 +35,10 @@ def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="hopper-medium-v2")
+    parser.add_argument("--env", default="halfcheetah-medium-v2")
     parser.add_argument("--seed", default=42, type=int)
-    parser.add_argument("--lr_actor", default=3e-5, type=float)
-    parser.add_argument("--lr", default=3e-4, type=float)
+    parser.add_argument("--lr_actor", default=1e-5, type=float)
+    parser.add_argument("--lr", default=1e-4, type=float)
     parser.add_argument("--weight_decay", default=5e-5, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
     parser.add_argument("--eval_freq", default=int(5e3), type=int)
@@ -46,12 +46,12 @@ def get_args():
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
     parser.add_argument("--target_entropy", default=None, type=float)
-    parser.add_argument("--min_q_weight", default=3.0, type=float)
+    parser.add_argument("--min_q_weight", default=0.5, type=float)
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
     parser.add_argument("--backup_entropy", default=False, action="store_true")
-    parser.add_argument("--rollout_random", default=True, action="store_true")
+    parser.add_argument("--rollout_random", default=False, action="store_true")
     args = parser.parse_args()
     return args
 
@@ -87,10 +87,10 @@ def main(args):
                        rollout_random=args.rollout_random)
 
     # Train the dynamics model
-    agent.model.train()
+    # agent.model.train()
 
     # Load the trained dynamics model
-    # agent.model.load(f'{args.model_dir}/{args.env}/s{args.seed}')
+    agent.model.load(f'{args.model_dir}/{args.env}/s0')
 
     # Replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
@@ -150,8 +150,15 @@ def main(args):
                 f"\tcql_q1: {log_info['cql_q1']:.2f}, cql_q2: {log_info['cql_q2']:.2f}\n"
                 f"\trandom_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
                 f"logp_next_action: {log_info['logp_next_action']:.2f}\n"
-            )
 
+                f"\treal_batch_rewards: {log_info['real_batch_rewards']:.2f}, "
+                f"real_batch_actions: {log_info['real_batch_actions']:.2f}, "
+                f"real_batch_discounts: {log_info['real_batch_discounts']:.2f}\n"
+                f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, "
+                f"model_batch_actions: {log_info['model_batch_actions']:.2f}, "
+                f"model_batch_discounts: {log_info['model_batch_discounts']:.2f} "
+                f"model_buffer_size: {log_info['model_buffer_size']:.0f}\n"
+            )
     # Save logs
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")

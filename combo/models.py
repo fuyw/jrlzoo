@@ -439,7 +439,7 @@ class COMBOAgent:
         self.masks = np.concatenate([np.ones(self.real_batch_size), np.zeros(self.model_batch_size)])
 
         # vmap select_action
-        self.select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
+        # self.select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
@@ -541,8 +541,10 @@ class COMBOAgent:
             ood_q2 = jax.scipy.special.logsumexp(cql_concat_q2)
 
             # compute logsumexp loss w.r.t model_states 
-            cql1_loss = (ood_q1*(1-mask) - q1*mask) * self.min_q_weight / self.real_ratio
-            cql2_loss = (ood_q2*(1-mask) - q2*mask) * self.min_q_weight / self.real_ratio
+            # cql1_loss = (ood_q1*(1-mask) - q1*mask) * self.min_q_weight / self.real_ratio
+            # cql2_loss = (ood_q2*(1-mask) - q2*mask) * self.min_q_weight / self.real_ratio
+            cql1_loss = (ood_q1 - q1*mask/self.real_ratio) * self.min_q_weight 
+            cql2_loss = (ood_q2 - q2*mask/self.real_ratio) * self.min_q_weight
 
             total_loss = alpha_loss + actor_loss + critic_loss + cql1_loss + cql2_loss
             log_info = {
@@ -647,10 +649,10 @@ class COMBOAgent:
 
     def update(self, replay_buffer, model_buffer):
         # rollout the model
+        select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
         if self.update_step % 1000 == 0:
             observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
             sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
-            # select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
             for t in range(self.horizon):
                 self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
                 if self.rollout_random:
@@ -659,7 +661,7 @@ class COMBOAgent:
                     # actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), self.act_dim), minval=-1.0, maxval=1.0)
                 else:
                     # sample actions with policy pi
-                    sample_rng, actions = self.select_action(self.actor_state.params, sample_rng, observations, False)
+                    sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
 
                 next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
                 nonterminal_mask = ~dones
@@ -696,6 +698,14 @@ class COMBOAgent:
         params = self.critic_state.params
         target_params = self.critic_target_params
         self.critic_target_params = self.update_target_params(params, target_params)
+
+        log_info['real_batch_rewards'] = real_batch.rewards.sum()
+        log_info['real_batch_actions'] = abs(real_batch.actions).reshape(-1).sum()
+        log_info['real_batch_discounts'] = real_batch.discounts.sum()
+        log_info['model_batch_rewards'] = model_batch.rewards.sum()
+        log_info['model_batch_actions'] = abs(model_batch.actions).reshape(-1).sum()
+        log_info['model_batch_discounts'] = model_batch.discounts.sum()
+        log_info['model_buffer_size'] = model_buffer.size
 
         self.update_step += 1
         return log_info
