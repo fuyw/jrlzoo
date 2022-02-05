@@ -19,22 +19,13 @@ kernel_initializer = jax.nn.initializers.glorot_uniform()
 
 class Actor(nn.Module):
     act_dim: int
-    hid_dim: int = 256
-    hid_layers: int = 3
 
     @nn.compact
     def __call__(self, rng: Any, observation: jnp.ndarray):
-        x = nn.relu(
-            nn.Dense(self.hid_dim, kernel_init=kernel_initializer,
-                     name="fc1")(observation))
-        for layer_idx in range(1, self.hid_layers):
-            x = nn.relu(
-                nn.Dense(self.hid_dim,
-                         kernel_init=kernel_initializer,
-                         name=f"fc{layer_idx+1}")(x))
-        x = nn.Dense(2 * self.act_dim,
-                     kernel_init=kernel_initializer,
-                     name=f"fc{self.hid_layers + 1}")(x)
+        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc1")(observation))
+        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc2")(x))
+        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc3")(x))
+        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="output")(x)
 
         mu, log_std = jnp.split(x, 2, axis=-1)
         log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
@@ -54,20 +45,11 @@ class Critic(nn.Module):
     hid_layers: int = 3
 
     @nn.compact
-    def __call__(self, observation: jnp.ndarray,
-                 action: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observation, action], axis=-1)
-        x = nn.relu(
-            nn.Dense(self.hid_dim, kernel_init=kernel_initializer,
-                     name="fc1")(x))
-        for layer_idx in range(1, self.hid_layers):
-            x = nn.relu(
-                nn.Dense(self.hid_dim,
-                         kernel_init=kernel_initializer,
-                         name=f"fc{layer_idx+1}")(x))
-        q = nn.Dense(1,
-                     kernel_init=kernel_initializer,
-                     name=f"fc{self.hid_layers+1}")(x)
+        for i in range(self.hid_layers):
+            x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc{i+1}")(x))
+        q = nn.Dense(1, kernel_init=kernel_initializer, name="output")(x)
         return q
 
 
@@ -141,7 +123,7 @@ class CQLAgent:
         dummy_act = jnp.ones([1, self.act_dim], dtype=jnp.float32)
 
         # Initialize the Actor
-        self.actor = Actor(self.act_dim, self.hid_dim, self.hid_layers)
+        self.actor = Actor(self.act_dim)
         actor_params = self.actor.init(actor_key, actor_key,
                                        dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(apply_fn=Actor.apply,
@@ -234,9 +216,9 @@ class CQLAgent:
 
             # Alpha loss: stop gradient to avoid affect Actor parameters
             log_alpha = self.log_alpha.apply({"params": alpha_params})
-            alpha_loss = -log_alpha * jax.lax.stop_gradient(
-                logp + self.target_entropy)
+            alpha_loss = -log_alpha * jax.lax.stop_gradient(logp + self.target_entropy)
             alpha = jnp.exp(log_alpha)
+            alpha = jax.lax.stop_gradient(alpha) 
 
             # We use frozen_params so that gradients can flow back to the actor without being used to update the critic.
             sampled_q1, sampled_q2 = self.critic.apply(
@@ -244,8 +226,7 @@ class CQLAgent:
             sampled_q = jnp.squeeze(jnp.minimum(sampled_q1, sampled_q2))
 
             # Actor loss
-            alpha = jax.lax.stop_gradient(
-                alpha)  # stop gradient to avoid affect Alpha parameters
+             # stop gradient to avoid affect Alpha parameters
             actor_loss = (alpha * logp - sampled_q)
 
             # Critic loss
@@ -260,7 +241,6 @@ class CQLAgent:
             next_q1, next_q2 = self.critic.apply(
                 {"params": critic_target_params}, next_observation,
                 next_action)
-
             next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2))
             if self.backup_entropy:
                 next_q -= alpha * logp_next_action
@@ -290,9 +270,9 @@ class CQLAgent:
                 {"params": frozen_actor_params}, rng4,
                 repeat_next_observations)
 
-            cql_random_q1, cql_random_q2 = self.critic.apply(
-                {"params": critic_params}, repeat_observations,
-                cql_random_actions)
+            cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params},
+                                                             repeat_observations,
+                                                             cql_random_actions)
             cql_q1, cql_q2 = self.critic.apply({"params": critic_params},
                                                repeat_observations,
                                                cql_sampled_actions)
@@ -302,27 +282,15 @@ class CQLAgent:
 
             # Simulate logsumexp() for continuous actions
             random_density = np.log(0.5**self.act_dim)
-            cql_random_q1_minus_logp = jnp.squeeze(
-                cql_random_q1) - random_density
-            cql_next_q1_minus_logp = jnp.squeeze(
-                cql_next_q1) - cql_logp_next_action
-            cql_q1_minus_logp = jnp.squeeze(cql_q1) - cql_logp
-
-            cql_random_q2_minus_logp = jnp.squeeze(
-                cql_random_q2) - random_density
-            cql_next_q2_minus_logp = jnp.squeeze(
-                cql_next_q2) - cql_logp_next_action
-            cql_q2_minus_logp = jnp.squeeze(cql_q2) - cql_logp
-
             cql_concat_q1 = jnp.concatenate([
-                cql_random_q1_minus_logp,
-                # cql_next_q1_minus_logp,
-                cql_q1_minus_logp
+                jnp.squeeze(cql_random_q1) - random_density,
+                # jnp.squeeze(cql_next_q1) - cql_logp_next_action,
+                jnp.squeeze(cql_q1) - cql_logp,
             ])
             cql_concat_q2 = jnp.concatenate([
-                cql_random_q2_minus_logp,
-                # cql_next_q2_minus_logp,
-                cql_q2_minus_logp
+                jnp.squeeze(cql_random_q2) - random_density,
+                # jnp.squeeze(cql_next_q2) - cql_logp_next_action,
+                jnp.squeeze(cql_q2) - cql_logp,
             ])
 
             # CQL0: conservative penalty ==> dominate by the max(cql_concat_q)
@@ -375,24 +343,6 @@ class CQLAgent:
                 "random_q2_avg": cql_random_q2.mean(),
                 "random_q2_min": cql_random_q2.min(),
                 "random_q2_max": cql_random_q2.max(),
-                "random_q1_IS_avg": cql_random_q1_minus_logp.mean(),
-                "random_q1_IS_min": cql_random_q1_minus_logp.min(),
-                "random_q1_IS_max": cql_random_q1_minus_logp.max(),
-                "next_q1_IS_avg": cql_next_q1_minus_logp.mean(),
-                "next_q1_IS_min": cql_next_q1_minus_logp.min(),
-                "next_q1_IS_max": cql_next_q1_minus_logp.max(),
-                "q1_IS_avg": cql_q1_minus_logp.mean(),
-                "q1_IS_min": cql_q1_minus_logp.min(),
-                "q1_IS_max": cql_q1_minus_logp.max(),
-                "random_q2_IS_avg": cql_random_q2_minus_logp.mean(),
-                "random_q2_IS_min": cql_random_q2_minus_logp.min(),
-                "random_q2_IS_max": cql_random_q2_minus_logp.max(),
-                "next_q2_IS_avg": cql_next_q2_minus_logp.mean(),
-                "next_q2_IS_min": cql_next_q2_minus_logp.min(),
-                "next_q2_IS_max": cql_next_q2_minus_logp.max(),
-                "q2_IS_avg": cql_q2_minus_logp.mean(),
-                "q2_IS_min": cql_q2_minus_logp.min(),
-                "q2_IS_max": cql_q2_minus_logp.max(),
                 "alpha": alpha,
                 "logp": logp,
                 "logp_next_action": logp_next_action
@@ -408,9 +358,13 @@ class CQLAgent:
 
         (_, log_info), gradients = grad_fn(actor_state.params,
                                            critic_state.params,
-                                           alpha_state.params, observations,
-                                           actions, rewards, discounts,
-                                           next_observations, rng)
+                                           alpha_state.params,
+                                           observations,
+                                           actions,
+                                           rewards,
+                                           discounts,
+                                           next_observations,
+                                           rng)
 
         gradients = jax.tree_map(functools.partial(jnp.mean, axis=0),
                                  gradients)
@@ -468,9 +422,10 @@ class CQLAgent:
                                              self.actor_state,
                                              self.critic_state,
                                              self.alpha_state, key)
-        log_info['batch_rewards'] = batch.rewards.mean().item()
-        log_info['batch_discounts'] = batch.discounts.mean().item()
-        log_info['batch_obs'] = abs(batch.observations).sum(1).mean().item()
+        log_info['batch_rewards'] = batch.rewards.sum().item()
+        log_info['batch_discounts'] = batch.discounts.sum().item()
+        log_info['batch_obs'] = abs(batch.observations).sum(1).sum().item()
+        log_info['batch_dones'] = abs(1 - batch.discounts).sum(1).sum().item()
 
         # update target network
         params = self.critic_state.params

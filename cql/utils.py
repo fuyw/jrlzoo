@@ -49,8 +49,9 @@ class ReplayBuffer:
         self.observations = dataset["observations"]
         self.actions = dataset["actions"]
         self.next_observations = dataset["next_observations"]
-        # self.rewards = dataset["rewards"]
+        # Reward shaping
         self.rewards = (dataset["rewards"] - 0.5) * 4.0
+        # self.rewards = dataset["rewards"]
         self.discounts = 1. - dataset["terminals"]
         self.size = self.observations.shape[0]
 
