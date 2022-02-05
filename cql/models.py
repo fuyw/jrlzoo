@@ -265,7 +265,10 @@ class CQLAgent:
             if self.backup_entropy:
                 next_q -= alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
-            critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
+
+            critic_loss1 = 0.5 * (q1 - target_q)**2
+            critic_loss2 = 0.5 * (q2 - target_q)**2
+            critic_loss = critic_loss1 + critic_loss2
 
             # CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
@@ -312,11 +315,13 @@ class CQLAgent:
             cql_q2_minus_logp = jnp.squeeze(cql_q2) - cql_logp
 
             cql_concat_q1 = jnp.concatenate([
-                cql_random_q1_minus_logp, cql_next_q1_minus_logp,
+                cql_random_q1_minus_logp,
+                # cql_next_q1_minus_logp,
                 cql_q1_minus_logp
             ])
             cql_concat_q2 = jnp.concatenate([
-                cql_random_q2_minus_logp, cql_next_q2_minus_logp,
+                cql_random_q2_minus_logp,
+                # cql_next_q2_minus_logp,
                 cql_q2_minus_logp
             ])
 
@@ -325,16 +330,14 @@ class CQLAgent:
             ood_q2 = jax.scipy.special.logsumexp(cql_concat_q2)
 
             # CQL1: maximize Q(s, a) in the dataset
-            if self.subtract_likelihood:
-                cql1_loss = (ood_q1 - q1) * self.min_q_weight
-                cql2_loss = (ood_q1 - q2) * self.min_q_weight
-            else:
-                cql1_loss = ood_q1 * self.min_q_weight
-                cql2_loss = ood_q2 * self.min_q_weight
+            cql1_loss = (ood_q1 - q1) * self.min_q_weight
+            cql2_loss = (ood_q1 - q2) * self.min_q_weight
 
             # Loss weight form Dopamine
-            total_loss = 0.5 * critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
+            total_loss = critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
             log_info = {
+                "critic_loss1": critic_loss1,
+                "critic_loss2": critic_loss2,
                 "critic_loss": critic_loss,
                 "actor_loss": actor_loss,
                 "alpha_loss": alpha_loss,
@@ -430,6 +433,12 @@ class CQLAgent:
             'critic_loss_min': log_info['critic_loss'].min(),
             'critic_loss_max': log_info['critic_loss'].max(),
             'critic_loss_std': log_info['critic_loss'].std(),
+            'critic_loss1_min': log_info['critic_loss1'].min(),
+            'critic_loss1_max': log_info['critic_loss1'].max(),
+            'critic_loss1_std': log_info['critic_loss1'].std(),
+            'critic_loss2_min': log_info['critic_loss2'].min(),
+            'critic_loss2_max': log_info['critic_loss2'].max(),
+            'critic_loss2_std': log_info['critic_loss2'].std(),
             'cql1_loss_min': log_info['cql1_loss'].min(),
             'cql1_loss_max': log_info['cql1_loss'].max(),
             'cql1_loss_std': log_info['cql1_loss'].std(),

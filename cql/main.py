@@ -41,14 +41,14 @@ def eval_policy(agent: CQLAgent,
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="hopper-medium-v2")
+    parser.add_argument("--env", default="walker2d-medium-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--hid_dim", default=256, type=int)
     parser.add_argument("--hid_layers", default=3, type=int)
     parser.add_argument("--lr_actor", default=1e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
-    parser.add_argument("--eval_freq", default=int(1e3), type=int)
+    parser.add_argument("--eval_freq", default=int(5e3), type=int)
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
@@ -62,14 +62,14 @@ def get_args():
     parser.add_argument("--backup_entropy", default=False, action="store_true")
     parser.add_argument("--with_lagrange", default=False, action="store_true")
     parser.add_argument("--lagrange_thresh", default=5.0, type=float)
-    parser.add_argument("--subtract_likelihood", default=False, action="store_true")
     args = parser.parse_args()
     return args
 
 
 def main(args):
-    exp_name = f'd4rl_cql{int(args.subtract_likelihood)}_s{args.seed}_alpha{args.min_q_weight}'
-    print('#'*30 + f'\n# Running experiment for: {exp_name} #\n' + '#'*30)
+    exp_name = f'd4rl_s{args.seed}_alpha{args.min_q_weight}'
+    exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
+    print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
     # Log setting
     logging.basicConfig(level=logging.INFO,
@@ -106,10 +106,10 @@ def main(args):
                      target_entropy=args.target_entropy,
                      min_q_weight=args.min_q_weight,
                      with_lagrange=args.with_lagrange,
-                     subtract_likelihood=args.subtract_likelihood,
                      lagrange_thresh=args.lagrange_thresh)
-    # print(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
-    # print(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
+
+    logger.info(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
+    logger.info(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
 
     # Replay D4RL buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
@@ -124,9 +124,7 @@ def main(args):
     start_time = time.time()
 
     # Train agent and evaluate policy
-    # for t in trange(args.max_timesteps):
-    # for t in trange(5000):
-    for t in trange(int(1.5e5)):
+    for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, args.batch_size)
 
         # save some evaluate time
@@ -153,6 +151,13 @@ def main(args):
                 f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
                 f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, "
                 f"critic_loss_max: {log_info['critic_loss_max']:.2f}, critic_loss_std: {log_info['critic_loss_std']:.2f}\n"
+                
+                f"\tcritic_loss1: {log_info['critic_loss1']:.2f}, critic_loss1_min: {log_info['critic_loss1_min']:.2f}, "
+                f"critic_loss1_max: {log_info['critic_loss1_max']:.2f}, critic_loss1_std: {log_info['critic_loss1_std']:.2f}\n"
+
+                f"\tcritic_loss2: {log_info['critic_loss2']:.2f}, critic_loss2_min: {log_info['critic_loss2_min']:.2f}, "
+                f"critic_loss2_max: {log_info['critic_loss2_max']:.2f}, critic_loss2_std: {log_info['critic_loss2_std']:.2f}\n"
+
                 f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql1_loss_min: {log_info['cql1_loss_min']:.2f} "
                 f"cql1_loss_max: {log_info['cql1_loss_max']:.2f}, cql1_loss_std: {log_info['cql1_loss_std']:.2f}\n"
                 f"\tcql2_loss: {log_info['cql2_loss']:.2f}, cql2_loss_min: {log_info['cql2_loss_min']:.2f} "
@@ -185,10 +190,6 @@ def main(args):
             )
 
     # Save logs
-    os.makedirs(args.log_dir, exist_ok=True)
-    os.makedirs(args.model_dir, exist_ok=True)
-    os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
-    os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
     with open(f"{args.log_dir}/{args.env}/{exp_name}.json", "w") as f:
@@ -199,4 +200,8 @@ def main(args):
 if __name__ == "__main__":
     args = get_args()
     print(f"\nArguments:\n{vars(args)}")
+    os.makedirs(args.log_dir, exist_ok=True)
+    os.makedirs(args.model_dir, exist_ok=True)
+    os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
+    os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     main(args)
