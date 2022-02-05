@@ -12,7 +12,8 @@ import optax
 from utils import Batch
 
 LOG_STD_MAX = 2.
-LOG_STD_MIN = -20.
+# LOG_STD_MIN = -20.
+LOG_STD_MIN = -5.
 
 kernel_initializer = jax.nn.initializers.glorot_uniform()
 
@@ -192,7 +193,6 @@ class CQLAgent:
                    critic_state: train_state.TrainState,
                    alpha_state: train_state.TrainState, key: jnp.ndarray):
 
-        # For use in loss_fn without apply gradients
         frozen_actor_params = actor_state.params
         frozen_critic_params = critic_state.params
 
@@ -230,8 +230,7 @@ class CQLAgent:
             actor_loss = (alpha * logp - sampled_q)
 
             # Critic loss
-            q1, q2 = self.critic.apply({"params": critic_params}, observation,
-                                       action)
+            q1, q2 = self.critic.apply({"params": critic_params}, observation, action)
             q1 = jnp.squeeze(q1)
             q2 = jnp.squeeze(q2)
 
@@ -404,7 +403,6 @@ class CQLAgent:
         log_info.update(extra_log_info)
         actor_grads, critic_grads, alpha_grads = gradients
 
-        # Update TrainState
         actor_state = actor_state.apply_gradients(grads=actor_grads)
         critic_state = critic_state.apply_gradients(grads=critic_grads)
         alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
@@ -425,7 +423,7 @@ class CQLAgent:
         log_info['batch_rewards'] = batch.rewards.sum().item()
         log_info['batch_discounts'] = batch.discounts.sum().item()
         log_info['batch_obs'] = abs(batch.observations).sum(1).sum().item()
-        log_info['batch_dones'] = abs(1 - batch.discounts).sum(1).sum().item()
+        log_info['batch_dones'] = abs(1 - batch.discounts).sum().item()
 
         # update target network
         params = self.critic_state.params

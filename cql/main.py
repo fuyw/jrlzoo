@@ -124,8 +124,17 @@ def main(args):
     start_time = time.time()
 
     # Train agent and evaluate policy
-    for t in trange(args.max_timesteps):
+    # for t in trange(args.max_timesteps):
+    for t in trange(150000):
         log_info = agent.update(replay_buffer, args.batch_size)
+
+        if t in [0, 500, 1000]:
+            logger.info(
+                f"\n# Step {t+1}:\n"
+                f"\talpha_loss: {log_info['alpha_loss']:.3f}, alpha: {log_info['alpha']:.3f}, logp: {log_info['logp']:.3f}\n"
+                f"\tactor_loss: {log_info['actor_loss']:.3f}, sampled_q: {log_info['sampled_q']:.3f}\n"
+                f"\tcritic_loss: {log_info['critic_loss']:.3f}, critic_loss_min: {log_info['critic_loss_min']:.3f}"
+            )
 
         # save some evaluate time
         if ((t + 1) >= int(9.5e5) and
