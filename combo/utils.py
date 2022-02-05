@@ -26,6 +26,9 @@ def get_training_data(replay_buffer, ensemble_num=7, holdout_num=1000):
     rewards = replay_buffer.rewards.reshape(-1, 1)  # reshape for correct shape
     delta_observations = next_observations - observations
 
+    # reward shaping
+    rewards = (rewards - 0.5) * 4.0
+
     # prepare for model inputs & outputs
     inputs = np.concatenate([observations, actions], axis=-1)
     targets = np.concatenate([rewards, delta_observations], axis=-1)
@@ -92,6 +95,7 @@ class ReplayBuffer:
         self.rewards = dataset["rewards"]
         self.discounts = 1. - dataset["terminals"]
         self.size = self.observations.shape[0]
+        self.rewards = (self.rewards - 0.5) * 4.0
     
     def convert_D4RL2(self, dataset):
         self.observations = dataset["observations"]

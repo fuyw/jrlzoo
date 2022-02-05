@@ -11,7 +11,7 @@ from tqdm import trange
 from models import COMBOAgent
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".25"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".5"
 
 
 def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
@@ -88,6 +88,7 @@ def main(args):
 
     # Train the dynamics model
     # agent.model.train()
+    # return
 
     # Load the trained dynamics model
     agent.model.load(f'{args.model_dir}/{args.env}/s0')

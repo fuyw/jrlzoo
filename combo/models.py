@@ -141,9 +141,9 @@ class DynamicsModel:
                  holdout_num: int = 1000,
                  lr: float = 1e-3,
                  weight_decay: float = 5e-5,
-                 epochs: int = 200,
-                 batch_size: int = 1024,
-                 max_patience: int = 10,
+                 epochs: int = 300,
+                 batch_size: int = 2048,
+                 max_patience: int = 5,
                  model_dir: str = "./saved_models"):
 
         # Model parameters
@@ -200,6 +200,7 @@ class DynamicsModel:
 
         patience = 0 
         batch_num = int(np.ceil(len(inputs) / self.batch_size))
+        print(f"Training batch = {self.batch_size} with {batch_num}")
         min_val_loss = np.inf
         optial_params = None
         res = []
@@ -207,12 +208,7 @@ class DynamicsModel:
         # Loss functions
         @jax.jit
         def loss_fn(params, x, y):
-            """
-            x = np.random.normal(size=(7, 128, 14))[:, 0, :]  # (7, 14)
-            y = np.random.normal(size=(7, 128, 12))[:, 0, :]  # (7, 12)
-            mu, log_var = model.model.apply({"params": model.model_state.params}, x)  # (7, 12), (7, 12)
-            """
-            mu, log_var = self.model.apply({"params": params}, x)  # (1, ) ==> (7, 256)
+            mu, log_var = self.model.apply({"params": params}, x)  # (1, 14)/(7, 14)  ==> (7, 256)
             inv_var = jnp.exp(-log_var)  # (7, 12)
             mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
             var_loss = jnp.mean(jnp.mean(log_var, axis=-1), axis=-1)
@@ -221,11 +217,6 @@ class DynamicsModel:
 
         @jax.jit
         def val_loss_fn(params, x, y):
-            """
-            x = np.random.normal(size=(7, 128, 14))[:, 0, :]
-            y = np.random.normal(size=(7, 128, 12))[:, 0, :]
-            mu, log_var = jax.lax.stop_gradient(model.model.apply({"params": model.model_state.params}, x))  
-            """
             mu, log_var = jax.lax.stop_gradient(self.model.apply({"params": params}, x))  # (7, 12), (7, 12)
             inv_var = jnp.exp(-log_var)
             mse_loss = jnp.mean(jnp.square(mu - y), axis=-1)
@@ -233,7 +224,7 @@ class DynamicsModel:
             state_mse_loss = jnp.mean(jnp.mean(jnp.square(mu[:, 1:] - y[:, 1:]) * inv_var[:, 1:], axis=-1), axis=-1)
             state_var_loss = jnp.mean(jnp.mean(log_var[:, 1:], axis=-1), axis=-1)
             state_loss = state_mse_loss + state_var_loss
-            return mse_loss, {"reward_loss": reward_loss, "state_loss": state_loss}
+            return mse_loss, {"reward_loss": reward_loss, "var_loss": state_var_loss, "state_loss": state_loss}
 
         # Wrap loss functions with jax.vmap
         grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
@@ -274,12 +265,13 @@ class DynamicsModel:
 
             res.append((epoch, sum(train_loss)/batch_num, sum(mse_loss)/batch_num,
                         sum(var_loss)/batch_num, mean_val_loss))
-            print(f"Epoch #{epoch+1}:\t"
+            print(f"Epoch #{epoch+1}: "
                   f"train_loss={sum(train_loss)/batch_num:.3f}\t"
                   f"mse_loss={sum(mse_loss)/batch_num:.3f}\t"
                   f"var_loss={sum(var_loss)/batch_num:.3f}\t"
                   f"val_loss={mean_val_loss:.3f}\t"
-                  f"val_rew_loss={val_info['reward_loss']:.3f}\t"
+                  f"val_rew_loss = {val_info['reward_loss']:.3f} "
+                  f"val_var_loss = {val_info['var_loss']:.3f} "
                   f"val_state_loss={val_info['state_loss']:.3f}")
 
         res_df = pd.DataFrame(res, columns=[
@@ -648,7 +640,6 @@ class COMBOAgent:
         return rng, jnp.where(eval_mode, mean_action.flatten(), sampled_action.flatten())
 
     def update(self, replay_buffer, model_buffer):
-        # rollout the model
         select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
         if self.update_step % 1000 == 0:
             observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
@@ -656,13 +647,9 @@ class COMBOAgent:
             for t in range(self.horizon):
                 self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
                 if self.rollout_random:
-                    # random actions
                     actions = np.random.uniform(low=-1.0, high=1.0, size=(len(observations), self.act_dim))
-                    # actions = jax.random.uniform(self.rollout_rng, shape=(len(observations), self.act_dim), minval=-1.0, maxval=1.0)
                 else:
-                    # sample actions with policy pi
                     sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
-
                 next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
                 nonterminal_mask = ~dones
                 if nonterminal_mask.sum() == 0:
