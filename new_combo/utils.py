@@ -30,6 +30,17 @@ class ReplayBuffer:
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
 
+    def add_batch(self, observations, actions, next_observations, rewards, dones):
+        add_num = len(actions)
+        add_idx = np.arange(self.ptr, self.ptr + add_num) % self.max_size
+        self.observations[add_idx] = observations
+        self.actions[add_idx] = actions
+        self.next_observations[add_idx] = next_observations
+        self.rewards[add_idx] = rewards.reshape(-1)
+        self.discounts[add_idx] = (1 - dones).reshape(-1)
+        self.ptr = (self.ptr + add_num) % self.max_size
+        self.size = min(self.size + add_num, self.max_size)
+
     def sample(self, batch_size: int) -> Batch:
         idx = np.random.randint(0, self.size, size=batch_size)
         batch = Batch(observations=jax.device_put(self.observations[idx]),

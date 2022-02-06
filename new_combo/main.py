@@ -61,13 +61,15 @@ def get_args():
     parser.add_argument("--model_dir", default="./saved_models", type=str)
     parser.add_argument("--backup_entropy", default=False, action="store_true")
     parser.add_argument("--with_lagrange", default=False, action="store_true")
+    parser.add_argument("--cql", default=False, action="store_true")
     parser.add_argument("--lagrange_thresh", default=5.0, type=float)
+    parser.add_argument("--real_ratio", default=0.99, type=float)
     args = parser.parse_args()
     return args
 
 
 def main(args):
-    exp_name = f's{args.seed}_alpha{args.min_q_weight}'
+    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}_rr{args.real_ratio}'
     exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
@@ -107,14 +109,16 @@ def main(args):
                        target_entropy=args.target_entropy,
                        min_q_weight=args.min_q_weight,
                        with_lagrange=args.with_lagrange,
-                       lagrange_thresh=args.lagrange_thresh)
+                       lagrange_thresh=args.lagrange_thresh,
+                       real_ratio=args.real_ratio)
 
-    logger.info(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
-    logger.info(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
+    # logger.info(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
+    # logger.info(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
 
     # Replay D4RL buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
+    model_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(5e5))
     fix_obs = np.random.normal(size=(128, obs_dim))
     fix_act = np.random.normal(size=(128, act_dim))
 
@@ -126,8 +130,9 @@ def main(args):
 
     # Train agent and evaluate policy
     # for t in trange(args.max_timesteps):
-    for t in trange(150000):
-        log_info = agent.update(replay_buffer, args.batch_size)
+    for t in trange(300000):
+        log_info = agent.update(replay_buffer, model_buffer)
+        # log_info = agent.update_cql(replay_buffer, args.batch_size)
 
         # save some evaluate time
         if ((t + 1) >= int(9.5e5) and
@@ -157,6 +162,8 @@ def main(args):
                 f"critic_loss1_max: {log_info['critic_loss1_max']:.2f}, critic_loss1_std: {log_info['critic_loss1_std']:.2f}\n"
                 f"\tcritic_loss2: {log_info['critic_loss2']:.2f}, critic_loss2_min: {log_info['critic_loss2_min']:.2f}, "
                 f"critic_loss2_max: {log_info['critic_loss2_max']:.2f}, critic_loss2_std: {log_info['critic_loss2_std']:.2f}\n"
+                f"\treal_critic_loss: {log_info['real_critic_loss']:.2f}, fake_critic_loss: {log_info['fake_critic_loss']:.2f}\n"
+                f"\treal_critic_loss_max: {log_info['real_critic_loss_max']:.2f}, fake_critic_loss_min: {log_info['fake_critic_loss_min']:.2f}\n"
                 f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql1_loss_min: {log_info['cql1_loss_min']:.2f} "
                 f"cql1_loss_max: {log_info['cql1_loss_max']:.2f}, cql1_loss_std: {log_info['cql1_loss_std']:.2f}\n"
                 f"\tcql2_loss: {log_info['cql2_loss']:.2f}, cql2_loss_min: {log_info['cql2_loss_min']:.2f} "
@@ -174,8 +181,13 @@ def main(args):
                 f"\trandom_q1_avg: {log_info['random_q1_avg']:.2f}, random_q1_min: {log_info['random_q1_min']:.2f}, random_q1_max: {log_info['random_q1_max']:.2f}\n"
                 f"\trandom_q2_avg: {log_info['random_q2_avg']:.2f}, random_q2_min: {log_info['random_q2_min']:.2f}, random_q2_max: {log_info['random_q2_max']:.2f}\n"
                 f"\tlogp_next_action: {log_info['logp_next_action']:.2f}, cql_logp: {log_info['cql_logp']:.2f} cql_logp_next_action: {log_info['cql_logp_next_action']:.2f}\n"
-                f"\tbatch_rewards: {log_info['batch_rewards']:.2f}, batch_obs: {log_info['batch_obs']:.2f}, "
-                f"\tbatch_actions: {log_info['batch_actions']:.2f}, batch_dones: {log_info['batch_dones']:.2f}, buffer_size: {replay_buffer.size}\n"
+
+                f"\treal_batch_rewards: {log_info['real_batch_rewards']:.2f}, real_batch_obs: {log_info['real_batch_obs']:.2f}, real_batch_actions: {log_info['real_batch_actions']:.2f}, real_batch_dones: {log_info['real_batch_dones']:.2f}\n"
+
+                f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, model_batch_obs: {log_info['model_batch_obs']:.2f}, model_batch_actions: {log_info['model_batch_actions']:.2f}, model_batch_dones: {log_info['model_batch_dones']:.2f}\n"
+                f"\tmodel_buffer_size: {log_info['model_buffer_size']:.0f}, model_buffer_ptr: {log_info['model_buffer_ptr']:.0f}\n"
+                f"\treal_batch_size: {log_info['real_batch_size']:.0f}, fake_batch_size: {log_info['fake_batch_size']:.0f}"
+
                 f"\tfix_q1: {fix_q1.squeeze().mean().item():.2f}, fix_q2: {fix_q2.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n\n"
             )
 

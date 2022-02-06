@@ -119,7 +119,8 @@ class COMBOAgent:
             self.target_entropy = target_entropy
 
         self.rng = jax.random.PRNGKey(seed)
-        self.rng, actor_key, critic_key = jax.random.split(self.rng, 3)
+        self.rng, self.rollout_rng = jax.random.split(self.rng, 2)
+        actor_key, critic_key, model_key = jax.random.split(self.rng, 3)
 
         # Dummy inputs
         dummy_obs = jnp.ones([1, self.obs_dim], dtype=jnp.float32)
@@ -165,11 +166,13 @@ class COMBOAgent:
                 apply_fn=None,
                 params=self.log_cql_alpha.init(cql_key)["params"],
                 tx=optax.adam(self.lr_actor))
-    
+
         # COMBO setting
         self.model = load_model(env[:-3])
         self.rollout_batch_size = 10000
-        self.real_ratio = 0.5
+        self.horizon = 5
+        self.rollout_random = True
+        self.real_ratio = real_ratio
         self.batch_size = 256
         self.real_batch_size = int(self.batch_size * self.real_ratio)
         self.fake_batch_size = self.batch_size - self.real_batch_size
@@ -206,11 +209,13 @@ class COMBOAgent:
                    observations: jnp.array,
                    actions: jnp.array,
                    rewards: jnp.array,
+                   discounts: jnp.array,
                    next_observations: jnp.array,
                    critic_target_params: FrozenDict,
                    actor_state: train_state.TrainState,
                    critic_state: train_state.TrainState,
-                   alpha_state: train_state.TrainState, key: jnp.ndarray):
+                   alpha_state: train_state.TrainState,
+                   key: jnp.ndarray):
 
         frozen_actor_params = actor_state.params
         frozen_critic_params = critic_state.params
@@ -263,7 +268,7 @@ class COMBOAgent:
             target_q = reward + self.gamma * discount * next_q
             critic_loss1 = 0.5 * (q1 - target_q)**2
             critic_loss2 = 0.5 * (q2 - target_q)**2
-            critic_loss = critic_loss1 + critic_loss2
+            critic_loss = (critic_loss1 + critic_loss2)
 
             # CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
@@ -313,13 +318,23 @@ class COMBOAgent:
             ood_q2 = jax.scipy.special.logsumexp(cql_concat_q2)
 
             # CQL1: maximize Q(s, a) in the dataset
+            # cql1_loss = self.min_q_weight * (
+            #     ood_q1 - q1) * mask * self.real_loss_ratio
+            # cql2_loss = self.min_q_weight * (
+            #     ood_q2 - q2) * mask * self.real_loss_ratio
+
             cql1_loss = self.min_q_weight * (
-                ood_q1 * (1-mask) * self.fake_loss_ratio - q1 * mask*self.real_loss_ratio)
+                ood_q1 - q1) #* mask * self.real_loss_ratio)
             cql2_loss = self.min_q_weight * (
-                ood_q2 * (1-mask) * self.fake_loss_ratio - q2 * mask*self.real_loss_ratio)
+                ood_q2 - q2) #* mask * self.real_loss_ratio)
+
+            # cql1_loss = self.min_q_weight * (
+            #     ood_q1 * (1-mask) * self.fake_loss_ratio - q1 * mask*self.real_loss_ratio)
+            # cql2_loss = self.min_q_weight * (
+            #     ood_q2 * (1-mask) * self.fake_loss_ratio - q2 * mask*self.real_loss_ratio)
 
             # Loss weight form Dopamine
-            total_loss = critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
+            total_loss = critic_loss * mask * self.real_loss_ratio + actor_loss * mask * self.real_loss_ratio  + alpha_loss * mask * self.real_loss_ratio + (cql1_loss + cql2_loss) * mask * self.real_loss_ratio
             log_info = {
                 "critic_loss1": critic_loss1,
                 "critic_loss2": critic_loss2,
@@ -370,7 +385,7 @@ class COMBOAgent:
         grad_fn = jax.vmap(jax.value_and_grad(loss_fn,
                                               argnums=(0, 1, 2),
                                               has_aux=True),
-                           in_axes=(None, None, None, 0, 0, 0, 0, 0, 0))
+                           in_axes=(None, None, None, 0, 0, 0, 0, 0, 0, 0))
         rng = jnp.stack(jax.random.split(key, num=actions.shape[0]))
 
         (_, log_info), gradients = grad_fn(actor_state.params,
@@ -381,6 +396,7 @@ class COMBOAgent:
                                            rewards,
                                            discounts,
                                            next_observations,
+                                           self.masks,
                                            rng)
 
         gradients = jax.tree_map(functools.partial(jnp.mean, axis=0),
@@ -410,6 +426,10 @@ class COMBOAgent:
             'critic_loss2_min': log_info['critic_loss2'].min(),
             'critic_loss2_max': log_info['critic_loss2'].max(),
             'critic_loss2_std': log_info['critic_loss2'].std(),
+            'real_critic_loss': log_info['critic_loss'][:self.real_batch_size].mean(),
+            'fake_critic_loss': log_info['critic_loss'][self.real_batch_size:].mean(),
+            'real_critic_loss_max': log_info['critic_loss'][:self.real_batch_size].max(),
+            'fake_critic_loss_min': log_info['critic_loss'][:self.real_batch_size].min(),
             'cql1_loss_min': log_info['cql1_loss'].min(),
             'cql1_loss_max': log_info['cql1_loss'].max(),
             'cql1_loss_std': log_info['cql1_loss'].std(),
@@ -649,7 +669,7 @@ class COMBOAgent:
 
         return log_info, actor_state, critic_state, alpha_state
 
-    def update(self, replay_buffer, batch_size: int = 256):
+    def update_cql(self, replay_buffer, batch_size: int = 256):
         self.update_step += 1
 
         # Sample from the buffer
@@ -661,10 +681,10 @@ class COMBOAgent:
              self.actor_state,
              self.critic_state,
              self.alpha_state, key)
-        log_info['batch_rewards'] = abs(batch.rewards).sum().item()
-        log_info['batch_actions'] = abs(batch.actions).sum().item()
-        log_info['batch_obs'] = abs(batch.observations).sum().item()
-        log_info['batch_dones'] = abs(1 - batch.discounts).sum().item()
+        log_info['real_batch_rewards'] = abs(batch.rewards).sum().item()
+        log_info['real_batch_actions'] = abs(batch.actions).sum().item()
+        log_info['real_batch_obs'] = abs(batch.observations).sum().item()
+        log_info['real_batch_dones'] = abs(1 - batch.discounts).sum().item()
 
         # update target network
         params = self.critic_state.params
@@ -672,4 +692,71 @@ class COMBOAgent:
         self.critic_target_params = self.update_target_params(
             params, target_params)
 
+        return log_info
+
+    def update(self, replay_buffer, model_buffer):
+        select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
+        if self.update_step % 1000 == 0:
+            observations = replay_buffer.sample(self.rollout_batch_size).observations
+            sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
+            for t in range(self.horizon):
+                self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
+                if self.rollout_random:
+                    actions = np.random.uniform(low=-1.0, high=1.0, size=(len(observations), self.act_dim))
+                else:
+                    sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
+                next_observations, rewards, dones, info = self.model.step(observations, actions, False)
+                # reward shaping
+                rewards = rewards / 4.0 + 0.5
+                model_buffer.add_batch(observations,
+                                       actions,
+                                       next_observations,
+                                       rewards,
+                                       dones)
+
+                nonterminal_mask = (~dones).squeeze()
+                if nonterminal_mask.sum() == 0:
+                    print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
+                    break
+                observations = next_observations[nonterminal_mask]
+                sample_rng = sample_rng[nonterminal_mask]
+
+        # sample from real & model buffer
+        real_batch = replay_buffer.sample(self.real_batch_size)
+        model_batch = model_buffer.sample(self.fake_batch_size)
+
+        concat_observations = np.concatenate([real_batch.observations, model_batch.observations], axis=0)
+        concat_actions = np.concatenate([real_batch.actions, model_batch.actions], axis=0)
+        concat_rewards = np.concatenate([real_batch.rewards, model_batch.rewards], axis=0)
+        concat_discounts = np.concatenate([real_batch.discounts, model_batch.discounts], axis=0)
+        concat_next_observations = np.concatenate([real_batch.next_observations, model_batch.next_observations], axis=0)
+
+        # CQL training with COMBO
+        self.rng, key = jax.random.split(self.rng)
+
+        log_info, self.actor_state, self.critic_state, self.alpha_state = self.train_step(
+            concat_observations, concat_actions, concat_rewards, concat_discounts,
+            concat_next_observations, self.critic_target_params, self.actor_state,
+            self.critic_state, self.alpha_state, key
+        )
+
+        log_info['real_batch_obs'] = abs(real_batch.observations).sum()
+        log_info['real_batch_rewards'] = abs(real_batch.rewards).sum()
+        log_info['real_batch_actions'] = abs(real_batch.actions).sum()
+        log_info['real_batch_dones'] = abs(1 - real_batch.discounts).sum()
+        log_info['model_batch_obs'] = abs(model_batch.observations).sum()
+        log_info['model_batch_rewards'] = abs(model_batch.rewards).sum()
+        log_info['model_batch_actions'] = abs(model_batch.actions).sum()
+        log_info['model_batch_dones'] = abs(1 - model_batch.discounts).sum()
+        log_info['model_buffer_size'] = model_buffer.size
+        log_info['model_buffer_ptr'] = model_buffer.ptr
+        log_info['real_batch_size'] = self.real_batch_size
+        log_info['fake_batch_size'] = self.fake_batch_size
+
+        # upate target network
+        params = self.critic_state.params
+        target_params = self.critic_target_params
+        self.critic_target_params = self.update_target_params(params, target_params)
+
+        self.update_step += 1
         return log_info
