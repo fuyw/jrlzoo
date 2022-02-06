@@ -49,17 +49,17 @@ def main(args):
     agent = TD3(obs_dim=obs_dim, act_dim=act_dim, max_action=max_action)
     agent_dict[0] = copy.deepcopy(agent)
     for step in steps:
-        agent.load(f"saved_models/Hopper-v2/step{step}_seed1")
+        agent.load(f"saved_models/{args.env}/step{step}_seed0")
         agent_dict[step] = copy.deepcopy(agent)
 
     # Eval agents
     for step in agent_dict.keys():
         eval_reward = eval_policy(agent_dict[step], args.env, 0)
-        print(f"[Step - {step}] Eval reward = {eval_reward:.2f}")
+        print(f"[Step - {step}][{args.env}] Eval reward = {eval_reward:.2f}")
 
     # Collect trajectories
     replay_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(1e6))
-    traj_len = 10000
+    traj_len = 50000
     for step in tqdm(agent_dict.keys(), desc='[Collect trajectories]'):
         agent = agent_dict[step]
         t = 0
@@ -86,4 +86,6 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args()
-    main(args)
+    for env in ['Hopper-v2', 'Walker2d-v2', 'HalfCheetah-v2']:
+        args.env = env
+        main(args)

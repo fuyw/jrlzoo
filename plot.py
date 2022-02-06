@@ -98,6 +98,16 @@ def plot_exps():
                     label=f'{algo} ({np.mean(rewards):.2f}±{np.std(rewards):.2f})'
                     )
             ax.legend(fontsize=7, loc='lower right')
+
+    # add combo result
+    for idx, fname in enumerate([
+            'new_combo/logs/halfcheetah-medium-v2/combo1_s0_alpha0.5_rr0.5.csv']):
+        df = pd.read_csv(fname, index_col=0)
+        ax = axes[idx // 3][idx % 3]
+        ax.plot(range(len(df)), df['reward'].values, lw=0.6,
+                color=colors[algo_idx], label='combo')
+        ax.legend(fontsize=7, loc='lower right')
+    
     plt.savefig('compare_algo.png')
 
 

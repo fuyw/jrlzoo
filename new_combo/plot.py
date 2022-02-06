@@ -95,70 +95,24 @@ def plot_exp():
     plt.savefig('cql.png', dpi=720)
 
 
-def plot_cql_min_q_weight(prefix_name):
-    _, axes = plt.subplots(nrows=3, ncols=5, figsize=(21, 12))
-    for min_q_weight in [1.0, 3.0, 5.0]:
-        df = pd.read_csv(
-            f'logs/hopper-medium-v2/{prefix_name}_alpha{min_q_weight}.csv',
-            index_col=0)
-        df['critic_loss'] /= 2
-        for idx, col in enumerate([
-                'reward', 'actor_loss', 'critic_loss', 'cql1_loss',
-                'cql2_loss', 'q1', 'q2', 'ood_q1', 'ood_q2'
-        ]):
-            ax = axes[idx // 5][idx % 5]
-            ax.plot(df['step'].values, df[col].values, label=str(min_q_weight))
+def plot_one():
+    _, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 4))
+    df = pd.read_csv(f'/usr/local/data/yuweifu/jaxrl/new_combo/logs/walker2d-medium-v2/combo1_s0_alpha5.0_rr0.99.csv', index_col=0)
+    for idx, col in enumerate(['reward', 'critic_loss', 'real_critic_loss', 'q1', 'alpha']):
+        ax = axes[idx % 5]
+        if col == 'real_critic_loss':
+            ax.plot(df['step'].values, df['real_critic_loss'].values, label='real_samples')
+            ax.plot(df['step'].values, df['fake_critic_loss'].values, label='fake_samples')
+            ax.set_yscale('log')
+            ax.set_title('critic_loss')
             ax.legend()
+        else:
+            ax.plot(df['step'].values, df[col].values)
             ax.set_title(col)
-    for idx, min_q_weight in enumerate([1.0, 3.0, 5.0]):
-        df = pd.read_csv(
-            f'logs/hopper-medium-v2/{prefix_name}_alpha{min_q_weight}.csv',
-            index_col=0)
-        df['critic_loss'] /= 2
-        idx = 9 + idx
-        ax = axes[idx // 5][idx % 5]
-        cql_loss = df['cql1_loss'] + df['cql2_loss']
-        ax.plot(df['step'].values, cql_loss.values, label='cql_loss')
-        ax.plot(df['step'].values,
-                df['critic_loss'].values,
-                label='critic_loss')
-        ax.legend()
-        ax.set_title(f'min_q_weight = {min_q_weight}')
 
-        idx = 3 + idx
-        ax = axes[idx // 5][idx % 5]
-        ax.plot(df['step'].values, df['ood_q1'].values, label='ood_q1')
-        ax.plot(df['step'].values, df['q1'].values, label='q1')
-        ax.legend()
-        ax.set_title(f'min_q_weight = {min_q_weight}')
-    # axes[-1, -1].axis('off')
-    # axes[-1, -2].axis('off')
-    plt.savefig(f'imgs/{prefix_name}.png')
+    plt.savefig(f'check_combo.png')
 
-def compare_cql_critic_losses():
-    _, axes = plt.subplots(nrows=1, ncols=3, figsize=(12, 4))
-    for idx, min_q_weight in enumerate([1.0, 3.0, 5.0]):
-        fname = f'd4rl_cql0_s0_alpha{min_q_weight}_early'
-        df = pd.read_csv(f'logs/hopper-medium-v2/{fname}.csv', index_col=0)
-        df['critic_loss'] /= 2
-        cql_loss = df['cql1_loss'] + df['cql2_loss']
-        ax = axes[idx]
-        ax.plot(df['step'].values, cql_loss.values, label='cql_loss')
-        ax.plot(df['step'].values, df['critic_loss'].values, label='critic_loss')
-        ax.legend()
-        ax.set_title(f'min_q_weight = {min_q_weight}')
-    plt.savefig(f'imgs/d4rl_cql0_s0_early.png')
 
 
 if __name__ == '__main__':
-    # plot_exp()
-
-    for prefix_name in [
-            'd4rl_online_cql0_s0',
-            'd4rl_cql0_s0',
-            'd4rl_online_cql1_s0',
-            'd4rl_cql1_s0'
-    ]:
-        plot_cql_min_q_weight(prefix_name)
-
-    # compare_cql_critic_losses()
+    plot_one()

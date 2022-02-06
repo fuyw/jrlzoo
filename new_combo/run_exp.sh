@@ -7,11 +7,12 @@ envs=(
     "walker2d-medium-v2"
 )
 
-for min_q_weight in 0.5 3 5
+# 0.5 0.75 0.99
+for min_q_weight in 0.5 5
 do 
     for env in ${envs[*]}
     do
-        for real_ratio in 0.5 0.75 0.99
+        for real_ratio in 0.5
         do
             python main.py \
             --env $env \

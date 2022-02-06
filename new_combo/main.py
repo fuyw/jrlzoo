@@ -41,13 +41,14 @@ def eval_policy(agent: COMBOAgent,
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="walker2d-medium-v2")
+    parser.add_argument("--env", default="halfcheetah-medium-v2")
+    # parser.add_argument("--env", default="walker2d-medium-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--hid_dim", default=256, type=int)
     parser.add_argument("--hid_layers", default=3, type=int)
     parser.add_argument("--lr_actor", default=1e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
-    parser.add_argument("--max_timesteps", default=int(1e6), type=int)
+    parser.add_argument("--max_timesteps", default=int(4e5), type=int)
     parser.add_argument("--eval_freq", default=int(5e3), type=int)
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
@@ -62,14 +63,15 @@ def get_args():
     parser.add_argument("--backup_entropy", default=False, action="store_true")
     parser.add_argument("--with_lagrange", default=False, action="store_true")
     parser.add_argument("--cql", default=False, action="store_true")
+    parser.add_argument("--name", default="combo1", type=str)
     parser.add_argument("--lagrange_thresh", default=5.0, type=float)
-    parser.add_argument("--real_ratio", default=0.99, type=float)
+    parser.add_argument("--real_ratio", default=0.5, type=float)
     args = parser.parse_args()
     return args
 
 
 def main(args):
-    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}_rr{args.real_ratio}'
+    exp_name = f'{args.name}_s{args.seed}_alpha{args.min_q_weight}_rr{args.real_ratio}'
     exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
@@ -98,6 +100,7 @@ def main(args):
     agent = COMBOAgent(obs_dim=obs_dim,
                        act_dim=act_dim,
                        hid_dim=args.hid_dim,
+                       env=args.env,
                        hid_layers=args.hid_layers,
                        seed=args.seed,
                        tau=args.tau,
@@ -129,10 +132,8 @@ def main(args):
     start_time = time.time()
 
     # Train agent and evaluate policy
-    # for t in trange(args.max_timesteps):
-    for t in trange(300000):
+    for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, model_buffer)
-        # log_info = agent.update_cql(replay_buffer, args.batch_size)
 
         # save some evaluate time
         if ((t + 1) >= int(9.5e5) and
@@ -180,14 +181,14 @@ def main(args):
                 f"\tcql_q2_avg: {log_info['cql_q2_avg']:.2f}, cql_q2_min: {log_info['cql_q2_min']:.2f}, cql_q2_max: {log_info['cql_q2_max']:.2f}\n"
                 f"\trandom_q1_avg: {log_info['random_q1_avg']:.2f}, random_q1_min: {log_info['random_q1_min']:.2f}, random_q1_max: {log_info['random_q1_max']:.2f}\n"
                 f"\trandom_q2_avg: {log_info['random_q2_avg']:.2f}, random_q2_min: {log_info['random_q2_min']:.2f}, random_q2_max: {log_info['random_q2_max']:.2f}\n"
-                f"\tlogp_next_action: {log_info['logp_next_action']:.2f}, cql_logp: {log_info['cql_logp']:.2f} cql_logp_next_action: {log_info['cql_logp_next_action']:.2f}\n"
+                f"\tlogp_next_action: {log_info['logp_next_action']:.2f}, cql_logp: {log_info['cql_logp']:.2f} \n"
+                # f"cql_logp_next_action: {log_info['cql_logp_next_action']:.2f}\n"
 
                 f"\treal_batch_rewards: {log_info['real_batch_rewards']:.2f}, real_batch_obs: {log_info['real_batch_obs']:.2f}, real_batch_actions: {log_info['real_batch_actions']:.2f}, real_batch_dones: {log_info['real_batch_dones']:.2f}\n"
 
                 f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, model_batch_obs: {log_info['model_batch_obs']:.2f}, model_batch_actions: {log_info['model_batch_actions']:.2f}, model_batch_dones: {log_info['model_batch_dones']:.2f}\n"
                 f"\tmodel_buffer_size: {log_info['model_buffer_size']:.0f}, model_buffer_ptr: {log_info['model_buffer_ptr']:.0f}\n"
                 f"\treal_batch_size: {log_info['real_batch_size']:.0f}, fake_batch_size: {log_info['fake_batch_size']:.0f}"
-
                 f"\tfix_q1: {fix_q1.squeeze().mean().item():.2f}, fix_q2: {fix_q2.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n\n"
             )
 

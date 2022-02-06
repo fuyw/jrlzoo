@@ -20,9 +20,56 @@ LOG_STD_MIN = -10.
 kernel_initializer = jax.nn.initializers.glorot_uniform()
 
 
+observations = replay_buffer.sample(agent.rollout_batch_size).observations
+sample_rng = jnp.stack(jax.random.split(agent.rollout_rng, num=agent.rollout_batch_size))
+for t in range(5):
+    # agent.rollout_rng, rollout_key = jax.random.split(agent.rollout_rng, 2)
+    actions = np.random.uniform(low=-1.0, high=1.0, size=(len(observations), agent.act_dim))
+    next_observations, rewards, dones, info = agent.model.step(observations, actions, False)
+    rewards = rewards / 4.0 + 0.5
+    model_buffer.add_batch(observations,
+                           actions,
+                           next_observations,
+                           rewards,
+                           dones)
+    nonterminal_mask = (~dones).squeeze()
+    if nonterminal_mask.sum() == 0:
+        print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
+        break
+
+    observations = next_observations[nonterminal_mask]
+    sample_rng = sample_rng[nonterminal_mask]
+
+# sample from real & model buffer
+real_batch = replay_buffer.sample(agent.real_batch_size)
+model_batch = model_buffer.sample(agent.fake_batch_size)
+
+concat_observations = np.concatenate([real_batch.observations, model_batch.observations], axis=0)
+concat_actions = np.concatenate([real_batch.actions, model_batch.actions], axis=0)
+concat_rewards = np.concatenate([real_batch.rewards, model_batch.rewards], axis=0)
+concat_discounts = np.concatenate([real_batch.discounts, model_batch.discounts], axis=0)
+concat_next_observations = np.concatenate([real_batch.next_observations, model_batch.next_observations], axis=0)
+
+agent.rng, key = jax.random.split(agent.rng)
+log_info, agent.actor_state, agent.critic_state, agent.alpha_state = agent.train_step(
+    concat_observations, concat_actions, concat_rewards, concat_discounts,
+    concat_next_observations, agent.critic_target_params, agent.actor_state,
+    agent.critic_state, agent.alpha_state, key
+)
+
+
+
+# CQL training with COMBO
+agent.rng, key = jax.random.split(agent.rng)
+
+
+
+
+
+
+###################
 frozen_actor_params = agent.actor_state.params
 frozen_critic_params = agent.critic_state.params
-
 
 
 def loss_fn(actor_params: FrozenDict,
