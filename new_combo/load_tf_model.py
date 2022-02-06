@@ -16,9 +16,9 @@ elite_id_dict = {
     'hopper-medium-expert': [2, 1, 3, 5, 4],
     'walker2d-medium-expert': [2, 6, 3, 1, 4],
 
+    'halfcheetah-medium-replay': [0, 2, 6, 3, 5],
     'hopper-medium-replay': [4, 3, 0, 2, 6],
-    # 'halfcheetah-medium': [3, 4, 2, 5, 6],
-    # 'halfcheetah-medium-replay': [6, 3, 2, 4, 5],
+    'walker2d-medium-replay': [1, 3, 4, 5, 6],
 }
 
 def load_model(env_name='halfcheetah-medium'):
@@ -48,7 +48,7 @@ def load_model(env_name='halfcheetah-medium'):
         num_plan_steps=5,
         reward_classification=False
     )
-    _model._model_inds = [5, 0, 3, 6, 2]
+    _model._model_inds = elite_id_dict[env_name]
     fake_env = FakeEnv(
         _model,
         env_name.split('-')[0],

@@ -5,6 +5,14 @@ import numpy as np
 from tqdm import tqdm
 from models import TD3
 from utils import ReplayBuffer
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".5"
+
+
+step_dict = {
+    'Hopper-v2': [10, 25, 40, 100],
+    'Walker2d-v2': [10, 30, 50, 100],
+    'HalfCheetah-v2': [10, 30, 50, 100]
+}
 
 
 def eval_policy(agent: TD3,
@@ -45,7 +53,7 @@ def main(args):
 
     # Load saved agents
     agent_dict = {}
-    steps = [10, 25, 40, 100]
+    steps = step_dict[args.env]
     agent = TD3(obs_dim=obs_dim, act_dim=act_dim, max_action=max_action)
     agent_dict[0] = copy.deepcopy(agent)
     for step in steps:
@@ -86,6 +94,6 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args()
-    for env in ['Hopper-v2', 'Walker2d-v2', 'HalfCheetah-v2']:
+    for env in ['Walker2d-v2', 'HalfCheetah-v2']:
         args.env = env
         main(args)
