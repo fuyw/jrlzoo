@@ -1,0 +1,371 @@
+{
+  "checkpoints": [
+    {
+      "trainable_name": "ExperimentRunner",
+      "config": {
+        "environment_params": {
+          "training": {
+            "domain": "halfcheetah",
+            "task": "medium-expert-v2",
+            "universe": "gym",
+            "kwargs": {}
+          },
+          "evaluation": {
+            "domain": "halfcheetah",
+            "task": "medium-expert-v2",
+            "universe": "gym",
+            "kwargs": {}
+          }
+        },
+        "policy_params": {
+          "type": "GaussianPolicy",
+          "kwargs": {
+            "hidden_layer_sizes": [
+              256,
+              256,
+              256
+            ],
+            "squash": true
+          }
+        },
+        "Q_params": {
+          "type": "double_feedforward_Q_function",
+          "kwargs": {
+            "hidden_layer_sizes": [
+              256,
+              256,
+              256
+            ]
+          }
+        },
+        "algorithm_params": {
+          "type": "COMBO",
+          "universe": "gym",
+          "log_dir": "./ray_combo/",
+          "kwargs": {
+            "epoch_length": 1000,
+            "train_every_n_steps": 1,
+            "n_train_repeat": 1,
+            "eval_render_mode": null,
+            "eval_n_episodes": 10,
+            "eval_deterministic": true,
+            "discount": 0.99,
+            "tau": 0.005,
+            "reward_scale": 1.0,
+            "model_train_freq": 1000,
+            "model_retain_epochs": 10,
+            "rollout_batch_size": 10000.0,
+            "deterministic": false,
+            "num_networks": 7,
+            "num_elites": 5,
+            "real_ratio": 0.5,
+            "target_entropy": -3,
+            "max_model_t": null,
+            "rollout_length": 5,
+            "penalty_coeff": 0.0,
+            "lr": 0.0001,
+            "q_lr": 0.0003,
+            "with_min_q": true,
+            "min_q_for_real": false,
+            "min_q_for_real_and_fake": false,
+            "min_q_for_fake_only": false,
+            "min_q_for_fake_states": true,
+            "min_q_for_real_fake_states": false,
+            "backup_for_one_step": false,
+            "temp": 10.0,
+            "min_q_version": 3,
+            "min_q_weight": 0.5,
+            "data_subtract": true,
+            "num_random": 10,
+            "max_q_backup": false,
+            "deterministic_backup": true,
+            "with_lagrange": false,
+            "lagrange_thresh": 5.0,
+            "rollout_random": false,
+            "restore": false,
+            "cross_validate": false,
+            "cross_validate_model_eval": false,
+            "cross_validate_eval_n_episodes": 20,
+            "cross_validate_n_steps": 5,
+            "sn": false,
+            "separate_mean_var": false,
+            "penalty_learned_var": false,
+            "pool_load_path": "d4rl/halfcheetah-medium-expert-v0",
+            "pool_load_max_size": 2000000,
+            "model_name": "halfcheetah-medium-expert_sn_smv_1_0",
+            "n_epochs": 3000,
+            "n_initial_exploration_steps": 5000,
+            "reparameterize": true,
+            "target_update_interval": 1,
+            "store_extra_policy_info": false,
+            "action_prior": "uniform"
+          },
+          "domain": "halfcheetah",
+          "task": "medium-expert-v2",
+          "exp_name": "halfcheetah_medium-expert_nolip_len5_minq_0.5_lagrange_0.0_deterministic_backup_lr1e-4_3layers_normalize_for_fake_states_fix_real0.5"
+        },
+        "replay_pool_params": {
+          "type": "SimpleReplayPool",
+          "kwargs": {
+            "max_size": 1000000,
+            "obs_filter": false,
+            "modify_rew": false
+          }
+        },
+        "sampler_params": {
+          "type": "SimpleSampler",
+          "kwargs": {
+            "max_path_length": 1000,
+            "min_pool_size": 1000,
+            "batch_size": 256
+          }
+        },
+        "run_params": {
+          "seed": 6669,
+          "checkpoint_at_end": true,
+          "checkpoint_frequency": 300,
+          "checkpoint_replay_pool": false
+        },
+        "restore": null
+      },
+      "local_dir": "./ray_combo/halfcheetah/halfcheetah_medium-expert_nolip_len5_minq_0.5_lagrange_0.0_deterministic_backup_lr1e-4_3layers_normalize_for_fake_states_fix_real0.5_2000e3",
+      "experiment_tag": "0_evaluation={'domain': 'halfcheetah', 'task': 'medium-expert-v2', 'universe': 'gym', 'kwargs': {}},max_size=1000000,seed=6669",
+      "resources": {
+        "cpu": 16,
+        "gpu": 1.0,
+        "extra_cpu": 0,
+        "extra_gpu": 0,
+        "custom_resources": {},
+        "extra_custom_resources": {}
+      },
+      "stopping_criterion": {},
+      "upload_dir": "",
+      "loggers": "80044e2e",
+      "sync_function": "80044e2e",
+      "verbose": true,
+      "max_failures": 3,
+      "last_result": {
+        "Q-avg": 3488.930419921875,
+        "Q-min": 1559.976318359375,
+        "Q-max": 3864.96435546875,
+        "Q-std": 384.6073303222656,
+        "Q_loss": 395.4229736328125,
+        "Q_loss1": 369.54998779296875,
+        "Q_loss2": 421.29595947265625,
+        "min_Q_loss": 42.54168701171875,
+        "min_Q_loss1": 41.395751953125,
+        "min_Q_loss2": 43.6876220703125,
+        "alpha": 4.566168308258057,
+        "evaluation/env_infos/reward_ctrl-first-mean": -0.18302870333194732,
+        "evaluation/env_infos/reward_ctrl-last-mean": -0.3373392486572266,
+        "evaluation/env_infos/reward_ctrl-mean-mean": -0.3144341079556942,
+        "evaluation/env_infos/reward_ctrl-median-mean": -0.30518872857093815,
+        "evaluation/env_infos/reward_ctrl-range-mean": 0.43664533734321587,
+        "evaluation/env_infos/reward_run-first-mean": -0.2943046206124903,
+        "evaluation/env_infos/reward_run-last-mean": 12.947659929817291,
+        "evaluation/env_infos/reward_run-mean-mean": 11.801566548040752,
+        "evaluation/env_infos/reward_run-median-mean": 12.491814634122022,
+        "evaluation/env_infos/reward_run-range-mean": 14.809818834256134,
+        "evaluation/episode-length-avg": 1000.0,
+        "evaluation/episode-length-max": 1000,
+        "evaluation/episode-length-min": 1000,
+        "evaluation/episode-length-std": 0.0,
+        "evaluation/return-average": 11487.130859375,
+        "evaluation/return-max": 11820.115234375,
+        "evaluation/return-min": 10801.4189453125,
+        "evaluation/return-std": 286.840576171875,
+        "epoch": 299,
+        "timestep": 1000,
+        "timesteps_total": 300000,
+        "done": false,
+        "episodes_total": null,
+        "training_iteration": 300,
+        "experiment_id": "212e332f880e4346be7500ef9d9bb54f",
+        "date": "2022-02-05_06-05-33",
+        "timestamp": 1644059133,
+        "time_this_iter_s": 38.7892587184906,
+        "time_total_s": 19065.09310746193,
+        "pid": 3253743,
+        "hostname": "bingley",
+        "node_ip": "132.206.73.47",
+        "config": {
+          "environment_params": {
+            "training": {
+              "domain": "halfcheetah",
+              "task": "medium-expert-v2",
+              "universe": "gym",
+              "kwargs": {}
+            },
+            "evaluation": {
+              "domain": "halfcheetah",
+              "task": "medium-expert-v2",
+              "universe": "gym",
+              "kwargs": {}
+            }
+          },
+          "policy_params": {
+            "type": "GaussianPolicy",
+            "kwargs": {
+              "hidden_layer_sizes": [
+                256,
+                256,
+                256
+              ],
+              "squash": true
+            }
+          },
+          "Q_params": {
+            "type": "double_feedforward_Q_function",
+            "kwargs": {
+              "hidden_layer_sizes": [
+                256,
+                256,
+                256
+              ]
+            }
+          },
+          "algorithm_params": {
+            "type": "COMBO",
+            "universe": "gym",
+            "log_dir": "./ray_combo/",
+            "kwargs": {
+              "epoch_length": 1000,
+              "train_every_n_steps": 1,
+              "n_train_repeat": 1,
+              "eval_render_mode": null,
+              "eval_n_episodes": 10,
+              "eval_deterministic": true,
+              "discount": 0.99,
+              "tau": 0.005,
+              "reward_scale": 1.0,
+              "model_train_freq": 1000,
+              "model_retain_epochs": 10,
+              "rollout_batch_size": 10000.0,
+              "deterministic": false,
+              "num_networks": 7,
+              "num_elites": 5,
+              "real_ratio": 0.5,
+              "target_entropy": -3,
+              "max_model_t": null,
+              "rollout_length": 5,
+              "penalty_coeff": 0.0,
+              "lr": 0.0001,
+              "q_lr": 0.0003,
+              "with_min_q": true,
+              "min_q_for_real": false,
+              "min_q_for_real_and_fake": false,
+              "min_q_for_fake_only": false,
+              "min_q_for_fake_states": true,
+              "min_q_for_real_fake_states": false,
+              "backup_for_one_step": false,
+              "temp": 10.0,
+              "min_q_version": 3,
+              "min_q_weight": 0.5,
+              "data_subtract": true,
+              "num_random": 10,
+              "max_q_backup": false,
+              "deterministic_backup": true,
+              "with_lagrange": false,
+              "lagrange_thresh": 5.0,
+              "rollout_random": false,
+              "restore": false,
+              "cross_validate": false,
+              "cross_validate_model_eval": false,
+              "cross_validate_eval_n_episodes": 20,
+              "cross_validate_n_steps": 5,
+              "sn": false,
+              "separate_mean_var": false,
+              "penalty_learned_var": false,
+              "pool_load_path": "d4rl/halfcheetah-medium-expert-v0",
+              "pool_load_max_size": 2000000,
+              "model_name": "halfcheetah-medium-expert_sn_smv_1_0",
+              "n_epochs": 3000,
+              "n_initial_exploration_steps": 5000,
+              "reparameterize": true,
+              "target_update_interval": 1,
+              "store_extra_policy_info": false,
+              "action_prior": "uniform"
+            },
+            "domain": "halfcheetah",
+            "task": "medium-expert-v2",
+            "exp_name": "halfcheetah_medium-expert_nolip_len5_minq_0.5_lagrange_0.0_deterministic_backup_lr1e-4_3layers_normalize_for_fake_states_fix_real0.5"
+          },
+          "replay_pool_params": {
+            "type": "SimpleReplayPool",
+            "kwargs": {
+              "max_size": 1000000,
+              "obs_filter": false,
+              "modify_rew": false
+            }
+          },
+          "sampler_params": {
+            "type": "SimpleSampler",
+            "kwargs": {
+              "max_path_length": 1000,
+              "min_pool_size": 1000,
+              "batch_size": 256
+            }
+          },
+          "run_params": {
+            "seed": 6669,
+            "checkpoint_at_end": true,
+            "checkpoint_frequency": 300,
+            "checkpoint_replay_pool": false
+          },
+          "restore": null
+        },
+        "time_since_restore": 19065.09310746193,
+        "timesteps_since_restore": 0,
+        "iterations_since_restore": 300
+      },
+      "last_update_time": 1644059133.6353743,
+      "checkpoint_freq": 300,
+      "checkpoint_at_end": true,
+      "history": [],
+      "keep_checkpoints_num": null,
+      "_cmp_greater": true,
+      "best_checkpoint_attr_value": -Infinity,
+      "checkpoint_score_attr": "training_iteration",
+      "_checkpoint": "800495d40f0000000000008c0e7261792e74756e652e747269616c948c0a436865636b706f696e749493942981947d94288c0773746f72616765948c046469736b948c0576616c7565948cd92e2f7261795f636f6d626f2f68616c66636865657461682f68616c66636865657461685f6d656469756d2d6578706572745f6e6f6c69705f6c656e355f6d696e715f302e355f6c616772616e67655f302e305f64657465726d696e69737469635f6261636b75705f6c7231652d345f336c61796572735f6e6f726d616c697a655f666f725f66616b655f7374617465735f6669785f7265616c302e355f3230303065332f736565643a363636395f323032322d30322d30355f30302d34372d3434766a666478616d382f636865636b706f696e745f3330302f948c0b6c6173745f726573756c74948c0b636f6c6c656374696f6e73948c0b4f72646572656444696374949394295294288c05512d617667944740ab41dc600000008c05512d6d696e944740985fe7c00000008c05512d6d6178944740ae31edc00000008c05512d7374649447407809b7a00000008c06515f6c6f737394474078b6c4800000008c07515f6c6f7373319447407718ccc00000008c07515f6c6f7373329447407a54bc400000008c0a6d696e5f515f6c6f7373944740454556000000008c0b6d696e5f515f6c6f73733194474044b2a8000000008c0b6d696e5f515f6c6f73733294474045d804000000008c05616c7068619447401243c1a00000008c2b6576616c756174696f6e2f656e765f696e666f732f7265776172645f6374726c2d66697273742d6d65616e9447bfc76d7c0b851eb88c2a6576616c756174696f6e2f656e765f696e666f732f7265776172645f6374726c2d6c6173742d6d65616e9447bfd596f75c28f5c38c2a6576616c756174696f6e2f656e765f696e666f732f7265776172645f6374726c2d6d65616e2d6d65616e9447bfd41fb03c9aaa3b8c2c6576616c756174696f6e2f656e765f696e666f732f7265776172645f6374726c2d6d656469616e2d6d65616e9447bfd388364e147ae28c2b6576616c756174696f6e2f656e765f696e666f732f7265776172645f6374726c2d72616e67652d6d65616e94473fdbf1ff48f5c28e8c2a6576616c756174696f6e2f656e765f696e666f732f7265776172645f72756e2d66697273742d6d65616e9447bfd2d5e30c25e8ca8c296576616c756174696f6e2f656e765f696e666f732f7265776172645f72756e2d6c6173742d6d65616e94474029e533aeac97008c296576616c756174696f6e2f656e765f696e666f732f7265776172645f72756e2d6d65616e2d6d65616e944740279a66ee3ace278c2b6576616c756174696f6e2f656e765f696e666f732f7265776172645f72756e2d6d656469616e2d6d65616e94474028fbcf20b27f208c2a6576616c756174696f6e2f656e765f696e666f732f7265776172645f72756e2d72616e67652d6d65616e9447402d9ea09301a1408c1d6576616c756174696f6e2f657069736f64652d6c656e6774682d6176679447408f4000000000008c1d6576616c756174696f6e2f657069736f64652d6c656e6774682d6d6178944de8038c1d6576616c756174696f6e2f657069736f64652d6c656e6774682d6d696e944de8038c1d6576616c756174696f6e2f657069736f64652d6c656e6774682d737464944700000000000000008c196576616c756174696f6e2f72657475726e2d61766572616765944740c66f90c00000008c156576616c756174696f6e2f72657475726e2d6d6178944740c7160ec00000008c156576616c756174696f6e2f72657475726e2d6d696e944740c518b5a00000008c156576616c756174696f6e2f72657475726e2d73746494474071ed73000000008c0565706f6368944d2b018c0874696d6573746570944de8038c0f74696d6573746570735f746f74616c944ae09304008c04646f6e6594898c0e657069736f6465735f746f74616c944e8c12747261696e696e675f697465726174696f6e944d2c018c0d6578706572696d656e745f6964948c203231326533333266383830653433343662653735303065663964396262353466948c0464617465948c13323032322d30322d30355f30362d30352d3333948c0974696d657374616d70944afd59fe618c1074696d655f746869735f697465725f739447404365066e0000008c0c74696d655f746f74616c5f73944740d29e45f57900008c03706964944aefa531008c08686f73746e616d65948c0762696e676c6579948c076e6f64655f6970948c0d3133322e3230362e37332e3437948c06636f6e666967947d94288c12656e7669726f6e6d656e745f706172616d73947d94288c08747261696e696e67947d94288c06646f6d61696e948c0b68616c6663686565746168948c047461736b948c106d656469756d2d6578706572742d7632948c08756e697665727365948c0367796d948c066b7761726773947d94758c0a6576616c756174696f6e947d94288c06646f6d61696e948c0b68616c6663686565746168948c047461736b948c106d656469756d2d6578706572742d7632948c08756e697665727365948c0367796d948c066b7761726773947d9475758c0d706f6c6963795f706172616d73947d94288c0474797065948c0e476175737369616e506f6c696379948c066b7761726773947d94288c1268696464656e5f6c617965725f73697a6573944d00014d00014d000187948c06737175617368948875758c08515f706172616d73947d94288c0474797065948c1d646f75626c655f66656564666f72776172645f515f66756e6374696f6e948c066b7761726773947d948c1268696464656e5f6c617965725f73697a6573944d00014d00014d0001879473758c10616c676f726974686d5f706172616d7394680c295294288c0474797065948c05434f4d424f948c08756e697665727365948c0367796d948c076c6f675f646972948c0c2e2f7261795f636f6d626f2f948c066b776172677394680c295294288c0c65706f63685f6c656e677468944de8038c13747261696e5f65766572795f6e5f7374657073944b018c0e6e5f747261696e5f726570656174944b018c106576616c5f72656e6465725f6d6f6465944e8c0f6576616c5f6e5f657069736f646573944b0a8c126576616c5f64657465726d696e697374696394888c08646973636f756e7494473fefae147ae147ae8c0374617594473f747ae147ae147b8c0c7265776172645f7363616c6594473ff00000000000008c106d6f64656c5f747261696e5f66726571944de8038c136d6f64656c5f72657461696e5f65706f636873944b0a8c12726f6c6c6f75745f62617463685f73697a65944740c38800000000008c0d64657465726d696e697374696394898c0c6e756d5f6e6574776f726b73944b078c0a6e756d5f656c69746573944b058c0a7265616c5f726174696f94473fe00000000000008c0e7461726765745f656e74726f7079944afdffffff8c0b6d61785f6d6f64656c5f74944e8c0e726f6c6c6f75745f6c656e677468944b058c0d70656e616c74795f636f656666944700000000000000008c026c7294473f1a36e2eb1c432d8c04715f6c7294473f33a92a305532618c0a776974685f6d696e5f7194888c0e6d696e5f715f666f725f7265616c94898c176d696e5f715f666f725f7265616c5f616e645f66616b6594898c136d696e5f715f666f725f66616b655f6f6e6c7994898c156d696e5f715f666f725f66616b655f73746174657394888c1a6d696e5f715f666f725f7265616c5f66616b655f73746174657394898c136261636b75705f666f725f6f6e655f7374657094898c0474656d70944740240000000000008c0d6d696e5f715f76657273696f6e944b038c0c6d696e5f715f77656967687494473fe00000000000008c0d646174615f737562747261637494888c0a6e756d5f72616e646f6d944b0a8c0c6d61785f715f6261636b757094898c1464657465726d696e69737469635f6261636b757094888c0d776974685f6c616772616e676594898c0f6c616772616e67655f746872657368944740140000000000008c0e726f6c6c6f75745f72616e646f6d94898c07726573746f726594898c0e63726f73735f76616c696461746594898c1963726f73735f76616c69646174655f6d6f64656c5f6576616c94898c1e63726f73735f76616c69646174655f6576616c5f6e5f657069736f646573944b148c1663726f73735f76616c69646174655f6e5f7374657073944b058c02736e94898c1173657061726174655f6d65616e5f76617294898c1370656e616c74795f6c6561726e65645f76617294898c0e706f6f6c5f6c6f61645f70617468948c216434726c2f68616c66636865657461682d6d656469756d2d6578706572742d7630948c12706f6f6c5f6c6f61645f6d61785f73697a65944a80841e008c0a6d6f64656c5f6e616d65948c2468616c66636865657461682d6d656469756d2d6578706572745f736e5f736d765f315f30948c086e5f65706f636873944db80b8c1b6e5f696e697469616c5f6578706c6f726174696f6e5f7374657073944d88138c0e7265706172616d65746572697a6594888c167461726765745f7570646174655f696e74657276616c944b018c1773746f72655f65787472615f706f6c6963795f696e666f94898c0c616374696f6e5f7072696f72948c07756e69666f726d94758c06646f6d61696e948c0b68616c6663686565746168948c047461736b948c106d656469756d2d6578706572742d7632948c086578705f6e616d65948c8468616c66636865657461685f6d656469756d2d6578706572745f6e6f6c69705f6c656e355f6d696e715f302e355f6c616772616e67655f302e305f64657465726d696e69737469635f6261636b75705f6c7231652d345f336c61796572735f6e6f726d616c697a655f666f725f66616b655f7374617465735f6669785f7265616c302e3594758c127265706c61795f706f6f6c5f706172616d73947d94288c0474797065948c1053696d706c655265706c6179506f6f6c948c066b7761726773947d94288c086d61785f73697a65944a40420f008c0a6f62735f66696c74657294898c0a6d6f646966795f726577948975758c0e73616d706c65725f706172616d73947d94288c0474797065948c0d53696d706c6553616d706c6572948c066b7761726773947d94288c0f6d61785f706174685f6c656e677468944de8038c0d6d696e5f706f6f6c5f73697a65944de8038c0a62617463685f73697a65944d000175758c0a72756e5f706172616d73947d94288c0473656564944d0d1a8c11636865636b706f696e745f61745f656e6494888c14636865636b706f696e745f6672657175656e6379944d2c018c16636865636b706f696e745f7265706c61795f706f6f6c9489758c07726573746f7265944e758c1274696d655f73696e63655f726573746f7265944740d29e45f57900008c1774696d6573746570735f73696e63655f726573746f7265944b008c18697465726174696f6e735f73696e63655f726573746f7265944d2c017575622e",
+      "export_formats": [],
+      "status": "RUNNING",
+      "logdir": "./ray_combo/halfcheetah/halfcheetah_medium-expert_nolip_len5_minq_0.5_lagrange_0.0_deterministic_backup_lr1e-4_3layers_normalize_for_fake_states_fix_real0.5_2000e3/seed:6669_2022-02-05_00-47-44vjfdxam8",
+      "runner": null,
+      "result_logger": null,
+      "last_debug": 1644059133.6353667,
+      "trial_id": "23c8acc4",
+      "error_file": null,
+      "num_failures": 0,
+      "custom_trial_name": "seed:6669",
+      "results": "80044e2e",
+      "best_result": "80044e2e",
+      "param_config": "80044e2e",
+      "extra_arg": "80044e2e",
+      "_nonjson_fields": [
+        "_checkpoint",
+        "loggers",
+        "sync_function",
+        "results",
+        "best_result",
+        "param_config",
+        "extra_arg"
+      ],
+      "__logger_started__": true
+    }
+  ],
+  "runner_data": {
+    "_global_time_limit": Infinity,
+    "_total_time": 30176.195903539658,
+    "_iteration": 584,
+    "_verbose": true,
+    "_server_port": 4321,
+    "_metadata_checkpoint_dir": "./ray_combo/halfcheetah/halfcheetah_medium-expert_nolip_len5_minq_0.5_lagrange_0.0_deterministic_backup_lr1e-4_3layers_normalize_for_fake_states_fix_real0.5_2000e3",
+    "_start_time": 1644040064.1557448,
+    "_session_str": "2022-02-05_00-47-44",
+    "launch_web_server": false
+  },
+  "stats": {
+    "start_time": 1644040064.1557448,
+    "timestamp": 1644070246.861452
+  }
+}

@@ -9,13 +9,13 @@ import numpy as np
 import pandas as pd
 from tqdm import trange
 
-from models import CQLAgent
+from models import COMBOAgent
 from utils import ReplayBuffer
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 
-def eval_policy(agent: CQLAgent,
+def eval_policy(agent: COMBOAgent,
                 env_name: str,
                 seed: int,
                 eval_episodes: int = 10) -> float:
@@ -42,7 +42,7 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", default="walker2d-medium-v2")
-    parser.add_argument("--seed", default=42, type=int)
+    parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--hid_dim", default=256, type=int)
     parser.add_argument("--hid_layers", default=3, type=int)
     parser.add_argument("--lr_actor", default=1e-4, type=float)
@@ -67,7 +67,7 @@ def get_args():
 
 
 def main(args):
-    exp_name = f'd4rl_s{args.seed}_alpha{args.min_q_weight}'
+    exp_name = f's{args.seed}_alpha{args.min_q_weight}'
     exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
@@ -79,6 +79,7 @@ def main(args):
                         filemode='w',
                         force=True)
     logger = logging.getLogger()
+    logger.info(f"\nArguments:\n{vars(args)}")
 
     # Env parameters
     env = gym.make(args.env)
@@ -92,21 +93,21 @@ def main(args):
     np.random.seed(args.seed)
 
     # CQL agent
-    agent = CQLAgent(obs_dim=obs_dim,
-                     act_dim=act_dim,
-                     hid_dim=args.hid_dim,
-                     hid_layers=args.hid_layers,
-                     seed=args.seed,
-                     tau=args.tau,
-                     gamma=args.gamma,
-                     lr=args.lr,
-                     lr_actor=args.lr_actor,
-                     auto_entropy_tuning=args.auto_entropy_tuning,
-                     backup_entropy=args.backup_entropy,
-                     target_entropy=args.target_entropy,
-                     min_q_weight=args.min_q_weight,
-                     with_lagrange=args.with_lagrange,
-                     lagrange_thresh=args.lagrange_thresh)
+    agent = COMBOAgent(obs_dim=obs_dim,
+                       act_dim=act_dim,
+                       hid_dim=args.hid_dim,
+                       hid_layers=args.hid_layers,
+                       seed=args.seed,
+                       tau=args.tau,
+                       gamma=args.gamma,
+                       lr=args.lr,
+                       lr_actor=args.lr_actor,
+                       auto_entropy_tuning=args.auto_entropy_tuning,
+                       backup_entropy=args.backup_entropy,
+                       target_entropy=args.target_entropy,
+                       min_q_weight=args.min_q_weight,
+                       with_lagrange=args.with_lagrange,
+                       lagrange_thresh=args.lagrange_thresh)
 
     logger.info(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
     logger.info(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
@@ -173,7 +174,8 @@ def main(args):
                 f"\trandom_q1_avg: {log_info['random_q1_avg']:.2f}, random_q1_min: {log_info['random_q1_min']:.2f}, random_q1_max: {log_info['random_q1_max']:.2f}\n"
                 f"\trandom_q2_avg: {log_info['random_q2_avg']:.2f}, random_q2_min: {log_info['random_q2_min']:.2f}, random_q2_max: {log_info['random_q2_max']:.2f}\n"
                 f"\tlogp_next_action: {log_info['logp_next_action']:.2f}, cql_logp: {log_info['cql_logp']:.2f} cql_logp_next_action: {log_info['cql_logp_next_action']:.2f}\n"
-                f"\tbatch_rewards: {log_info['batch_rewards']:.2f}, batch_discounts: {log_info['batch_discounts']:.2f}, batch_obs: {log_info['batch_obs']:.2f}, batch_dones: {log_info['batch_dones']:.2f}, buffer_size: {replay_buffer.size}\n"
+                f"\tbatch_rewards: {log_info['batch_rewards']:.2f}, batch_obs: {log_info['batch_obs']:.2f}, "
+                f"\tbatch_actions: {log_info['batch_actions']:.2f}, batch_dones: {log_info['batch_dones']:.2f}, buffer_size: {replay_buffer.size}\n"
                 f"\tfix_q1: {fix_q1.squeeze().mean().item():.2f}, fix_q2: {fix_q2.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n\n"
             )
 
