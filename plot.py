@@ -100,12 +100,24 @@ def plot_exps():
             ax.legend(fontsize=7, loc='lower right')
 
     # add combo result
-    for idx, fname in enumerate([
-            'new_combo/logs/halfcheetah-medium-v2/combo1_s0_alpha0.5_rr0.5.csv']):
-        df = pd.read_csv(fname, index_col=0)
-        ax = axes[idx // 3][idx % 3]
-        ax.plot(range(len(df)), df['reward'].values, lw=0.6,
-                color=colors[algo_idx], label='combo')
+    for i, j, fname in [
+            (0, 0, 'new_combo/logs/halfcheetah-medium-v2/combo_s0_alpha5.0_rr0.5.csv'),
+            (0, 1, 'new_combo/logs/halfcheetah-medium-replay-v2/combo_s0_alpha3.0_rr0.5.csv'),
+            (0, 2, 'new_combo/logs/halfcheetah-medium-expert-v2/combo_s0_alpha3.0_rr0.5.csv'),
+            (1, 0, 'new_combo/logs/hopper-medium-v2/combo_s0_alpha5.0_rr0.5.csv'),
+            (1, 1, 'new_combo/logs/hopper-medium-replay-v2/combo_s0_alpha5.0_rr0.5.csv'),
+            (1, 2, 'new_combo/logs/hopper-medium-expert-v2/combo_s0_alpha5.0_rr0.5.csv'), 
+            (2, 0, 'new_combo/logs/walker2d-medium-v2/combo_s0_alpha3.0_rr0.5.csv'),
+            (2, 1, 'new_combo/logs/walker2d-medium-replay-v2/combo_s0_alpha3.0_rr0.5.csv'),
+            (2, 2, 'new_combo/logs/walker2d-medium-expert-v2/combo_s0_alpha3.0_rr0.5.csv')
+        ]:
+        df = pd.read_csv(fname, index_col=0).set_index('step')
+
+        plot_idx = [10000*i for i in range(101) if 10000*i in df.index]
+        x = df.loc[plot_idx, 'reward'].values
+        ax = axes[i][j]
+        ax.plot(range(len(x)), x, lw=1,
+                color=colors[4], label=f'combo')
         ax.legend(fontsize=7, loc='lower right')
     
     plt.savefig('compare_algo.png')

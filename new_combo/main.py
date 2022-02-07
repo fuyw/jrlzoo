@@ -53,7 +53,7 @@ def get_args():
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
-    parser.add_argument("--min_q_weight", default=5.0, type=float)
+    parser.add_argument("--min_q_weight", default=3.0, type=float)
     parser.add_argument("--target_entropy", default=None, type=float)
     parser.add_argument("--auto_entropy_tuning",
                         default=True,
@@ -192,8 +192,8 @@ def main(args):
                 f"\tfix_q1: {fix_q1.squeeze().mean().item():.2f}, fix_q2: {fix_q2.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n\n"
             )
 
-    log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
+            log_df = pd.DataFrame(logs)
+            log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
     with open(f"{args.log_dir}/{args.env}/{exp_name}.json", "w") as f:
         json.dump(vars(args), f)
 

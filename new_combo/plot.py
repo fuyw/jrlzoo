@@ -97,7 +97,7 @@ def plot_exp():
 
 def plot_one():
     _, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 4))
-    df = pd.read_csv(f'/usr/local/data/yuweifu/jaxrl/new_combo/logs/walker2d-medium-v2/combo1_s0_alpha5.0_rr0.99.csv', index_col=0)
+    df = pd.read_csv(f'/usr/local/data/yuweifu/jaxrl/new_combo/logs/halfcheetah-medium-expert-v2/combo_s0_alpha3.0_rr0.5.csv', index_col=0)
     for idx, col in enumerate(['reward', 'critic_loss', 'real_critic_loss', 'q1', 'alpha']):
         ax = axes[idx % 5]
         if col == 'real_critic_loss':
