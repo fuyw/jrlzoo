@@ -28,6 +28,7 @@ def eval_policy(agent: CDCAgent,
         while not done:
             t += 1
             eval_rng, action = agent.select_action(agent.actor_state.params,
+                                                   agent.critic_state.params,
                                                    eval_rng, np.array(obs), True)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
@@ -120,7 +121,6 @@ def main(args):
             (t + 1) % args.eval_freq == 0) or ((t + 1) <= int(9.5e5) and
                                                (t + 1) %
                                                (2 * args.eval_freq) == 0):
-            # eval_reward = np.NaN
             eval_reward = eval_policy(agent, args.env, args.seed)
             log_info.update({
                 "step": t + 1,
@@ -131,11 +131,14 @@ def main(args):
             fix_q = agent.critic.apply(
                 {"params": agent.critic_state.params}, fix_obs, fix_act)
             _, fix_a = agent.select_action(agent.actor_state.params,
-                                           jax.random.PRNGKey(0), fix_obs,
-                                           True)
+                                           agent.critic_state.params,
+                                           jax.random.PRNGKey(0),
+                                           fix_obs, True)
             logger.info(
                 f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
-                f"\tcritic_loss: {log_info['critic_loss']:.2f}, actor_loss: {log_info['actor_loss']:.2f}, penalty_loss: {log_info['penalty_loss']:.2f}\n"
+                f"\tcritic_loss: {log_info['critic_loss']:.2f}\n"
+                f"\tactor_loss: {log_info['actor_loss']:.2f}, mle_prob: {log_info['mle_prob']:.2f}\n"
+                f"penalty_loss: {log_info['penalty_loss']:.2f}\n"
                 f"\tconcat_q_avg: {log_info['concat_q_avg']:.2f}, concat_q_min: {log_info['concat_q_min']:.2f}, concat_q_max: {log_info['concat_q_max']:.2f}\n"
                 f"\ttarget_q: {log_info['target_q']:.2f}, fix_q: {fix_q.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n\n"
             )
@@ -143,8 +146,6 @@ def main(args):
 
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
-    with open(f"{args.log_dir}/{args.env}/{exp_name}.json", "w") as f:
-        json.dump(vars(args), f)
 
 
 if __name__ == "__main__":

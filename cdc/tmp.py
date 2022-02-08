@@ -1,130 +1,181 @@
-from typing import Any, Optional
-import functools
-from flax import linen as nn
-from flax.core import FrozenDict
-from flax.training import train_state
-import os
-import distrax
+import gym
+import d4rl
 import jax
 import jax.numpy as jnp
+import os
+import time
+import yaml
+import logging
 import numpy as np
-import optax
+import pandas as pd
+from tqdm import trange
+from models import CDCAgent
+from utils import ReplayBuffer
+
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 
-LOG_STD_MAX = 2.
-LOG_STD_MIN = -5.
-
-kernel_initializer = jax.nn.initializers.glorot_uniform()
-
-
-
-class Actor(nn.Module):
-    """return (mu, action_distribution)
-
-    pi_action, logp_pi, lopprobs = self.actor(obs, gt_actions=actions, with_log_mle=True)
-    """
-    act_dim: int
-
-    @nn.compact
-    def __call__(self, rng: Any, observation: jnp.ndarray):
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc1")(observation))
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc2")(x))
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc3")(x))
-        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="output")(x)
-
-        mu, log_std = jnp.split(x, 2, axis=-1)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std)
- 
-        mean_action = jnp.tanh(mu)
-        action_distribution = distrax.Transformed(
-            distrax.MultivariateNormalDiag(mu, std),
-            distrax.Block(distrax.Tanh(), ndims=1)
-        )
-        return mean_action, action_distribution
-        # sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
-        # return mean_action, sampled_action, logp
+def eval_policy(agent: CDCAgent,
+                env_name: str,
+                seed: int,
+                eval_episodes: int = 10) -> float:
+    eval_env = gym.make(env_name)
+    eval_env.seed(seed + 100)
+    eval_rng = jax.random.PRNGKey(seed + 100)
+    avg_reward = 0.
+    for _ in range(eval_episodes):
+        t = 0
+        obs, done = eval_env.reset(), False
+        while not done:
+            t += 1
+            eval_rng, action = agent.select_action(agent.actor_state.params,
+                                                   eval_rng, np.array(obs), True)
+            obs, reward, done, _ = eval_env.step(action)
+            avg_reward += reward
+    avg_reward /= eval_episodes
+    return avg_reward
 
 
-class Critic(nn.Module):
-    hid_dim: int = 256
-
-    @nn.compact
-    def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        x = jnp.concatenate([observation, action], axis=-1)
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")(x))
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc2")(q))
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc3")(q))
-        q = nn.Dense(1, kernel_init=kernel_initializer, name="output")(q)
-        return q
-
-
-class MultiCritic(nn.Module):
-    hid_dim: int = 256
-
-    def setup(self):
-        self.critic1 = Critic(self.hid_dim)
-        self.critic2 = Critic(self.hid_dim)
-        self.critic3 = Critic(self.hid_dim)
-        self.critic4 = Critic(self.hid_dim)
-
-    def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        q1 = self.critic1(observation, action)
-        q2 = self.critic2(observation, action)
-        q3 = self.critic3(observation, action)
-        q4 = self.critic4(observation, action)
-        concat_q = jnp.concatenate([q1, q2, q3, q3], axis=-1)
-        return concat_q
+def get_args():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--env", default="halfcheetah-medium-v2")
+    parser.add_argument("--seed", default=0, type=int)
+    parser.add_argument("--lr", default=7e-4, type=float)
+    parser.add_argument("--lr_actor", default=3e-4, type=float)
+    parser.add_argument("--max_timesteps", default=int(1e6), type=int)
+    parser.add_argument("--eval_freq", default=int(5e3), type=int)
+    parser.add_argument("--batch_size", default=256, type=int)
+    parser.add_argument("--gamma", default=0.99, type=float)
+    parser.add_argument("--tau", default=0.005, type=float)
+    parser.add_argument("--nu", default=0.75, type=float)
+    parser.add_argument("--lmbda", default=1.0, type=float)
+    parser.add_argument("--eta", default=1.0, type=float)
+    parser.add_argument("--num_samples", default=15, type=int)
+    parser.add_argument("--log_dir", default="./logs", type=str)
+    parser.add_argument("--config_dir", default="./configs", type=str)
+    parser.add_argument("--model_dir", default="./saved_models", type=str)
+    args = parser.parse_args()
+    return args
 
 
-obs_dim = 11
-act_dim = 3
+args = get_args()
+print(f"\nArguments:\n{vars(args)}")
+with open(f"{args.config_dir}/cdc.yaml", "r") as stream:
+    configs = yaml.safe_load(stream)
+args.eta = configs[args.env]["eta"]
+args.lmbda = configs[args.env]["lmbda"]
+
+# Env parameters
+env = gym.make(args.env)
+obs_dim = env.observation_space.shape[0]
+act_dim = env.action_space.shape[0]
+
+# random seeds
+env.seed(args.seed)
+env.action_space.seed(args.seed)
+np.random.seed(args.seed)
+
+
+# CDC agent
+agent = CDCAgent(obs_dim=obs_dim,
+                act_dim=act_dim,
+                seed=args.seed,
+                nu=args.nu,
+                eta=args.eta,
+                tau=args.tau,
+                gamma=args.gamma,
+                lmbda=args.lmbda,
+                num_samples=args.num_samples,
+                lr=args.lr,
+                lr_actor=args.lr_actor)
+
+# Replay buffer
+replay_buffer = ReplayBuffer(obs_dim, act_dim)
+replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
+fix_obs = np.random.normal(size=(128, obs_dim))
+fix_act = np.random.normal(size=(128, act_dim))
+
+
+batch = replay_buffer.sample(30)
+observations, actions, rewards, discounts, next_observations = batch
+actor_params = agent.actor_state.params
+critic_params = agent.critic_state.params
+observation = observations[0]
+action = actions[0]
+reward = rewards[0]
+discount = discounts[0]
+next_observation = next_observations[0]
+
+        # 1209 [0.6336192  0.76014924 1.3123713  0.47833192 0.4488593  0.55731165]
+        # critic_loss: 3.09 actor_loss: -31.43, mle_prob: 4.13 penalty_loss: 0.41
+        # concat_q_avg: 30.96, concat_q_min: 30.74, concat_q_max: 31.14
+T = 1
+
+# Train
+for _ in range(10):
+    for t in range(10):
+        log_info = agent.update(replay_buffer, 256)
+        mu, pi_distribution = agent.actor.apply({"params": agent.actor_state.params},
+                                                next_observation)
+        print(f'\t{T+t}', mu)
+        print(
+            f"\tcritic_loss: {log_info['critic_loss']:.2f} actor_loss: {log_info['actor_loss']:.2f}, mle_prob: {log_info['mle_prob']:.2f} penalty_loss: {log_info['penalty_loss']:.2f}\n"
+            f"\tconcat_q_avg: {log_info['concat_q_avg']:.2f}, concat_q_min: {log_info['concat_q_min']:.2f}, concat_q_max: {log_info['concat_q_max']:.2f} "
+            f"\tsampled_q: {log_info['sampled_q']:.2f}")
+    T += 110
+
+
+#############
+frozen_actor_params = agent.actor_state.params
+frozen_critic_params = agent.critic_state.params
+
+
 
 rng = jax.random.PRNGKey(0)
-rng, actor_key, critic_key = jax.random.split(rng, 3)
-dummy_obs = jnp.ones([1, obs_dim], dtype=jnp.float32)
-dummy_act = jnp.ones([1, act_dim], dtype=jnp.float32)
+rng1, rng2, rng3 = jax.random.split(rng, 3)
 
-actor = Actor(act_dim)
-actor_params = actor.init(actor_key, actor_key, dummy_obs)["params"]
-actor_state = train_state.TrainState.create(
-    apply_fn=Actor.apply,
-    params=actor_params,
-    tx=optax.adam(1e-3))
+mu, pi_distribution = agent.actor.apply({"params": actor_params}, observation)
+sampled_action, _ = pi_distribution.sample_and_log_prob(seed=rng1)  # (6,)
+mle_prob = pi_distribution.log_prob(action)  # (,)
 
-critic = MultiCritic()
-critic_params = critic.init(critic_key, dummy_obs, dummy_act)["params"]
-critic_target_params = critic_params
-critic_state = train_state.TrainState.create(
-    apply_fn=Critic.apply,
-    params=critic_params,
-    tx=optax.adam(1e-3))
+concat_sampled_q = agent.critic.apply(
+    {"params": frozen_critic_params}, observation, sampled_action)
+sampled_q = agent.nu*concat_sampled_q.min(-1) + (1.-agent.nu)*concat_sampled_q.max(-1)  # ()
 
-rng1, rng2, rng3, rng4, rng5 = jax.random.split(rng, 5)
-observation = np.random.normal(size=(obs_dim,))
-sampled_action = np.random.normal(size=(act_dim,))
-concat_q = critic.apply({"params": critic_params}, observation, sampled_action)  # (4,)
+# Actor loss
+actor_loss = (-agent.lmbda*mle_prob - sampled_q)
 
+# Critic loss
+concat_q = agent.critic.apply({"params": critic_params}, observation, action)  # (4,)
 
+repeat_next_observations = jnp.repeat(jnp.expand_dims(next_observation, axis=0),
+                                      repeats=agent.num_samples, axis=0)  # (15, 17)
 
-repeat_next_observations = jnp.repeat(jnp.expand_dims(observation, axis=0), repeats=15, axis=0)
-_, next_pi_distribution = actor.apply({"params": actor_params}, rng2, repeat_next_observations)
-sampled_next_actions = next_pi_distribution.sample(seed=jax.random.PRNGKey(4))  # (15, 3)
+_, next_pi_distribution = agent.actor.apply({"params": frozen_actor_params},
+                                           repeat_next_observations)
+sampled_next_actions = next_pi_distribution.sample(seed=rng2)  # (15, 6)
 
-concat_next_q = critic.apply({"params": critic_params},
-    repeat_next_observations, sampled_next_actions)  # (15, 4)
+concat_next_q = agent.critic.apply(
+    {"params": agent.critic_target_params}, repeat_next_observations, sampled_next_actions)  # (15, 4)
 
-weighted_next_q = 0.5 * concat_next_q.min(-1) + 0.5 * concat_next_q.max(-1)  # (15,)
-next_q = jnp.squeeze(weighted_next_q.max(-1))
+weighted_next_q = agent.nu * concat_next_q.min(-1) + (1. - agent.nu) * concat_next_q.max(-1)  # (15,)
 
-target_q = 1.5 + 0.99 *  next_q
+next_q = weighted_next_q.max(-1)  # ()
+target_q = reward + agent.gamma * discount * next_q  # ()
 
-# Penalty
-repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0), repeats=15, axis=0)  # (15, 11)
-_, penalty_pi_distribution = actor.apply({"params": actor_params}, rng4, repeat_observations)
-penalty_sampled_actions = penalty_pi_distribution.sample(seed=rng5)  # (15, 3)
-penalty_concat_q = critic.apply({"params": critic_params}, repeat_observations, penalty_sampled_actions).max(0)  # (15, 4) ==> (4,)
+critic_loss = jnp.square(concat_q - target_q).sum()
 
+# Overestimation penalty loss
+repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0),
+                                 repeats=agent.num_samples, axis=0)  # (15, 17)
+_, penalty_pi_distribution = agent.actor.apply({"params": agent.actor_state.params},
+                                                repeat_observations)
+penalty_sampled_actions = penalty_pi_distribution.sample(seed=rng3)  # (15, 6)
+penalty_concat_q = agent.critic.apply({"params": agent.critic_state.params},
+    repeat_observations, penalty_sampled_actions).max(0)  # (4,)
 
+delta_concat_q = concat_q.reshape(1, -1) - penalty_concat_q.reshape(-1, 1)  # (4, 4)
+penalty_loss = jnp.square(jax.nn.relu(delta_concat_q)).mean()
 
+total_loss = critic_loss + actor_loss + penalty_loss * agent.eta
