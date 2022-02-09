@@ -9,8 +9,14 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+import rlax
+from bsuite.utils import gym_wrapper
+
 from utils import Batch
 
+from tensorflow_probability.substrates import jax as tfp
+tfd = tfp.distributions
+tfb = tfp.bijectors
 
 LOG_STD_MAX = 2.
 LOG_STD_MIN = -5.
@@ -22,10 +28,17 @@ class Actor(nn.Module):
     """return (mu, action_distribution)
 
     pi_action, logp_pi, lopprobs = self.actor(obs, gt_actions=actions, with_log_mle=True)
+
+        base_dist = tfd.MultivariateNormalDiag(loc=means,
+                                               scale_diag=jnp.exp(log_stds) *
+                                               temperature)
+        if self.tanh_squash_distribution:
+            return tfd.TransformedDistribution(distribution=base_dist,
+                                               bijector=tfb.Tanh())
     """
     act_dim: int
+    action_spec
 
-    @nn.compact
     def __call__(self, observation: jnp.ndarray):
         x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc1")(observation))
         x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc2")(x))
@@ -33,15 +46,21 @@ class Actor(nn.Module):
         x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="output")(x)
 
         mu, log_std = jnp.split(x, 2, axis=-1)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std)
+        return mu, log_std
+
+    def sample_and_log_prob(self, seed, observation):
+        mu, log_std = self.__call__(observation)
+        action_distribution = rlax.squashed_gaussian(LOG_STD_MIN, LOG_STD_MAX)
+        sampled_action = action_distribution.sample(seed, mu, log_std)
+
+        # std = jnp.exp(log_std)
+        # mean_action = jnp.tanh(mu)
  
-        mean_action = jnp.tanh(mu)
-        action_distribution = distrax.Transformed(
-            distrax.MultivariateNormalDiag(mu, std),
-            distrax.Block(distrax.Tanh(), ndims=1)
-        )
-        return mean_action, action_distribution
+        # action_distribution = distrax.Transformed(
+        #     distrax.MultivariateNormalDiag(mu, std),
+        #     distrax.Block(distrax.Tanh(), ndims=1)
+        # )
+        # return mean_action, action_distribution
         # sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
         # return mean_action, sampled_action, logp
 
