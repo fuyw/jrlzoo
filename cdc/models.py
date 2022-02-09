@@ -8,15 +8,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-
-import rlax
-from bsuite.utils import gym_wrapper
-
-from utils import Batch
-
-from tensorflow_probability.substrates import jax as tfp
-tfd = tfp.distributions
-tfb = tfp.bijectors
+from utils import Batch, ReplayBuffer
 
 LOG_STD_MAX = 2.
 LOG_STD_MIN = -5.
@@ -24,57 +16,73 @@ LOG_STD_MIN = -5.
 kernel_initializer = jax.nn.initializers.glorot_uniform()
 
 
+def atanh(x: jnp.ndarray):
+    one_plus_x = jnp.clip(1 + x, a_min=1e-6)
+    one_minus_x = jnp.clip(1 - x, a_min=1e-6)
+    return 0.5 * jnp.log(one_plus_x / one_minus_x)
+
+
+class MLP(nn.Module):
+    num_layers: int
+    out_dim: int
+
+    @nn.compact
+    def __call__(self, x: jnp.ndarray):
+        for i in range(self.num_layers):
+            x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name=f"fc{i+1}")(x))
+        output = nn.Dense(self.out_dim, kernel_init=kernel_initializer, name="output")(x)
+        return output
+
+
 class Actor(nn.Module):
-    """return (mu, action_distribution)
-
-    pi_action, logp_pi, lopprobs = self.actor(obs, gt_actions=actions, with_log_mle=True)
-
-        base_dist = tfd.MultivariateNormalDiag(loc=means,
-                                               scale_diag=jnp.exp(log_stds) *
-                                               temperature)
-        if self.tanh_squash_distribution:
-            return tfd.TransformedDistribution(distribution=base_dist,
-                                               bijector=tfb.Tanh())
-    """
     act_dim: int
-    action_spec
+    hid_layers: int = 3
+    action_limit: float = 1.0
 
-    def __call__(self, observation: jnp.ndarray):
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc1")(observation))
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc2")(x))
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc3")(x))
-        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="output")(x)
+    def setup(self):
+        self.mlp = MLP(num_layers=self.hid_layers, out_dim=2*self.act_dim)
 
+    def get_logprob(self, observation, action):
+        x = self.mlp(observation)
         mu, log_std = jnp.split(x, 2, axis=-1)
-        return mu, log_std
+        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        std = jnp.exp(log_std)
 
-    def sample_and_log_prob(self, seed, observation):
-        mu, log_std = self.__call__(observation)
-        action_distribution = rlax.squashed_gaussian(LOG_STD_MIN, LOG_STD_MAX)
-        sampled_action = action_distribution.sample(seed, mu, log_std)
+        # Pre-squash distribution and sample
+        pi_distribution = distrax.Normal(mu, std)
 
-        # std = jnp.exp(log_std)
-        # mean_action = jnp.tanh(mu)
- 
-        # action_distribution = distrax.Transformed(
-        #     distrax.MultivariateNormalDiag(mu, std),
-        #     distrax.Block(distrax.Tanh(), ndims=1)
-        # )
-        # return mean_action, action_distribution
-        # sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
-        # return mean_action, sampled_action, logp
+        # Compute log_prob
+        raw_action = atanh(action)
+        log_prob = pi_distribution.log_prob(raw_action).sum(-1)
+        log_prob -= (2 * jnp.log(2) - raw_action - jax.nn.softplus(-2 * raw_action)).sum(-1)
+
+        return log_prob
+
+    def __call__(self, observation: jnp.ndarray, seed: jnp.ndarray):
+        x = self.mlp(observation)
+        mu, log_std = jnp.split(x, 2, axis=-1)
+        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        std = jnp.exp(log_std)
+
+        mean_action = jnp.tanh(mu) * self.action_limit
+
+        # Pre-squash distribution and sample
+        pi_distribution = distrax.Normal(mu, std)
+        pi_action = pi_distribution.sample(seed=seed) 
+        squashed_actions = jnp.tanh(pi_action) * self.action_limit
+        return mean_action, squashed_actions
 
 
 class Critic(nn.Module):
     hid_dim: int = 256
+    hid_layers: int = 3
 
-    @nn.compact
+    def setup(self):
+        self.mlp = MLP(num_layers=self.hid_layers, out_dim=1)
+
     def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observation, action], axis=-1)
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")(x))
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc2")(q))
-        q = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc3")(q))
-        q = nn.Dense(1, kernel_init=kernel_initializer, name="output")(q)
+        q = self.mlp(x)
         return q
 
 
@@ -129,7 +137,7 @@ class CDCAgent:
 
         # Initialize the Actor
         self.actor = Actor(act_dim)
-        actor_params = self.actor.init(actor_key, dummy_obs)["params"]
+        actor_params = self.actor.init(actor_key, dummy_obs, actor_key)["params"]
         self.actor_state = train_state.TrainState.create(
             apply_fn=Actor.apply,
             params=actor_params,
@@ -169,9 +177,9 @@ class CDCAgent:
             rng1, rng2, rng3 = jax.random.split(rng, 3)
 
             # Sample actions with Actor
-            _, pi_distribution = self.actor.apply({"params": actor_params}, observation)
-            sampled_action, _ = pi_distribution.sample_and_log_prob(seed=rng1)
-            mle_prob = pi_distribution.log_prob(action)
+            _, sampled_action = self.actor.apply({"params": actor_params}, observation, rng1)
+            mle_prob = self.actor.apply(
+                {"params": actor_params}, observation, action, method=self.actor.get_logprob)
 
             # We use frozen_params so that gradients can flow back to the actor without being
             # used to update the critic.
@@ -188,26 +196,24 @@ class CDCAgent:
             repeat_next_observations = jnp.repeat(
                 jnp.expand_dims(next_observation, axis=0),
                 repeats=self.num_samples, axis=0)
-            _, next_pi_distribution = self.actor.apply({"params": frozen_actor_params},
-                                                       repeat_next_observations)
-            sampled_next_actions = next_pi_distribution.sample(seed=rng2)
+            _, sampled_next_actions = self.actor.apply({"params": frozen_actor_params},
+                                                       repeat_next_observations, rng2)
             concat_next_q = self.critic.apply(
                 {"params": critic_target_params}, repeat_next_observations, sampled_next_actions)
             weighted_next_q = self.nu * concat_next_q.min(-1) + (1. - self.nu) * concat_next_q.max(-1)
-            next_q = jnp.squeeze(weighted_next_q.max(-1))
+            next_q = weighted_next_q.max(-1)
             target_q = reward + self.gamma * discount * next_q
-            critic_loss = jnp.square(concat_next_q - target_q).sum()
+            critic_loss = jnp.square(concat_q - target_q).sum()
 
             # Overestimation penalty loss
             repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0),
                                              repeats=self.num_samples, axis=0)
-            _, penalty_pi_distribution = self.actor.apply({"params": frozen_actor_params},
-                                                          repeat_observations)
-            penalty_sampled_actions = penalty_pi_distribution.sample(seed=rng3)
+            _, penalty_sampled_actions = self.actor.apply({"params": frozen_actor_params},
+                                                          repeat_observations, rng3)
             penalty_concat_q = self.critic.apply(
                 {"params": critic_params}, repeat_observations, penalty_sampled_actions).max(0)
 
-            delta_concat_q = concat_q.reshape(1, -1) - penalty_concat_q.reshape(-1, 1)
+            delta_concat_q = penalty_concat_q.reshape(-1, 1) - concat_q.reshape(1, -1)
             penalty_loss = jnp.square(jax.nn.relu(delta_concat_q)).mean()
 
             # logger info
@@ -219,7 +225,8 @@ class CDCAgent:
                 "target_q": target_q,
                 "critic_loss": critic_loss,
                 "actor_loss": actor_loss,
-                "penalty_loss": penalty_loss
+                "penalty_loss": penalty_loss,
+                "mle_prob": mle_prob
             }
             return total_loss, log_info
 
@@ -259,11 +266,10 @@ class CDCAgent:
     @functools.partial(jax.jit, static_argnames=("self"))
     def select_action(self, params: FrozenDict, rng: Any, observation: np.ndarray, eval_mode: bool = False) -> jnp.ndarray:
         rng, sample_rng = jax.random.split(rng)
-        mean_action, pi_distribution = self.actor.apply({"params": params}, observation[None])
-        sampled_action = pi_distribution.sample(seed=sample_rng)
-        return rng, jnp.where(eval_mode, mean_action.flatten(), sampled_action.flatten())
+        mean_action, sampled_action = self.actor.apply({"params": params}, observation, sample_rng)
+        return rng, jnp.where(eval_mode, mean_action, sampled_action)
 
-    def update(self, replay_buffer, batch_size: int = 256):
+    def update(self, replay_buffer: ReplayBuffer, batch_size: int = 256):
         self.update_step += 1
 
         # sample from the buffer

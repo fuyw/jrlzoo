@@ -27,9 +27,7 @@ def eval_policy(agent: CDCAgent,
         obs, done = eval_env.reset(), False
         while not done:
             t += 1
-            eval_rng, action = agent.select_action(agent.actor_state.params,
-                                                   agent.critic_state.params,
-                                                   eval_rng, np.array(obs), True)
+            eval_rng, action = agent.select_action(agent.actor_state.params, eval_rng, np.array(obs), True)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -73,6 +71,7 @@ def main(args):
                         filemode='w',
                         force=True)
     logger = logging.getLogger()
+    logger.info(f"Arguments:\n{vars(args)}")
 
     # Env parameters
     env = gym.make(args.env)
@@ -131,18 +130,15 @@ def main(args):
             fix_q = agent.critic.apply(
                 {"params": agent.critic_state.params}, fix_obs, fix_act)
             _, fix_a = agent.select_action(agent.actor_state.params,
-                                           agent.critic_state.params,
                                            jax.random.PRNGKey(0),
                                            fix_obs, True)
             logger.info(
                 f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
-                f"\tcritic_loss: {log_info['critic_loss']:.2f}\n"
+                f"\tcritic_loss: {log_info['critic_loss']:.2f}, penalty_loss: {log_info['penalty_loss']:.2f}\n"
                 f"\tactor_loss: {log_info['actor_loss']:.2f}, mle_prob: {log_info['mle_prob']:.2f}\n"
-                f"penalty_loss: {log_info['penalty_loss']:.2f}\n"
                 f"\tconcat_q_avg: {log_info['concat_q_avg']:.2f}, concat_q_min: {log_info['concat_q_min']:.2f}, concat_q_max: {log_info['concat_q_max']:.2f}\n"
                 f"\ttarget_q: {log_info['target_q']:.2f}, fix_q: {fix_q.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n\n"
             )
-
 
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
