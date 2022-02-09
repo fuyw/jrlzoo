@@ -280,12 +280,12 @@ class CQLAgent:
             random_density = np.log(0.5**self.act_dim)
             cql_concat_q1 = jnp.concatenate([
                 jnp.squeeze(cql_random_q1) - random_density,
-                # jnp.squeeze(cql_next_q1) - cql_logp_next_action,
+                jnp.squeeze(cql_next_q1) - cql_logp_next_action,
                 jnp.squeeze(cql_q1) - cql_logp,
             ])
             cql_concat_q2 = jnp.concatenate([
                 jnp.squeeze(cql_random_q2) - random_density,
-                # jnp.squeeze(cql_next_q2) - cql_logp_next_action,
+                jnp.squeeze(cql_next_q2) - cql_logp_next_action,
                 jnp.squeeze(cql_q2) - cql_logp,
             ])
 
