@@ -31,7 +31,9 @@ def eval_policy(agent: CDCAgent,
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
-    return avg_reward
+    d4rl_score = eval_env.get_normalized_score(avg_reward) * 100
+    return d4rl_score
+
 
 
 def get_args():
