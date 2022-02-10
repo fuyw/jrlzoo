@@ -90,3 +90,14 @@ next_observation = next_observations[0]
 
 mean_action, sampled_action = agent.actor.apply(
     {"params": agent.actor_state.params}, observations, jax.random.PRNGKey(0))
+
+
+repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0),
+                                 repeats=15, axis=0)
+rng = jax.random.PRNGKey(0)
+mean_actions, sampled_actions = agent.actor.apply({"params": actor_params},
+                                                  repeat_observations, rng)
+concat_qs = agent.critic.apply({"params": critic_params},
+                               repeat_observations, sampled_actions)
+weighted_q = concat_qs.min(-1) + concat_qs.max(-1)
+max_idx = weighted_q.argmax()

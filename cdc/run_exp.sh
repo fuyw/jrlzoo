@@ -3,10 +3,10 @@
 # python main.py --env_name halfcheetah-random-v2
 # Script to reproduce results
 envs=(
-    "halfcheetah-medium-v2"
-    "halfcheetah-medium-replay-v2"
-    "halfcheetah-medium-expert-v2"
-    "hopper-medium-v2"
+    # "halfcheetah-medium-v2"
+    # "halfcheetah-medium-replay-v2"
+    # "halfcheetah-medium-expert-v2"
+    # "hopper-medium-v2"
     "hopper-medium-replay-v2"
     "hopper-medium-expert-v2"
     "walker2d-medium-v2"
@@ -19,6 +19,7 @@ do
     do
         python main.py \
         --env $env \
-        --seed $i
+        --seed $i \
+        --cdc_sample
     done
 done

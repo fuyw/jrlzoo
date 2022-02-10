@@ -27,13 +27,15 @@ def eval_policy(agent: CDCAgent,
         obs, done = eval_env.reset(), False
         while not done:
             t += 1
-            eval_rng, action = agent.select_action(agent.actor_state.params, eval_rng, np.array(obs), True)
+            if agent.cdc_sample:
+                eval_rng, action = agent.select_action2(agent.actor_state.params, agent.critic_state.params, eval_rng, obs)
+            else:
+                eval_rng, action = agent.select_action(agent.actor_state.params, eval_rng, obs, True)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
     d4rl_score = eval_env.get_normalized_score(avg_reward) * 100
     return d4rl_score
-
 
 
 def get_args():
@@ -55,6 +57,7 @@ def get_args():
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--config_dir", default="./configs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
+    parser.add_argument("--cdc_sample", default=False, action="store_true")
     args = parser.parse_args()
     return args
 
@@ -64,6 +67,9 @@ def main(args):
     exp_name = f's{args.seed}'
     exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
+
+    if args.cdc_sample:
+        exp_name += '_sample'
 
     # Log setting
     logging.basicConfig(level=logging.INFO,
@@ -96,7 +102,9 @@ def main(args):
                      lmbda=args.lmbda,
                      num_samples=args.num_samples,
                      lr=args.lr,
-                     lr_actor=args.lr_actor)
+                     lr_actor=args.lr_actor,
+                     cdc_sample=args.cdc_sample)
+    agent.save(f"{args.model_dir}/{args.env}/step0_seed{args.seed}")
 
     logger.info(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
     logger.info(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}\n")
@@ -104,11 +112,10 @@ def main(args):
     # Replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
-    fix_obs = np.random.normal(size=(128, obs_dim))
-    fix_act = np.random.normal(size=(128, act_dim))
 
     # Evaluate the untrained policy
     logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]
+    logger.info(f"Eval reward before training: {logs[0]['reward']:.2f}")
 
     # Initialize training stats
     start_time = time.time()
@@ -129,18 +136,16 @@ def main(args):
                 "time": (time.time() - start_time) / 60
             })
             logs.append(log_info)
-            fix_q = agent.critic.apply(
-                {"params": agent.critic_state.params}, fix_obs, fix_act)
-            _, fix_a = agent.select_action(agent.actor_state.params,
-                                           jax.random.PRNGKey(0),
-                                           fix_obs, True)
             logger.info(
                 f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
                 f"\tcritic_loss: {log_info['critic_loss']:.2f}, penalty_loss: {log_info['penalty_loss']:.2f}\n"
                 f"\tactor_loss: {log_info['actor_loss']:.2f}, mle_prob: {log_info['mle_prob']:.2f}\n"
-                f"\tconcat_q_avg: {log_info['concat_q_avg']:.2f}, concat_q_min: {log_info['concat_q_min']:.2f}, concat_q_max: {log_info['concat_q_max']:.2f}\n"
-                f"\ttarget_q: {log_info['target_q']:.2f}, fix_q: {fix_q.squeeze().mean().item():.2f}, fix_a: {abs(fix_a).sum().item():.2f}\n\n"
+                f"\tconcat_q_avg: {log_info['concat_q_avg']:.2f}, concat_q_min: {log_info['concat_q_min']:.2f}\n"
+                f"\tconcat_q_max: {log_info['concat_q_max']:.2f}, target_q: {log_info['target_q']:.2f}\n"
             )
+
+            if (t+1) % (2 * args.eval_freq) == 0:
+                agent.save(f"{args.model_dir}/{args.env}/step{int((t+1)/1e4)}_seed{args.seed}")
 
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")

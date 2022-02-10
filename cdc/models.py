@@ -1,6 +1,7 @@
 from typing import Any, Optional
 import functools
 from flax import linen as nn
+from flax import serialization
 from flax.core import FrozenDict
 from flax.training import train_state
 import distrax
@@ -116,8 +117,9 @@ class CDCAgent:
                  lmbda: float = 1.0,
                  num_samples: int = 15,
                  lr: float = 7e-4,
+                 cdc_sample: bool = False,
                  lr_actor: float = 3e-4):
-
+        self.cdc_sample = cdc_sample
         self.update_step = 0
         self.tau = tau
         self.nu = nu
@@ -268,6 +270,18 @@ class CDCAgent:
         rng, sample_rng = jax.random.split(rng)
         mean_action, sampled_action = self.actor.apply({"params": params}, observation, sample_rng)
         return rng, jnp.where(eval_mode, mean_action, sampled_action)
+    
+    @functools.partial(jax.jit, static_argnames=("self"))
+    def select_action2(self, actor_params: FrozenDict, critic_params: FrozenDict, rng: Any, observation: np.ndarray) -> jnp.ndarray:
+        rng, sample_rng = jax.random.split(rng)
+        repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0),
+                                         repeats=self.num_samples, axis=0)
+        _, sampled_actions = self.actor.apply({"params": actor_params}, repeat_observations, sample_rng)
+        concat_qs = self.critic.apply({"params": critic_params}, repeat_observations, sampled_actions)
+        weighted_q = self.nu * concat_qs.min(-1) + (1 - self.nu) * concat_qs.max(-1)
+        max_idx = weighted_q.argmax()
+
+        return rng,  sampled_actions[max_idx]
 
     def update(self, replay_buffer: ReplayBuffer, batch_size: int = 256):
         self.update_step += 1
@@ -286,3 +300,31 @@ class CDCAgent:
         self.critic_target_params = self.update_target_params(params, target_params)
 
         return log_info
+
+    def save(self, filename):
+        critic_file = filename + '_critic.ckpt'
+        with open(critic_file, 'wb') as f:
+            f.write(serialization.to_bytes(self.critic_state.params))
+        actor_file = filename + '_actor.ckpt'
+        with open(actor_file, 'wb') as f:
+            f.write(serialization.to_bytes(self.actor_state.params))
+
+    def load(self, filename):
+        critic_file = filename + '_critic.ckpt'
+        with open(critic_file, 'rb') as f:
+            critic_params = serialization.from_bytes(
+                self.critic_state.params, f.read())
+        self.critic_state = train_state.TrainState.create(
+            apply_fn=Critic.apply,
+            params=critic_params,
+            tx=optax.adam(learning_rate=self.lr))
+
+        actor_file = filename + '_actor.ckpt'
+        with open(actor_file, 'rb') as f:
+            actor_params = serialization.from_bytes(
+                self.actor_state.params, f.read())
+        self.actor_state = train_state.TrainState.create(
+            apply_fn=Actor.apply,
+            params=actor_params,
+            tx=optax.adam(learning_rate=self.lr_actor)
+        )
