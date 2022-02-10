@@ -140,7 +140,7 @@ class DynamicsModel:
                  elite_num: int = 5,
                  holdout_num: int = 1000,
                  lr: float = 1e-3,
-                 weight_decay: float = 5e-5,
+                 weight_decay: float = 1e-5,
                  epochs: int = 300,
                  batch_size: int = 2048,
                  max_patience: int = 5,
@@ -168,7 +168,7 @@ class DynamicsModel:
         self.replay_buffer.convert_D4RL(d4rl.qlearning_dataset(self.env))
 
         # Initilaize the ensemble model
-        self.save_file = f"{model_dir}/{env}/s{seed}"
+        self.save_file = f"{model_dir}/{env}/s{seed}_new"
         self.elite_mask = np.eye(self.ensemble_num)[range(elite_num), :]
 
         np.random.seed(seed+10)
@@ -183,6 +183,12 @@ class DynamicsModel:
             params=model_params,
             tx=optax.adamw(learning_rate=lr, weight_decay=weight_decay))
 
+        # Normalize inputs
+        self.obs_mean = None
+        self.obs_std = None
+        self.act_mean = None
+        self.act_std = None
+
     def load(self, filename):
         with open(f"{filename}.ckpt", "rb") as f:
             model_params = serialization.from_bytes(
@@ -195,12 +201,12 @@ class DynamicsModel:
         self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
 
     def train(self):
-        inputs, targets, holdout_inputs, holdout_targets = get_training_data(
-            self.replay_buffer, self.ensemble_num, self.holdout_num)
+        (inputs, targets, holdout_inputs, holdout_targets, self.obs_mean,
+         self.obs_std, self.act_mean, self.act_std) = get_training_data(
+             self.replay_buffer, self.ensemble_num, self.holdout_num)
 
         patience = 0 
         batch_num = int(np.ceil(len(inputs) / self.batch_size))
-        print(f"Training batch = {self.batch_size} with {batch_num}")
         min_val_loss = np.inf
         optial_params = None
         res = []
@@ -286,6 +292,9 @@ class DynamicsModel:
         elite_idx = elite_models.to_py()[:self.elite_num]
         self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
         print(f'Elite mask is:\n{self.elite_mask}')
+        np.save(f"{self.save_file}_normalize_stat",
+                obs_mean=obs_mean, obs_std=obs_std,
+                act_mean=act_mean, act_std=act_std)
 
     def step(self, key, observations, actions):
         model_idx = jax.random.randint(key, shape=(actions.shape[0],), minval=0, maxval=self.elite_num)

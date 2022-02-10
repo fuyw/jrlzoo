@@ -35,7 +35,7 @@ def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="halfcheetah-medium-v2")
+    parser.add_argument("--env", default="walker2d-medium-v2")
     parser.add_argument("--seed", default=42, type=int)
     parser.add_argument("--lr_actor", default=1e-5, type=float)
     parser.add_argument("--lr", default=1e-4, type=float)
@@ -87,8 +87,8 @@ def main(args):
                        rollout_random=args.rollout_random)
 
     # Train the dynamics model
-    # agent.model.train()
-    # return
+    agent.model.train()
+    return
 
     # Load the trained dynamics model
     agent.model.load(f'{args.model_dir}/{args.env}/s0')

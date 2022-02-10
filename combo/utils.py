@@ -12,7 +12,7 @@ QBatch = collections.namedtuple(
     ["observations", "actions", "rewards", "discounts", "next_observations", "qpos", "qvel"])
 
 
-def get_training_data(replay_buffer, ensemble_num=7, holdout_num=1000):
+def get_training_data(replay_buffer, ensemble_num=7, holdout_num=50000, eps=1e-3):
     """
     inputs.shape  = (N, obs_dim+act_dim)
     targets.shape = (N, obs_dim+1) 
@@ -24,25 +24,39 @@ def get_training_data(replay_buffer, ensemble_num=7, holdout_num=1000):
     actions = replay_buffer.actions
     next_observations = replay_buffer.next_observations
     rewards = replay_buffer.rewards.reshape(-1, 1)  # reshape for correct shape
-    delta_observations = next_observations - observations
 
-    # reward shaping
-    rewards = (rewards - 0.5) * 4.0
+    # validation dataset
+    permutation = np.random.permutation(len(observations))
+    train_idx, target_idx = permutation[:-holdout_num], permutation[-holdout_num:]
+
+    # split validation set
+    train_observations = observations[train_idx]
+    train_actions = actions[train_idx]
+    train_inputs = np.concatenate([train_observations, train_actions], axis=-1)
+
+    # compute the normalize stats
+    obs_mean = train_observations.mean(0, keepdims=True)
+    obs_std = train_observations.std(0, keepdims=True) + eps
+    act_mean = train_actions.mean(0, keepdims=True)
+    act_std = train_actions.std(0, keepdims=True) + eps
+
+    # normlaize the data
+    observations = (observations - obs_mean) / obs_std
+    actions = (actions - act_mean) / act_std
+    next_observations = (next_observations - obs_mean) / obs_std
+    delta_observations = next_observations - observations
 
     # prepare for model inputs & outputs
     inputs = np.concatenate([observations, actions], axis=-1)
     targets = np.concatenate([rewards, delta_observations], axis=-1)
 
-    # validation dataset
-    permutation = np.random.permutation(inputs.shape[0])
-
     # split the dataset
-    inputs, holdout_inputs = inputs[permutation[holdout_num:]], inputs[permutation[:holdout_num]]
-    targets, holdout_targets = targets[permutation[holdout_num:]], targets[permutation[:holdout_num]]
+    inputs, holdout_inputs = inputs[train_idx], inputs[target_idx]
+    targets, holdout_targets = targets[train_idx], targets[target_idx]
     holdout_inputs = np.tile(holdout_inputs[None], [ensemble_num, 1, 1])
     holdout_targets = np.tile(holdout_targets[None], [ensemble_num, 1, 1])
 
-    return inputs, targets, holdout_inputs, holdout_targets
+    return inputs, targets, holdout_inputs, holdout_targets, obs_mean, obs_std, act_mean, act_std
 
 
 class ReplayBuffer:
