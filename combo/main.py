@@ -59,7 +59,7 @@ def get_args():
 
 
 def main(args):
-    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}_deterministic'
+    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}'
     exp_info = f'# Running experiment for: {exp_name}_{args.env_name} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 

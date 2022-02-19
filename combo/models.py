@@ -428,19 +428,21 @@ class COMBOAgent:
         # Initialize the Actor
         self.actor = Actor(self.act_dim)
         actor_params = self.actor.init(actor_key, actor_key, dummy_obs)["params"]
+        actor_optimizer = optax.chain(optax.clip(1.0), optax.adam(learning_rate=self.lr_actor))
         self.actor_state = train_state.TrainState.create(
             apply_fn=Actor.apply,
             params=actor_params,
-            tx=optax.adam(self.lr_actor))
+            tx=actor_optimizer)
 
         # Initialize the Critic
         self.critic = DoubleCritic()
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]
         self.critic_target_params = critic_params
+        critic_optimizer = optax.chain(optax.clip(1.0), optax.adam(learning_rate=self.lr))
         self.critic_state = train_state.TrainState.create(
             apply_fn=self.critic.apply,
             params=critic_params,
-            tx=optax.adam(self.lr))
+            tx=critic_optimizer)
 
         # Initialize the Dynamics Model
         self.model = DynamicsModel(env_name=env_name,
@@ -738,40 +740,5 @@ class COMBOAgent:
         log_info['model_batch_discounts'] = model_batch.discounts.sum()
         log_info['model_buffer_size'] = model_buffer.size
         log_info['model_buffer_ptr'] = model_buffer.ptr
-        self.update_step += 1
-        return log_info
-
-    def update2(self, replay_buffer, model_buffer):
-        # sample from real & model buffer
-        real_batch = replay_buffer.sample(self.real_batch_size)
-        model_batch = replay_buffer.sample(self.model_batch_size)
-
-        concat_observations = np.concatenate([real_batch.observations, model_batch.observations], axis=0)
-        concat_actions = np.concatenate([real_batch.actions, model_batch.actions], axis=0)
-        concat_rewards = np.concatenate([real_batch.rewards, model_batch.rewards], axis=0)
-        concat_discounts = np.concatenate([real_batch.discounts, model_batch.discounts], axis=0)
-        concat_next_observations = np.concatenate([real_batch.next_observations, model_batch.next_observations], axis=0)
-
-        # CQL training with COMBO
-        self.rng, key = jax.random.split(self.rng)
-        log_info, self.actor_state, self.critic_state, self.alpha_state = self.train_step(
-            concat_observations, concat_actions, concat_rewards, concat_discounts,
-            concat_next_observations, self.critic_target_params, self.actor_state,
-            self.critic_state, self.alpha_state, key
-        )
-
-        # upate target network
-        params = self.critic_state.params
-        target_params = self.critic_target_params
-        self.critic_target_params = self.update_target_params(params, target_params)
-
-        log_info['real_batch_rewards'] = real_batch.rewards.sum()
-        log_info['real_batch_actions'] = abs(real_batch.actions).reshape(-1).sum()
-        log_info['real_batch_discounts'] = real_batch.discounts.sum()
-        log_info['model_batch_rewards'] = model_batch.rewards.sum()
-        log_info['model_batch_actions'] = abs(model_batch.actions).reshape(-1).sum()
-        log_info['model_batch_discounts'] = model_batch.discounts.sum()
-        log_info['model_buffer_size'] = model_buffer.size
-
         self.update_step += 1
         return log_info
