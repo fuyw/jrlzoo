@@ -1,2 +1,3 @@
-ensemble_models*
-config
+saved_td3_buffers
+saved_dynamics_models
+logs_old

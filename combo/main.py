@@ -11,7 +11,8 @@ from tqdm import trange
 from models import COMBOAgent
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".5"
+
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".9"
 
 
 def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
@@ -35,10 +36,10 @@ def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="walker2d-medium-v2")
-    parser.add_argument("--seed", default=42, type=int)
-    parser.add_argument("--lr_actor", default=1e-5, type=float)
-    parser.add_argument("--lr", default=1e-4, type=float)
+    parser.add_argument("--env_name", default="hopper-medium-v2")
+    parser.add_argument("--seed", default=0, type=int)
+    parser.add_argument("--lr_actor", default=1e-4, type=float)
+    parser.add_argument("--lr", default=3e-4, type=float)
     parser.add_argument("--weight_decay", default=5e-5, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
     parser.add_argument("--eval_freq", default=int(5e3), type=int)
@@ -46,33 +47,34 @@ def get_args():
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
     parser.add_argument("--target_entropy", default=None, type=float)
-    parser.add_argument("--min_q_weight", default=0.5, type=float)
+    parser.add_argument("--min_q_weight", default=1.0, type=float)
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
-    parser.add_argument("--model_dir", default="./saved_models", type=str)
+    parser.add_argument("--model_dir", default="./saved_dynamics_models", type=str)
     parser.add_argument("--backup_entropy", default=False, action="store_true")
     parser.add_argument("--rollout_random", default=False, action="store_true")
+    parser.add_argument("--train_dynamics_model", default=False, action="store_true")
     args = parser.parse_args()
     return args
 
 
 def main(args):
-    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}_random{int(args.rollout_random)}'
-    exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
+    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}_deterministic'
+    exp_info = f'# Running experiment for: {exp_name}_{args.env_name} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
     # Log setting
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s - %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S',
-                        filename=f'{args.log_dir}/{args.env}/{exp_name}.log',
+                        filename=f'{args.log_dir}/{args.env_name}/{exp_name}.log',
                         filemode='w',
                         force=True)
     logger = logging.getLogger()
     logger.info(f"\nArguments:\n{vars(args)}")
 
     # Env parameters
-    env = gym.make(args.env)
+    env = gym.make(args.env_name)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
 
@@ -82,24 +84,31 @@ def main(args):
     np.random.seed(args.seed)
 
     # TD3 agent
-    agent = COMBOAgent(env=args.env, obs_dim=obs_dim, act_dim=act_dim, seed=args.seed,
-                       lr=args.lr, lr_actor=args.lr_actor, rollout_batch_size=10000,
+    horizon = 1 if 'walker2d' in args.env_name else 5
+    agent = COMBOAgent(env_name=args.env_name,
+                       obs_dim=obs_dim,
+                       act_dim=act_dim,
+                       seed=args.seed,
+                       lr=args.lr,
+                       lr_actor=args.lr_actor,
+                       horizon=horizon,
+                       rollout_batch_size=10000,
                        rollout_random=args.rollout_random)
 
     # Train the dynamics model
-    agent.model.train()
-    return
+    if args.train_dynamics_model:
+        agent.model.train()
 
     # Load the trained dynamics model
-    agent.model.load(f'{args.model_dir}/{args.env}/s0')
+    agent.model.load(f'{args.model_dir}/{args.env_name}')
 
     # Replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
-    model_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(5e5))
+    model_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(horizon*1e5))
 
     # Evaluate the untrained policy
-    logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]  # 2.382196339051178
+    logs = [{"step": 0, "reward": eval_policy(agent, args.env_name, args.seed)}]  # 2.38219
 
     # Initialize training stats
     start_time = time.time()
@@ -107,8 +116,14 @@ def main(args):
     # Train agent and evaluate policy
     for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, model_buffer)
-        if (t + 1) % args.eval_freq == 0:
-            eval_reward = eval_policy(agent, args.env, args.seed)
+        # log_info = agent.update2(replay_buffer, model_buffer)
+
+        # save some evaluate time
+        if ((t + 1) >= int(9.5e5) and
+            (t + 1) % args.eval_freq == 0) or ((t + 1) <= int(9.5e5) and
+                                               (t + 1) %
+                                               (2 * args.eval_freq) == 0):
+            eval_reward = eval_policy(agent, args.env_name, args.seed)
             log_info.update({
                 "step": t+1,
                 "reward": eval_reward,
@@ -128,6 +143,9 @@ def main(args):
 
                 f"\tcritic_loss2: {log_info['critic_loss2']:.2f}, critic_loss2_min: {log_info['critic_loss2_min']:.2f}, "
                 f"critic_loss2_max: {log_info['critic_loss2_max']:.2f}, critic_loss2_std: {log_info['critic_loss2_std']:.2f}\n"
+
+                f"\treal_critic_loss: {log_info['real_critic_loss']:.2f}, fake_critic_loss: {log_info['fake_critic_loss']:.2f}\n"
+                f"\treal_critic_loss_max: {log_info['real_critic_loss_max']:.2f}, fake_critic_loss_min: {log_info['fake_critic_loss_min']:.2f}\n"
 
                 f"\tcql1_loss: {log_info['cql1_loss']:.2f}, cql1_loss_min: {log_info['cql1_loss_min']:.2f} "
                 f"cql1_loss_max: {log_info['cql1_loss_max']:.2f}, cql1_loss_std: {log_info['cql1_loss_std']:.2f}\n"
@@ -157,12 +175,14 @@ def main(args):
                 f"real_batch_discounts: {log_info['real_batch_discounts']:.2f}\n"
                 f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, "
                 f"model_batch_actions: {log_info['model_batch_actions']:.2f}, "
-                f"model_batch_discounts: {log_info['model_batch_discounts']:.2f} "
-                f"model_buffer_size: {log_info['model_buffer_size']:.0f}\n"
+                f"model_batch_discounts: {log_info['model_batch_discounts']:.2f}\n"
+                f"\tmodel_buffer_size: {log_info['model_buffer_size']:.0f}, "
+                f"model_buffer_ptr: {log_info['model_buffer_ptr']:.0f}\n"
             )
+
     # Save logs
     log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
+    log_df.to_csv(f"{args.log_dir}/{args.env_name}/{exp_name}.csv")
     # agent.save(f"{args.model_dir}/{args.env}/combo_{args.seed}")
 
 
@@ -170,6 +190,6 @@ if __name__ == "__main__":
     args = get_args()
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
-    os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
-    os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
+    os.makedirs(f"{args.log_dir}/{args.env_name}", exist_ok=True)
+    os.makedirs(f"{args.model_dir}/{args.env_name}", exist_ok=True)
     main(args)

@@ -1,36 +1,38 @@
-import os
-import gym
-import d4rl
-import numpy as np
-import jax.numpy as jnp
-from models import DynamicsModel
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".3"
+import jax.numpy as np
+import jax.random as random
+from jax import jit
 
-env = gym.make('hopper-medium-v2')
-obs_dim = env.observation_space.shape[0]
-act_dim = env.action_space.shape[0]
-ensemble_num = 7
-model = DynamicsModel(env = 'hopper-medium-v2', ensemble_num=ensemble_num)
+a = random.normal(random.PRNGKey(1), (100, 20, 20, 3))
+b = random.normal(random.PRNGKey(2), (200, 20, 20, 3))
 
-# agent.model.train()
-model.load('ensemble_models/hopper-medium-v2/s42')
+@jit
+def matmul(a, b):
+  return np.transpose(np.matmul(np.transpose(a, axes=(1, 2, 0, 3)), np.transpose(b, axes=(1, 2, 3, 0))), axes=(2, 3, 0, 1))
+
+@jit
+def einsum(a, b):
+  return np.einsum('nxyc,mxyc->nmxy', a, b, optimize=True)
+
+np.sum(np.abs(einsum(a, b) - matmul(a, b)))
+
+%timeit einsum(a, b).block_until_ready()
+
+%timeit matmul(a, b).block_until_ready()
 
 
-observations = np.random.normal(size=(16, obs_dim))
-actions = np.random.normal(size=(16, act_dim))
+a = random.normal(random.PRNGKey(1), (7, 1, 23))
+b = random.normal(random.PRNGKey(2), (7, 23, 200))
 
-x = jnp.concatenate([observations, actions], axis=-1)  # (16, 14)
-model_mu, model_log_var = model.model.apply({"params": model.model_state.params}, x)
+@jit
+def einsum(a, b):
+    return np.einsum('ij,ijk->ik', a, b)
+%timeit einsum(a, b).block_until_ready()
+# 16 µs ± 62.5 ns per loop (mean ± std. dev. of 7 runs, 100000 loops each)
 
-#########
-# Check #
-#########
-x0 = x[0].reshape(1, -1)  # (1, 14)
-x1 = jnp.repeat(jnp.expand_dims(x[0], axis=0), repeats=7, axis=0)  # (7, 14)
 
-model_mu, model_log_var = model.model.apply({"params": model.model_state.params}, x0)
-model_mu1, model_log_var1 = model.model.apply({"params": model.model_state.params}, x1)
-print(model_mu - model_mu1)
-
-z1, z2 = model.model.apply({"params": model.model_state.params}, np.random.normal(size=(7, 14)))
+@jit
+def matmul(a, b):
+    return np.matmul(a, b).squeeze()
+%timeit matmul(a, b).block_until_ready()
+# 16.3 µs ± 70.7 ns per loop (mean ± std. dev. of 7 runs, 100000 loops each)
 

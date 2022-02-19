@@ -12,9 +12,10 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 import optax
-from static_fn import static_fns
+import time
 from tqdm import trange
-from utils import Batch, ReplayBuffer, get_training_data
+from static_fn import static_fns
+from utils import ReplayBuffer, get_training_data
 
 
 LOG_STD_MAX = 2.
@@ -116,15 +117,13 @@ class GaussianMLP(nn.Module):
         self.l1 = EnsembleDense(ensemble_num=self.ensemble_num, features=self.hid_dim, name="fc1")
         self.l2 = EnsembleDense(ensemble_num=self.ensemble_num, features=self.hid_dim, name="fc2")
         self.l3 = EnsembleDense(ensemble_num=self.ensemble_num, features=self.hid_dim, name="fc3")
-        self.l4 = EnsembleDense(ensemble_num=self.ensemble_num, features=self.hid_dim, name="fc4")
-        self.l5 = EnsembleDense(ensemble_num=self.ensemble_num, features=self.out_dim*2, name="fc5")
+        self.mean_and_logvar = EnsembleDense(ensemble_num=self.ensemble_num, features=self.out_dim*2, name="output")
 
     def __call__(self, x):
-        x = nn.swish(self.l1(x))
-        x = nn.swish(self.l2(x))
-        x = nn.swish(self.l3(x))
-        x = nn.swish(self.l4(x))
-        x = self.l5(x)
+        x = nn.leaky_relu(self.l1(x))
+        x = nn.leaky_relu(self.l2(x))
+        x = nn.leaky_relu(self.l3(x))
+        x = self.mean_and_logvar(x)
 
         mu, log_var = jnp.split(x, 2, axis=-1)
         log_var = self.max_log_var - jax.nn.softplus(self.max_log_var - log_var)
@@ -134,22 +133,23 @@ class GaussianMLP(nn.Module):
 
 class DynamicsModel:
     def __init__(self,
-                 env: str = "hopper-medium-v2",
+                 env_name: str = "hopper-medium-v2",
                  seed: int = 42,
                  ensemble_num: int = 7,
                  elite_num: int = 5,
                  holdout_num: int = 1000,
                  lr: float = 1e-3,
                  weight_decay: float = 1e-5,
-                 epochs: int = 300,
+                 epochs: int = 200,
                  batch_size: int = 2048,
-                 max_patience: int = 5,
-                 model_dir: str = "./saved_models"):
+                 max_patience: int = 10,
+                 model_dir: str = "./saved_dynamics_models"):
 
         # Model parameters
         self.seed = seed
         self.lr = lr
-        self.static_fn = static_fns[env.split('-')[0].lower()]
+        self.static_fn = static_fns[env_name.split('-')[0].lower()]
+        print(f'Load static_fn: {self.static_fn}')
         self.weight_decay = weight_decay
         self.ensemble_num = ensemble_num
         self.elite_num = elite_num
@@ -160,77 +160,80 @@ class DynamicsModel:
         self.max_patience = max_patience
 
         # Environment & ReplayBuffer
-        self.env = gym.make(env)
-        obs_dim = self.env.observation_space.shape[0]
-        act_dim = self.env.action_space.shape[0]
-        self.obs_dim = obs_dim
-        self.replay_buffer = ReplayBuffer(obs_dim, act_dim)
+        print(f'Loading data for {env_name}')
+        self.env = gym.make(env_name)
+        self.obs_dim = self.env.observation_space.shape[0]
+        self.act_dim = self.env.action_space.shape[0]
+        self.replay_buffer = ReplayBuffer(self.obs_dim, self.act_dim)
         self.replay_buffer.convert_D4RL(d4rl.qlearning_dataset(self.env))
 
-        # Initilaize the ensemble model
-        self.save_file = f"{model_dir}/{env}/s{seed}_new"
+        # Initilaize saving settings
+        self.save_file = f"{model_dir}/{env_name}"
         self.elite_mask = np.eye(self.ensemble_num)[range(elite_num), :]
 
+        # Initilaize the ensemble model
         np.random.seed(seed+10)
         rng = jax.random.PRNGKey(seed+10)
         _, model_key = jax.random.split(rng, 2)
-        self.model = GaussianMLP(ensemble_num=ensemble_num, out_dim=obs_dim+1)
-        dummy_model_inputs = jnp.ones([ensemble_num, obs_dim+act_dim], dtype=jnp.float32)
+        self.model = GaussianMLP(ensemble_num=ensemble_num, out_dim=self.obs_dim+1)
+        dummy_model_inputs = jnp.ones([ensemble_num, self.obs_dim+self.act_dim], dtype=jnp.float32)
         model_params = self.model.init(model_key, dummy_model_inputs)["params"]
 
         self.model_state = train_state.TrainState.create(
             apply_fn=self.model.apply,
             params=model_params,
-            tx=optax.adamw(learning_rate=lr, weight_decay=weight_decay))
+            tx=optax.adamw(learning_rate=self.lr, weight_decay=self.weight_decay))
 
         # Normalize inputs
         self.obs_mean = None
-        self.obs_std = None
-        self.act_mean = None
-        self.act_std = None
+        self.obs_std = None 
 
     def load(self, filename):
-        with open(f"{filename}.ckpt", "rb") as f:
+        with open(f"{filename}/dynamics_model.ckpt", "rb") as f:
             model_params = serialization.from_bytes(
                 self.model_state.params, f.read())
         self.model_state = train_state.TrainState.create(
             apply_fn=self.model.apply, params=model_params,
             tx=optax.adamw(learning_rate=self.lr,
             weight_decay=self.weight_decay))
-        elite_idx = np.loadtxt(f'{filename}_elite_models.txt', dtype=np.int32)[:self.elite_num]
-        self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
+        # elite_idx = np.loadtxt(f'{filename}/elite_models.txt', dtype=np.int32)[:self.elite_num]
+        # self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
+        normalize_stat = np.load(f'{filename}/normalize_stat.npz')
+        self.obs_mean = normalize_stat['obs_mean']
+        self.obs_std = normalize_stat['obs_std']
 
     def train(self):
         (inputs, targets, holdout_inputs, holdout_targets, self.obs_mean,
-         self.obs_std, self.act_mean, self.act_std) = get_training_data(
-             self.replay_buffer, self.ensemble_num, self.holdout_num)
-
+         self.obs_std) = get_training_data(self.replay_buffer, self.ensemble_num)
         patience = 0 
         batch_num = int(np.ceil(len(inputs) / self.batch_size))
         min_val_loss = np.inf
         optial_params = None
         res = []
+        print(f'batch_num     = {batch_num}')
+        print(f'inputs.shape  = {inputs.shape}')
+        print(f'targets.shape = {targets.shape}') 
+        print(f'holdout_inputs.shape  = {holdout_inputs.shape}')
+        print(f'holdout_targets.shape = {holdout_targets.shape}') 
 
         # Loss functions
         @jax.jit
         def loss_fn(params, x, y):
-            mu, log_var = self.model.apply({"params": params}, x)  # (1, 14)/(7, 14)  ==> (7, 256)
-            inv_var = jnp.exp(-log_var)  # (7, 12)
-            mse_loss = jnp.mean(jnp.mean(jnp.square(mu - y) * inv_var, axis=-1), axis=-1)
-            var_loss = jnp.mean(jnp.mean(log_var, axis=-1), axis=-1)
-            train_loss = mse_loss + var_loss
-            return train_loss, {"mse_loss": mse_loss, "var_loss": var_loss, "train_loss": train_loss}
+            mu, log_var = self.model.apply({"params": params}, x)  # (7, 14) ==> (7, 12)
+            inv_var = jnp.exp(-log_var)    # (7, 12)
+            mse_loss = jnp.square(mu - y)  # (7, 12)
+            train_loss = jnp.mean(mse_loss * inv_var + log_var, axis=-1).sum()
+            return train_loss, {"mse_loss": mse_loss.mean(),
+                                "var_loss": log_var.mean(),
+                                "train_loss": train_loss}
 
         @jax.jit
         def val_loss_fn(params, x, y):
-            mu, log_var = jax.lax.stop_gradient(self.model.apply({"params": params}, x))  # (7, 12), (7, 12)
-            inv_var = jnp.exp(-log_var)
-            mse_loss = jnp.mean(jnp.square(mu - y), axis=-1)
-            reward_loss = jnp.mean(jnp.square(mu[:, 0] - y[:, 0]), axis=-1) 
-            state_mse_loss = jnp.mean(jnp.mean(jnp.square(mu[:, 1:] - y[:, 1:]) * inv_var[:, 1:], axis=-1), axis=-1)
-            state_var_loss = jnp.mean(jnp.mean(log_var[:, 1:], axis=-1), axis=-1)
-            state_loss = state_mse_loss + state_var_loss
-            return mse_loss, {"reward_loss": reward_loss, "var_loss": state_var_loss, "state_loss": state_loss}
+            mu, _ = jax.lax.stop_gradient(self.model.apply({"params": params}, x))  # (7, 14) ==> (7, 12)
+            mse_loss = jnp.mean(jnp.square(mu - y), axis=-1)  # (7, 12) ==> (7,)
+            reward_loss = jnp.square(mu[:, -1] - y[:, -1]).mean()
+            state_loss = jnp.square(mu[:, :-1] - y[:, :-1]).mean()
+            return mse_loss, {"reward_loss": reward_loss, "state_loss": state_loss}
 
         # Wrap loss functions with jax.vmap
         grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
@@ -238,11 +241,11 @@ class DynamicsModel:
 
         for epoch in trange(self.epochs):
             shuffled_idxs = np.concatenate([np.random.permutation(np.arange(
-                inputs.shape[0])).reshape(1, -1) for _ in range(self.ensemble_num)], axis=0)
+                inputs.shape[0])).reshape(1, -1) for _ in range(self.ensemble_num)], axis=0)  # (7, 1000000)
             train_loss, mse_loss, var_loss = [], [], []
             for i in range(batch_num):
                 batch_idxs = shuffled_idxs[:, i*self.batch_size:(i+1)*self.batch_size]
-                batch_inputs = inputs[batch_idxs]  # (7, 256, 14)
+                batch_inputs = inputs[batch_idxs]    # (7, 256, 14)
                 batch_targets = targets[batch_idxs]  # (7, 256, 12)
 
                 (_, log_info), gradients = grad_fn(self.model_state.params, batch_inputs, batch_targets)
@@ -255,7 +258,7 @@ class DynamicsModel:
                 var_loss.append(log_info["var_loss"].item())
 
             val_loss, val_info = val_loss_fn(self.model_state.params, holdout_inputs, holdout_targets)
-            val_loss = jnp.mean(val_loss, axis=0)  # (7,)
+            val_loss = jnp.mean(val_loss, axis=0)  # (N, 7) ==> (7,)
             val_info = jax.tree_map(functools.partial(jnp.mean, axis=0), val_info)
             mean_val_loss = jnp.mean(val_loss)
             if mean_val_loss < min_val_loss:
@@ -269,32 +272,30 @@ class DynamicsModel:
                 print(f"Early stopping at epoch {epoch+1}.")
                 break
 
-            res.append((epoch, sum(train_loss)/batch_num, sum(mse_loss)/batch_num,
+            res.append((epoch, sum(train_loss)/batch_num, sum(mse_loss)/batch_num,  
                         sum(var_loss)/batch_num, mean_val_loss))
             print(f"Epoch #{epoch+1}: "
                   f"train_loss={sum(train_loss)/batch_num:.3f}\t"
                   f"mse_loss={sum(mse_loss)/batch_num:.3f}\t"
                   f"var_loss={sum(var_loss)/batch_num:.3f}\t"
                   f"val_loss={mean_val_loss:.3f}\t"
-                  f"val_rew_loss = {val_info['reward_loss']:.3f} "
-                  f"val_var_loss = {val_info['var_loss']:.3f} "
+                  f"val_rew_loss={val_info['reward_loss']:.3f}\t"
                   f"val_state_loss={val_info['state_loss']:.3f}")
 
         res_df = pd.DataFrame(res, columns=[
             "epoch", "train_loss", "mse_loss", "var_loss", "val_loss"])
         res_df.to_csv(f"{self.save_file}.csv")
-        with open(f"{self.save_file}.ckpt", "wb") as f:
+        with open(f"{self.save_file}/dynamics_model.ckpt", "wb") as f:
             f.write(serialization.to_bytes(optimal_params))
-        with open(f"{self.save_file}_elite_models.txt", "w") as f:
+        with open(f"{self.save_file}/elite_models.txt", "w") as f:
             for idx in elite_models:
                 f.write(f"{idx}\n")
 
         elite_idx = elite_models.to_py()[:self.elite_num]
         self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
         print(f'Elite mask is:\n{self.elite_mask}')
-        np.save(f"{self.save_file}_normalize_stat",
-                obs_mean=obs_mean, obs_std=obs_std,
-                act_mean=act_mean, act_std=act_std)
+        np.savez(f"{self.save_file}/normalize_stat",
+                 obs_mean=self.obs_mean, obs_std=self.obs_std)
 
     def step(self, key, observations, actions):
         model_idx = jax.random.randint(key, shape=(actions.shape[0],), minval=0, maxval=self.elite_num)
@@ -304,25 +305,62 @@ class DynamicsModel:
         def rollout(params, rng, observation, action, model_mask):
             x = jnp.concatenate([observation, action], axis=-1).reshape(1, -1)
             model_mu, model_log_var = self.model.apply({"params": params}, x)
-            model_std = jnp.sqrt(jnp.exp(model_log_var))  # (7, 12)
-            model_noise = model_std * jax.random.normal(rng, (self.ensemble_num, self.obs_dim+1))  # (7, 12)
-            reward_noise, observation_noise = jnp.split(model_noise, [1], axis=-1)     # (7, 1), (7, 11)
-            reward_mu, observation_mu = jnp.split(model_mu, [1], axis=-1)              # (7, 1), (7, 11)
-            model_next_observation = observation + jnp.sum(
-                model_mask * (observation_mu + observation_noise), axis=0)              # (1, 11)
-            model_reward = jnp.sum(model_mask * (reward_mu + reward_noise), axis=0)   # (1, 1)
+            observation_mu, reward_mu = jnp.split(model_mu, [self.obs_dim], axis=-1)
+
+            # model_std = jnp.sqrt(jnp.exp(model_log_var))  # (7, 12)
+            # model_noise = model_std * jax.random.normal(rng, (self.ensemble_num, self.obs_dim+1))  # (7, 12)
+            # observation_noise, reward_noise = jnp.split(model_noise, [self.obs_dim], axis=-1)
+
+            # model_next_observation = observation + jnp.sum(
+            #     model_mask * (observation_mu + observation_noise), axis=0)
+            # model_reward = jnp.sum(model_mask * (reward_mu + reward_noise), axis=0)
+
+            model_next_observation = observation + jnp.sum(model_mask * observation_mu, axis=0)
+            model_reward = jnp.sum(model_mask * reward_mu, axis=0)
+
             return model_next_observation, model_reward
 
         rollout = jax.vmap(rollout, in_axes=(None, 0, 0, 0, 0))
         rollout_rng = jnp.stack(jax.random.split(key, num=actions.shape[0]))
         next_observations, rewards = rollout(self.model_state.params, rollout_rng, observations, actions, model_masks)
+        next_observations = self.denormalize(next_observations)
         terminals = self.static_fn.termination_fn(observations, actions, next_observations)
         return next_observations, rewards.squeeze(), terminals.squeeze()
+
+    def step2(self, key, observations, actions):
+        @jax.jit
+        def rollout(params, observation, action):
+            x = jnp.concatenate([observation, action], axis=-1).reshape(1, -1)
+            model_mu, _ = self.model.apply({"params": params}, x)
+            observation_mu, reward_mu = jnp.split(model_mu, [self.obs_dim], axis=-1)
+            model_next_observation = observation + observation_mu 
+            return model_next_observation, reward_mu
+        rollout = jax.vmap(rollout, in_axes=(None, 0, 0))
+        next_observations, rewards = rollout(self.model_state.params, observations, actions)
+        return next_observations, rewards.squeeze()
+
+    def normalize(self, observations):
+        assert (self.obs_mean is not None) and (self.obs_std is not None)
+        new_observations = (observations - self.obs_mean) / self.obs_std
+        return new_observations
+
+    def denormalize(self, observations):
+        assert (self.obs_mean is not None) and (self.obs_std is not None)
+        new_observations = observations * self.obs_std + self.obs_mean
+        return new_observations
+
+    def load_pytorch(self):
+        model_params, mu, std = convert_to_jax_params(self.env_name)
+        self.model_state = train_state.TrainState.create(
+            apply_fn=self.model.apply,
+            params=model_params,
+            tx=optax.adamw(learning_rate=self.lr, weight_decay=self.weight_decay))
+        self.obs_mean, self.obs_std = mu, std
 
 
 class COMBOAgent:
     def __init__(self,
-                 env: str = "hopper-medium-v2",
+                 env_name: str = "hopper-medium-v2",
                  obs_dim: int = 11,
                  act_dim: int = 3,
                  seed: int = 42,
@@ -350,7 +388,8 @@ class COMBOAgent:
                  rollout_batch_size: int = 10000,
                  holdout_ratio: float = 0.1,
                  rollout_random: bool = False,
-                 model_dir: str = 'saved_models'):
+                 model_dir: str = 'saved_models',
+                 seperate: bool = False):
 
         self.update_step = 0
         self.obs_dim = obs_dim
@@ -404,7 +443,8 @@ class COMBOAgent:
             tx=optax.adam(self.lr))
 
         # Initialize the Dynamics Model
-        self.model = DynamicsModel(env=env, seed=seed,
+        self.model = DynamicsModel(env_name=env_name,
+                                   seed=seed,
                                    ensemble_num=ensemble_num,   
                                    elite_num=elite_num,
                                    model_dir=model_dir)
@@ -422,15 +462,7 @@ class COMBOAgent:
         # CQL parameters
         self.num_random = num_random
         self.with_lagrange = with_lagrange
-        self.min_q_weight = min_q_weight if not with_lagrange else 1.0
-        if self.with_lagrange:
-            self.target_action_gap = lagrange_thresh
-            self.rng, cql_key = jax.random.split(self.rng, 2)
-            self.log_cql_alpha = Scalar(0.0)  # 1.0
-            self.cql_alpha_state = train_state.TrainState.create(
-                apply_fn=None,
-                params=self.log_cql_alpha.init(cql_key)["params"],
-                tx=optax.adam(self.lr_actor))
+        self.min_q_weight = min_q_weight
 
         # replay buffer
         self.batch_size = batch_size
@@ -438,9 +470,8 @@ class COMBOAgent:
         self.real_batch_size = int(real_ratio * batch_size)
         self.model_batch_size = batch_size - self.real_batch_size
         self.masks = np.concatenate([np.ones(self.real_batch_size), np.zeros(self.model_batch_size)])
-
-        # vmap select_action
-        # self.select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
+        self.real_batch_ratio = self.batch_size / self.real_batch_size
+        self.model_batch_ratio = self.batch_size / self.model_batch_size
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
@@ -504,24 +535,23 @@ class COMBOAgent:
             critic_loss2 = 0.5 * (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
 
-
             # COMBO CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
             cql_random_actions = jax.random.uniform(
-                rng3, shape=(self.num_random, self.act_dim), minval=-1.0, maxval=1.0)
+                rng3, shape=(self.num_random, self.act_dim), minval=-1.0, maxval=1.0)  # (10, 3)
 
             # repeat next observations
             repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0),
-                                             repeats=self.num_random, axis=0)
+                                             repeats=self.num_random, axis=0)          # (10, 11)
 
             # sample actions with actor
             _, cql_sampled_actions, cql_logp = self.actor.apply(
-                {"params": frozen_actor_params}, rng3, repeat_observations)
+                {"params": frozen_actor_params}, rng3, repeat_observations)            # (10, 3),  (10,)
 
             # random q values
             cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params},
                                                              repeat_observations,
-                                                             cql_random_actions)
+                                                             cql_random_actions)       # (10, 1), (10, 1)
 
             # cql q values
             cql_q1, cql_q2 = self.critic.apply({"params": critic_params},
@@ -542,10 +572,8 @@ class COMBOAgent:
             ood_q2 = jax.scipy.special.logsumexp(cql_concat_q2)
 
             # compute logsumexp loss w.r.t model_states 
-            # cql1_loss = (ood_q1*(1-mask) - q1*mask) * self.min_q_weight / self.real_ratio
-            # cql2_loss = (ood_q2*(1-mask) - q2*mask) * self.min_q_weight / self.real_ratio
-            cql1_loss = (ood_q1 - q1*mask/self.real_ratio) * self.min_q_weight 
-            cql2_loss = (ood_q2 - q2*mask/self.real_ratio) * self.min_q_weight
+            cql1_loss = (ood_q1*(1-mask)*self.model_batch_ratio - q1*self.real_batch_ratio) * self.min_q_weight
+            cql2_loss = (ood_q2*(1-mask)*self.model_batch_ratio - q2*self.real_batch_ratio) * self.min_q_weight
 
             total_loss = alpha_loss + actor_loss + critic_loss + cql1_loss + cql2_loss
             log_info = {
@@ -615,6 +643,10 @@ class COMBOAgent:
             'critic_loss2_min': log_info['critic_loss2'].min(),
             'critic_loss2_max': log_info['critic_loss2'].max(),
             'critic_loss2_std': log_info['critic_loss2'].std(),
+            'real_critic_loss': log_info['critic_loss'][:self.real_batch_size].mean(),
+            'fake_critic_loss': log_info['critic_loss'][self.real_batch_size:].mean(),
+            'real_critic_loss_max': log_info['critic_loss'][:self.real_batch_size].max(),
+            'fake_critic_loss_min': log_info['critic_loss'][self.real_batch_size:].min(),
             'cql1_loss_min': log_info['cql1_loss'].min(),
             'cql1_loss_max': log_info['cql1_loss'].max(),
             'cql1_loss_std': log_info['cql1_loss'].std(),
@@ -651,7 +683,7 @@ class COMBOAgent:
     def update(self, replay_buffer, model_buffer):
         select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
         if self.update_step % 1000 == 0:
-            observations = replay_buffer.sample(self.rollout_batch_size).observations  # (10000, 11)
+            observations = replay_buffer.sample(self.rollout_batch_size).observations
             sample_rng = jnp.stack(jax.random.split(self.rollout_rng, num=self.rollout_batch_size))
             for t in range(self.horizon):
                 self.rollout_rng, rollout_key = jax.random.split(self.rollout_rng, 2)
@@ -659,16 +691,19 @@ class COMBOAgent:
                     actions = np.random.uniform(low=-1.0, high=1.0, size=(len(observations), self.act_dim))
                 else:
                     sample_rng, actions = select_action(self.actor_state.params, sample_rng, observations, False)
-                next_observations, rewards, dones = self.model.step(rollout_key, observations, actions)
+                
+                # normalize states and actions
+                normalized_observations = self.model.normalize(observations)
+                next_observations, rewards, dones = self.model.step(rollout_key, normalized_observations, actions)
                 nonterminal_mask = ~dones
-                if nonterminal_mask.sum() == 0:
-                    print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
-                    break
                 model_buffer.add_batch(observations,
                                        actions,
                                        next_observations,
                                        rewards,
                                        dones)
+                if nonterminal_mask.sum() == 0:
+                    print(f'[ Model Rollout ] Breaking early {nonterminal_mask.shape}')
+                    break
                 observations = next_observations[nonterminal_mask]
                 sample_rng = sample_rng[nonterminal_mask]
 
@@ -702,34 +737,41 @@ class COMBOAgent:
         log_info['model_batch_actions'] = abs(model_batch.actions).reshape(-1).sum()
         log_info['model_batch_discounts'] = model_batch.discounts.sum()
         log_info['model_buffer_size'] = model_buffer.size
-
+        log_info['model_buffer_ptr'] = model_buffer.ptr
         self.update_step += 1
         return log_info
 
-    # def save(self, filename):
-    #     critic_file = filename + '_critic.ckpt'
-    #     with open(critic_file, 'wb') as f:
-    #         f.write(serialization.to_bytes(self.critic_state.params))
-    #     actor_file = filename + '_actor.ckpt'
-    #     with open(actor_file, 'wb') as f:
-    #         f.write(serialization.to_bytes(self.actor_state.params))
+    def update2(self, replay_buffer, model_buffer):
+        # sample from real & model buffer
+        real_batch = replay_buffer.sample(self.real_batch_size)
+        model_batch = replay_buffer.sample(self.model_batch_size)
 
-    # def load(self, filename):
-    #     critic_file = filename + '_critic.ckpt'
-    #     with open(critic_file, 'rb') as f:
-    #         critic_params = serialization.from_bytes(
-    #             self.critic_state.params, f.read())
-    #     self.critic_state = train_state.TrainState.create(
-    #         apply_fn=Critic.apply,
-    #         params=critic_params,
-    #         tx=optax.adam(learning_rate=self.learning_rate))
+        concat_observations = np.concatenate([real_batch.observations, model_batch.observations], axis=0)
+        concat_actions = np.concatenate([real_batch.actions, model_batch.actions], axis=0)
+        concat_rewards = np.concatenate([real_batch.rewards, model_batch.rewards], axis=0)
+        concat_discounts = np.concatenate([real_batch.discounts, model_batch.discounts], axis=0)
+        concat_next_observations = np.concatenate([real_batch.next_observations, model_batch.next_observations], axis=0)
 
-    #     actor_file = filename + '_actor.ckpt'
-    #     with open(actor_file, 'rb') as f:
-    #         actor_params = serialization.from_bytes(
-    #             self.actor_state.params, f.read())
-    #     self.actor_state = train_state.TrainState.create(
-    #         apply_fn=Actor.apply,
-    #         params=actor_params,
-    #         tx=optax.adam(learning_rate=self.learning_rate)
-    #     )
+        # CQL training with COMBO
+        self.rng, key = jax.random.split(self.rng)
+        log_info, self.actor_state, self.critic_state, self.alpha_state = self.train_step(
+            concat_observations, concat_actions, concat_rewards, concat_discounts,
+            concat_next_observations, self.critic_target_params, self.actor_state,
+            self.critic_state, self.alpha_state, key
+        )
+
+        # upate target network
+        params = self.critic_state.params
+        target_params = self.critic_target_params
+        self.critic_target_params = self.update_target_params(params, target_params)
+
+        log_info['real_batch_rewards'] = real_batch.rewards.sum()
+        log_info['real_batch_actions'] = abs(real_batch.actions).reshape(-1).sum()
+        log_info['real_batch_discounts'] = real_batch.discounts.sum()
+        log_info['model_batch_rewards'] = model_batch.rewards.sum()
+        log_info['model_batch_actions'] = abs(model_batch.actions).reshape(-1).sum()
+        log_info['model_batch_discounts'] = model_batch.discounts.sum()
+        log_info['model_buffer_size'] = model_buffer.size
+
+        self.update_step += 1
+        return log_info

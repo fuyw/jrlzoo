@@ -1,5 +1,0 @@
-FC(output_dim=200, input_dim=23, activation='swish', weight_decay=2.5e-05, ensemble_size=7)
-FC(output_dim=200, input_dim=200, activation='swish', weight_decay=5e-05, ensemble_size=7)
-FC(output_dim=200, input_dim=200, activation='swish', weight_decay=7.5e-05, ensemble_size=7)
-FC(output_dim=200, input_dim=200, activation='swish', weight_decay=7.5e-05, ensemble_size=7)
-FC(output_dim=18, input_dim=200, activation=None, weight_decay=0.0001, ensemble_size=7)

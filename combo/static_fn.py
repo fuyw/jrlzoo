@@ -53,4 +53,3 @@ class Walker2dFns:
 static_fns = {'halfcheetah': HalfcheetahFns,
               'hopper': HopperFns,
               'walker2d': Walker2dFns}
-

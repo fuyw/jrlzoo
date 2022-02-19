@@ -37,12 +37,9 @@ def get_training_data(replay_buffer, ensemble_num=7, holdout_num=50000, eps=1e-3
     # compute the normalize stats
     obs_mean = train_observations.mean(0, keepdims=True)
     obs_std = train_observations.std(0, keepdims=True) + eps
-    act_mean = train_actions.mean(0, keepdims=True)
-    act_std = train_actions.std(0, keepdims=True) + eps
 
     # normlaize the data
     observations = (observations - obs_mean) / obs_std
-    actions = (actions - act_mean) / act_std
     next_observations = (next_observations - obs_mean) / obs_std
     delta_observations = next_observations - observations
 
@@ -56,7 +53,7 @@ def get_training_data(replay_buffer, ensemble_num=7, holdout_num=50000, eps=1e-3
     holdout_inputs = np.tile(holdout_inputs[None], [ensemble_num, 1, 1])
     holdout_targets = np.tile(holdout_targets[None], [ensemble_num, 1, 1])
 
-    return inputs, targets, holdout_inputs, holdout_targets, obs_mean, obs_std, act_mean, act_std
+    return inputs, targets, holdout_inputs, holdout_targets, obs_mean, obs_std
 
 
 class ReplayBuffer:
@@ -109,7 +106,7 @@ class ReplayBuffer:
         self.rewards = dataset["rewards"]
         self.discounts = 1. - dataset["terminals"]
         self.size = self.observations.shape[0]
-        self.rewards = (self.rewards - 0.5) * 4.0
+        # self.rewards = (self.rewards - 0.5) * 4.0
     
     def convert_D4RL2(self, dataset):
         self.observations = dataset["observations"]
@@ -189,34 +186,3 @@ class InfoBuffer:
         self.qpos = dataset['qpos']
         self.qvel = dataset['qvel']
         self.size = len(self.actions)
-
-
-def check_replay_buffer():
-    import gym
-    task = 'Hopper'
-    env = gym.make(f'{task}-v2')
-    obs_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.shape[0]
-    env_state = env.sim.get_state()
-    qpos_dim = len(env_state.qpos)
-    qvel_dim = len(env_state.qvel)
-    replay_buffer = InfoBuffer(obs_dim, act_dim, qpos_dim, qvel_dim)
-    replay_buffer.load(f'saved_buffers/{task}-v2/s0.npz')
-
-    L = replay_buffer.size
-    _ = env.reset()
-    env_state = env.sim.get_state()
-    error_lst = []
-    for i in trange(100):
-        env_state.qpos[:] = replay_buffer.qpos[i]
-        env_state.qvel[:] = replay_buffer.qvel[i]
-        env.sim.set_state(env_state)
-        act = replay_buffer.actions[i]
-        next_obs, reward, done, _ = env.step(act)
-        obs_error = abs(replay_buffer.next_observations[i] - next_obs).sum()
-        rew_error = abs(replay_buffer.rewards[i] - reward)
-        print((i, obs_error, rew_error))
-        # if np.allclose(replay_buffer.next_observations[i], next_obs) and np.allclose(replay_buffer.rewards[i], reward):
-        #     pass
-        # else:
-        #     error_lst.append(i)

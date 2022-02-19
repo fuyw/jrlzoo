@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 import functools
 from flax import linen as nn
 from flax import serialization
@@ -55,7 +55,8 @@ class Actor(nn.Module):
         # Compute log_prob
         raw_action = atanh(action)
         log_prob = pi_distribution.log_prob(raw_action).sum(-1)
-        log_prob -= (2 * jnp.log(2) - raw_action - jax.nn.softplus(-2 * raw_action)).sum(-1)
+        # log_prob -= (2 * jnp.log(2) - raw_action - jax.nn.softplus(-2 * raw_action)).sum(-1)
+        log_prob -= (2 * jnp.log(2) - action - jax.nn.softplus(-2 * action)).sum(-1)
 
         return log_prob
 
@@ -117,9 +118,9 @@ class CDCAgent:
                  lmbda: float = 1.0,
                  num_samples: int = 15,
                  lr: float = 7e-4,
-                 cdc_sample: bool = False,
-                 lr_actor: float = 3e-4):
-        self.cdc_sample = cdc_sample
+                 lr_actor: float = 3e-4,
+                 select_action_cql: bool = False):
+
         self.update_step = 0
         self.tau = tau
         self.nu = nu
@@ -129,6 +130,7 @@ class CDCAgent:
         self.lmbda = lmbda
         self.lr = lr
         self.lr_actor = lr_actor
+        self.select_action_cql = select_action_cql
 
         self.rng = jax.random.PRNGKey(seed)
         self.rng, actor_key, critic_key = jax.random.split(self.rng, 3)
@@ -266,13 +268,17 @@ class CDCAgent:
         return updated_params
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def select_action(self, params: FrozenDict, rng: Any, observation: np.ndarray, eval_mode: bool = False) -> jnp.ndarray:
+    def select_action_cql(self, params: FrozenDict, rng: Any, observation: np.ndarray, eval_mode: bool = False) -> jnp.ndarray:
+        """Selecting actions in a CQL-like way
+        """
         rng, sample_rng = jax.random.split(rng)
         mean_action, sampled_action = self.actor.apply({"params": params}, observation, sample_rng)
         return rng, jnp.where(eval_mode, mean_action, sampled_action)
     
     @functools.partial(jax.jit, static_argnames=("self"))
-    def select_action2(self, actor_params: FrozenDict, critic_params: FrozenDict, rng: Any, observation: np.ndarray) -> jnp.ndarray:
+    def select_action_cdc(self, actor_params: FrozenDict, critic_params: FrozenDict, rng: Any, observation: np.ndarray) -> jnp.ndarray:
+        """Selecting actions with samples
+        """
         rng, sample_rng = jax.random.split(rng)
         repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0),
                                          repeats=self.num_samples, axis=0)
@@ -280,8 +286,7 @@ class CDCAgent:
         concat_qs = self.critic.apply({"params": critic_params}, repeat_observations, sampled_actions)
         weighted_q = self.nu * concat_qs.min(-1) + (1 - self.nu) * concat_qs.max(-1)
         max_idx = weighted_q.argmax()
-
-        return rng,  sampled_actions[max_idx]
+        return rng, sampled_actions[max_idx]
 
     def update(self, replay_buffer: ReplayBuffer, batch_size: int = 256):
         self.update_step += 1

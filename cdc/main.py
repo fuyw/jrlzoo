@@ -11,7 +11,7 @@ from tqdm import trange
 from models import CDCAgent
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".25"
 
 
 def eval_policy(agent: CDCAgent,
@@ -27,10 +27,10 @@ def eval_policy(agent: CDCAgent,
         obs, done = eval_env.reset(), False
         while not done:
             t += 1
-            if agent.cdc_sample:
-                eval_rng, action = agent.select_action2(agent.actor_state.params, agent.critic_state.params, eval_rng, obs)
+            if agent.select_action_cql:
+                eval_rng, action = agent.select_action_cql(agent.actor_state.params, eval_rng, obs, True)
             else:
-                eval_rng, action = agent.select_action(agent.actor_state.params, eval_rng, obs, True)
+                eval_rng, action = agent.select_action_cdc(agent.actor_state.params, agent.critic_state.params, eval_rng, obs)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -41,7 +41,7 @@ def eval_policy(agent: CDCAgent,
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="halfcheetah-medium-v2")
+    parser.add_argument("--env", default="hopper-medium-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--lr", default=7e-4, type=float)
     parser.add_argument("--lr_actor", default=3e-4, type=float)
@@ -57,7 +57,7 @@ def get_args():
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--config_dir", default="./configs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
-    parser.add_argument("--cdc_sample", default=False, action="store_true")
+    parser.add_argument("--select_action_cql", default=False, action="store_true")
     args = parser.parse_args()
     return args
 
@@ -67,9 +67,6 @@ def main(args):
     exp_name = f's{args.seed}'
     exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
-
-    if args.cdc_sample:
-        exp_name += '_sample'
 
     # Log setting
     logging.basicConfig(level=logging.INFO,
@@ -103,8 +100,8 @@ def main(args):
                      num_samples=args.num_samples,
                      lr=args.lr,
                      lr_actor=args.lr_actor,
-                     cdc_sample=args.cdc_sample)
-    agent.save(f"{args.model_dir}/{args.env}/step0_seed{args.seed}")
+                     select_action_cql=args.select_action_cql)
+    agent.save(f"{args.model_dir}/{args.env}/{exp_name}_step0")
 
     logger.info(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
     logger.info(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}\n")
@@ -145,7 +142,7 @@ def main(args):
             )
 
             if (t+1) % (2 * args.eval_freq) == 0:
-                agent.save(f"{args.model_dir}/{args.env}/step{int((t+1)/1e4)}_seed{args.seed}")
+                agent.save(f"{args.model_dir}/{args.env}/{exp_name}_step{int((t+1)/1e4)}")
 
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
