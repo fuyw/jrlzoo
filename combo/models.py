@@ -26,6 +26,7 @@ kernel_initializer = jax.nn.initializers.glorot_uniform()
 
 class Actor(nn.Module):
     act_dim: int
+    action_limit: float = 1.0
 
     @nn.compact
     def __call__(self, rng: Any, observation: jnp.ndarray):
@@ -36,14 +37,19 @@ class Actor(nn.Module):
 
         mu, log_std = jnp.split(x, 2, axis=-1)
         log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std)
- 
-        mean_action = jnp.tanh(mu)
-        action_distribution = distrax.Transformed(
-            distrax.MultivariateNormalDiag(mu, std),
-            distrax.Block(distrax.Tanh(), ndims=1)
-        )
-        sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
+        std = jnp.exp(log_std) 
+        mean_action = jnp.tanh(mu) * self.action_limit
+
+        # Pre-squash distribution and sample
+        pi_distribution = distrax.Normal(mu, std)
+        pi_action, logp = pi_distribution.sample_and_log_prob(seed=rng)
+
+        # log probability
+        logp = logp.sum(-1)
+        logp -= (2*(jnp.log(2) - pi_action - jax.nn.softplus(-2*pi_action))).sum(-1)
+
+        # Squashed actions
+        sampled_action = jnp.tanh(pi_action) * self.action_limit
         return mean_action, sampled_action, logp
 
 
@@ -458,7 +464,7 @@ class COMBOAgent:
             self.alpha_state = train_state.TrainState.create(
                 apply_fn=None,
                 params=self.log_alpha.init(alpha_key)["params"],
-                tx=optax.adam(self.lr)
+                tx=optax.chain(optax.clip(1.0), optax.adam(self.lr))
             )
 
         # CQL parameters
@@ -471,9 +477,19 @@ class COMBOAgent:
         self.rollout_batch_size = rollout_batch_size
         self.real_batch_size = int(real_ratio * batch_size)
         self.model_batch_size = batch_size - self.real_batch_size
-        self.masks = np.concatenate([np.ones(self.real_batch_size), np.zeros(self.model_batch_size)])
+
+        # cql loss masks
         self.real_batch_ratio = self.batch_size / self.real_batch_size
         self.model_batch_ratio = self.batch_size / self.model_batch_size
+        if 'hopper' in env_name:
+            self.masks_real = self.real_batch_ratio * np.concatenate([np.ones(self.real_batch_size),
+                                                                      np.zeros(self.model_batch_size)])
+            self.masks_model = self.model_batch_ratio * np.concatenate([np.zeros(self.real_batch_size),
+                                                                        np.ones(self.model_batch_size)])
+        else:
+            self.masks_real = self.real_batch_ratio * np.concatenate([np.ones(self.real_batch_size),
+                                                                      np.zeros(self.model_batch_size)])
+            self.masks_model = np.ones(self.batch_size)
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
@@ -500,7 +516,8 @@ class COMBOAgent:
                     reward: jnp.ndarray,
                     discount: jnp.ndarray,
                     next_observation: jnp.ndarray,
-                    mask: jnp.ndarray,
+                    mask_real: jnp.ndarray,
+                    mask_model: jnp.ndarray,
                     rng: jnp.ndarray):
             """compute loss for a single transition"""
             rng, rng1, rng2 = jax.random.split(rng, 3)
@@ -574,8 +591,8 @@ class COMBOAgent:
             ood_q2 = jax.scipy.special.logsumexp(cql_concat_q2)
 
             # compute logsumexp loss w.r.t model_states 
-            cql1_loss = (ood_q1*(1-mask)*self.model_batch_ratio - q1*self.real_batch_ratio) * self.min_q_weight
-            cql2_loss = (ood_q2*(1-mask)*self.model_batch_ratio - q2*self.real_batch_ratio) * self.min_q_weight
+            cql1_loss = (ood_q1*mask_model - q1*mask_real) * self.min_q_weight
+            cql2_loss = (ood_q2*mask_model - q2*mask_real) * self.min_q_weight
 
             total_loss = alpha_loss + actor_loss + critic_loss + cql1_loss + cql2_loss
             log_info = {
@@ -598,6 +615,7 @@ class COMBOAgent:
                 "random_q2": cql_random_q2.mean(),
                 "alpha": alpha,
                 "logp": logp,
+                "min_q_weight": self.min_q_weight,
                 "logp_next_action": logp_next_action
             }
 
@@ -605,7 +623,7 @@ class COMBOAgent:
 
         grad_fn = jax.vmap(
             jax.value_and_grad(loss_fn, argnums=(0, 1, 2), has_aux=True),
-            in_axes=(None, None, None, 0, 0, 0, 0, 0, 0, 0))
+            in_axes=(None, None, None, 0, 0, 0, 0, 0, 0, 0, 0))
         rng = jnp.stack(jax.random.split(key, num=actions.shape[0]))
 
         (_, log_info), gradients = grad_fn(actor_state.params,
@@ -616,7 +634,8 @@ class COMBOAgent:
                                            rewards,
                                            discounts,
                                            next_observations,
-                                           self.masks,
+                                           self.masks_real,
+                                           self.masks_model,
                                            rng)
 
         gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
@@ -742,3 +761,9 @@ class COMBOAgent:
         log_info['model_buffer_ptr'] = model_buffer.ptr
         self.update_step += 1
         return log_info
+
+    def save(self, save_dir):
+        with open(f"{save_dir}/actor.ckpt", "wb") as f:
+            f.write(serialization.to_bytes(self.actor_state.params))
+        with open(f"{save_dir}/critic.ckpt", "wb") as f:
+            f.write(serialization.to_bytes(self.critic_state.params))

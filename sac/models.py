@@ -18,6 +18,37 @@ LOG_STD_MIN = -10.
 kernel_initializer = jax.nn.initializers.glorot_uniform()
 
 
+class Actor2(nn.Module):
+    act_dim: int
+    action_limit: float = 1.0
+
+    @nn.compact
+    def __call__(self, rng: Any, observation: jnp.ndarray):
+        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc1")(observation))
+        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc2")(x))
+        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="fc3")(x)
+
+        mu, log_std = jnp.split(x, 2, axis=-1)
+        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        std = jnp.exp(log_std)
+ 
+        mean_action = jnp.tanh(mu) * self.action_limit
+
+        # Pre-squash distribution and sample
+        pi_distribution = distrax.Normal(mu, std)
+        pi_action, logp = pi_distribution.sample_and_log_prob(seed=rng)
+
+        # log probability
+        logp = logp.sum(-1)
+        logp -= (2*(jnp.log(2) - pi_action - jax.nn.softplus(-2*pi_action))).sum(-1)
+
+        # Squashed actions
+        sampled_action = jnp.tanh(pi_action) * self.action_limit
+
+        return mean_action, sampled_action, logp
+
+
+
 class Actor(nn.Module):
     act_dim: int
 
@@ -186,7 +217,7 @@ class SACAgent:
 
             # Loss weight form Dopamine
             total_loss = 0.5 * critic_loss + actor_loss + alpha_loss
-            log_info = {"q1": q1, "q2": q2, "critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss, "alpha": alpha}
+            log_info = {"q1": q1, "q2": q2, "critic_loss": critic_loss, "actor_loss": actor_loss, "alpha_loss": alpha_loss, "alpha": alpha, "logp": logp}
 
             return total_loss, log_info
 

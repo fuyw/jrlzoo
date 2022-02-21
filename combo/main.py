@@ -33,6 +33,21 @@ def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int 
     return d4rl_score
 
 
+conf_dict = {
+    "walker2d-medium-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 1, "rollout_random": False},
+    "walker2d-medium-replay-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 0.5, "horizon": 1, "rollout_random": False},
+    "walker2d-medium-expert-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 1, "rollout_random": False},
+
+    "hopper-medium-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 3.0, "horizon": 5, "rollout_random": False},
+    "hopper-medium-replay-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": False},
+    "hopper-medium-expert-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 3.0, "horizon": 5, "rollout_random": False},  # 3
+
+    "halfcheetah-medium-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 0.5, "horizon": 5, "rollout_random": False},
+    "halfcheetah-medium-replay-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 0.5, "horizon": 5, "rollout_random": False},
+    "halfcheetah-medium-expert-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 3.0, "horizon": 5, "rollout_random": False},
+}
+
+
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
@@ -40,14 +55,15 @@ def get_args():
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--lr_actor", default=1e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
+    parser.add_argument("--min_q_weight", default=5.0, type=float)
     parser.add_argument("--weight_decay", default=5e-5, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
     parser.add_argument("--eval_freq", default=int(5e3), type=int)
+    parser.add_argument("--horizon", default=1, type=int)
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
     parser.add_argument("--target_entropy", default=None, type=float)
-    parser.add_argument("--min_q_weight", default=1.0, type=float)
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_dynamics_models", type=str)
@@ -84,15 +100,15 @@ def main(args):
     np.random.seed(args.seed)
 
     # TD3 agent
-    horizon = 1 if 'walker2d' in args.env_name else 5
     agent = COMBOAgent(env_name=args.env_name,
                        obs_dim=obs_dim,
                        act_dim=act_dim,
                        seed=args.seed,
                        lr=args.lr,
                        lr_actor=args.lr_actor,
-                       horizon=horizon,
+                       horizon=args.horizon,
                        rollout_batch_size=10000,
+                       min_q_weight=args.min_q_weight,
                        rollout_random=args.rollout_random)
 
     # Train the dynamics model
@@ -105,7 +121,7 @@ def main(args):
     # Replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
-    model_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(horizon*1e5))
+    model_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(args.horizon*1e5))
 
     # Evaluate the untrained policy
     logs = [{"step": 0, "reward": eval_policy(agent, args.env_name, args.seed)}]  # 2.38219
@@ -178,6 +194,7 @@ def main(args):
                 f"model_batch_discounts: {log_info['model_batch_discounts']:.2f}\n"
                 f"\tmodel_buffer_size: {log_info['model_buffer_size']:.0f}, "
                 f"model_buffer_ptr: {log_info['model_buffer_ptr']:.0f}\n"
+                f"\tmin_q_weight: {log_info['min_q_weight']:.1f}\n"
             )
 
     # Save logs
@@ -192,4 +209,11 @@ if __name__ == "__main__":
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(f"{args.log_dir}/{args.env_name}", exist_ok=True)
     os.makedirs(f"{args.model_dir}/{args.env_name}", exist_ok=True)
+
+    # set parameters according to envs
+    args.lr_actor = conf_dict[args.env_name]["lr_actor"]
+    args.lr = conf_dict[args.env_name]["lr"]
+    args.min_q_weight = conf_dict[args.env_name]["min_q_weight"]
+    args.horizon = conf_dict[args.env_name]["horizon"]
+    args.rollout_random = conf_dict[args.env_name]["rollout_random"]
     main(args)
