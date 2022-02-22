@@ -67,7 +67,7 @@ def main(args):
 
     # Collect trajectories
     replay_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(1e6))
-    traj_len = 50000
+    traj_len = 100000
     for step in tqdm(agent_dict.keys(), desc='[Collect trajectories]'):
         agent = agent_dict[step]
         t = 0
@@ -76,7 +76,7 @@ def main(args):
             obs, done = env.reset(), False
             while (not done) and flag:
                 t += 1
-                if np.random.random() < 0.1:
+                if np.random.random() < 0.3:
                     action = env.action_space.sample()
                 else:
                     action = agent.select_action(agent.actor_state.params, np.array(obs))
@@ -94,6 +94,6 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args()
-    for env in ['Walker2d-v2', 'HalfCheetah-v2']:
+    for env in ['Hopper-v2', 'Walker2d-v2', 'HalfCheetah-v2']:
         args.env = env
         main(args)

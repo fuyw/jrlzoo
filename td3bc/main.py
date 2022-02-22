@@ -9,7 +9,7 @@ from tqdm import trange
 from models import TD3, TD3_BC
 from utils import ReplayBuffer
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".25"
 
 
 def eval_policy(agent: TD3_BC,
@@ -39,7 +39,7 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--algo", default="td3bc")
-    parser.add_argument("--env", default="halfcheetah-medium-v2")
+    parser.add_argument("--env", default="hopper-medium-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)
@@ -53,7 +53,7 @@ def get_args():
     parser.add_argument("--policy_noise", default=0.2, type=float)
     parser.add_argument("--noise_clip", default=0.5, type=float)
     parser.add_argument("--policy_freq", default=2, type=int)
-    parser.add_argument("--log_dir", default="./logs", type=str)
+    parser.add_argument("--log_dir", default="./new_logs", type=str)
     parser.add_argument("--model_dir", default="./saved_models", type=str)
     args = parser.parse_args()
     return args
@@ -115,33 +115,34 @@ def main(args):
     for t in trange(args.max_timesteps):
         log_info = agent.train(replay_buffer, args.batch_size)
 
-        if (t + 1) % args.eval_freq == 0:
-            eval_reward = eval_policy(agent, args.env, args.seed, mean, std)
-            log_info.update({
-                "step": t+1,
-                "reward": eval_reward,
-                "time": (time.time() - start_time) / 60
-            })
-            logs.append(log_info)
-            if "actor_loss" in log_info:
-                print(
-                    f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
-                    f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f} ",
-                    f"actor_loss: {log_info['actor_loss']:.3f}, "
-                    f"bc_loss: {log_info['bc_loss']:.3f}")
-            else:
-                print(
-                    f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
-                    f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}")
+        # if (t + 1) % args.eval_freq == 0:
+        #     eval_reward = eval_policy(agent, args.env, args.seed, mean, std)
+        #     log_info.update({
+        #         "step": t+1,
+        #         "reward": eval_reward,
+        #         "time": (time.time() - start_time) / 60
+        #     })
+        #     logs.append(log_info)
+        #     if "actor_loss" in log_info:
+        #         print(
+        #             f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
+        #             f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f} ",
+        #             f"actor_loss: {log_info['actor_loss']:.3f}, "
+        #             f"bc_loss: {log_info['bc_loss']:.3f}")
+        #     else:
+        #         print(
+        #             f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
+        #             f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}")
 
     # Save logs
-    os.makedirs(args.log_dir, exist_ok=True)
+    # os.makedirs(args.log_dir, exist_ok=True)
+    # os.makedirs(f"{args.log_dir}/{args.algo}_{args.env}", exist_ok=True)
+    # log_df = pd.DataFrame(logs)
+    # log_df.to_csv(f"{args.log_dir}/{args.algo}_{args.env}/{args.seed}.csv")
+
     os.makedirs(args.model_dir, exist_ok=True)
-    os.makedirs(f"{args.log_dir}/{args.algo}_{args.env}", exist_ok=True)
-    os.makedirs(f"{args.model_dir}/{args.algo}_{args.env}", exist_ok=True)
-    log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"{args.log_dir}/{args.algo}_{args.env}/{args.seed}.csv")
-    # agent.save(f"{args.model_dir}/{args.algo}_{args.env}/{args.seed}")
+    os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
+    agent.save(f"{args.model_dir}/{args.env}/s{args.seed}")
 
 
 if __name__ == "__main__":

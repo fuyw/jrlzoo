@@ -20,13 +20,6 @@ tasks = [
 ]
 
 
-DIRS = {
-    'cql': '/usr/local/data/yuweifu/jaxrl/cql/logs_',
-    'iql': '/usr/local/data/yuweifu/jaxrl/iql/logs',
-    'td3bc': '/usr/local/data/yuweifu/jaxrl/td3bc/logs',
-}
-
-
 def smooth(x, window=3):
     y = np.ones(window)
     z = np.ones(len(x))
@@ -39,8 +32,7 @@ def read_data(log_dir, env_name='hopper-medium-v2', col='reward', window=1):
     res_lst = []
     csv_files = [i for i in os.listdir(f'{log_dir}/{env_name}') if '.csv' in i]
     for csv_file in csv_files:
-        df = pd.read_csv(f'{log_dir}/{env_name}/{csv_file}',
-                         index_col=0).set_index('step')
+        df = pd.read_csv(f'{log_dir}/{env_name}/{csv_file}', index_col=0).set_index('step')
         plot_idx = [10000 * i for i in range(101)]
         res_idx = range(955000, 1005000, 5000)
         x = df.loc[plot_idx, col].values
@@ -78,32 +70,14 @@ def plot_ax(ax, data, fill_color, title=None, log=False, label=None):
     ax.set_xticklabels([0, 0.2, 0.4, 0.6, 0.8, 1])
 
 
-def plot_exps():
-    # matplotlib plot setting
-    mpl.rcParams['xtick.labelsize'] = 7
-    mpl.rcParams['ytick.labelsize'] = 7
-    mpl.rcParams['axes.linewidth'] = 0.5
-    mpl.rcParams['xtick.major.pad'] = '0.1'
-    mpl.rcParams['ytick.major.pad'] = '0'
-
-    _, axes = plt.subplots(nrows=3, ncols=3, figsize=(12, 12))
-    plt.subplots_adjust(hspace=0.2, wspace=0.15)
-    for algo_idx, algo in enumerate(DIRS):
-        for idx, env in enumerate(tasks):
-            ax = axes[idx // 3][idx % 3]
-            data, rewards = read_data(DIRS[algo], env_name=env, window=7)
-            plot_ax(ax, data, colors[algo_idx], title=env,
-                    label=f'{algo} ({np.mean(rewards):.2f}±{np.std(rewards):.2f})')
-            ax.legend(fontsize=7, loc='lower right')
-
-    # add combo result
-    for i, j, env in [(1, 0, 'hopper-medium-v2'), (1, 1, 'hopper-medium-replay-v2')]:
-        ax = axes[i][j]
-        data, rewards = read_data('combo/logs', env, window=7)
-        plot_ax(ax, data, colors[4], title=env, label=f'combo ({np.mean(rewards):.2f}±{np.std(rewards):.2f})')
-        ax.legend(fontsize=7, loc='lower right')
-    plt.savefig('compare_algo.png')
+def plot_exps(env):
+    _, ax = plt.subplots()
+    data, rewards = read_data(f'logs', env_name=env, window=7)
+    plot_ax(ax, data, colors[0], title=env, label=f'{np.mean(rewards):.2f}±{np.std(rewards):.2f}')
+    ax.legend(fontsize=7, loc='lower right')
+    plt.savefig(f'imgs/{env}.png')
 
 
 if __name__ == '__main__':
-    plot_exps()
+    env = 'hopper-medium-v2'
+    plot_exps(env)

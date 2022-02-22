@@ -12,7 +12,7 @@ from models import COMBOAgent
 from utils import ReplayBuffer
 
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".9"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".5"
 
 
 def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
@@ -39,8 +39,8 @@ conf_dict = {
     "walker2d-medium-expert-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 1, "rollout_random": False},
 
     "hopper-medium-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 3.0, "horizon": 5, "rollout_random": False},
-    "hopper-medium-replay-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": False},
-    "hopper-medium-expert-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 3.0, "horizon": 5, "rollout_random": False},  # 3
+    "hopper-medium-replay-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": True},
+    "hopper-medium-expert-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 3, "rollout_random": False},  # 3
 
     "halfcheetah-medium-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 0.5, "horizon": 5, "rollout_random": False},
     "halfcheetah-medium-replay-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 0.5, "horizon": 5, "rollout_random": False},
@@ -51,7 +51,7 @@ conf_dict = {
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_name", default="hopper-medium-v2")
+    parser.add_argument("--env_name", default="hopper-medium-expert-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--lr_actor", default=1e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
@@ -67,6 +67,7 @@ def get_args():
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_dynamics_models", type=str)
+    parser.add_argument("--combo_dir", default="./saved_combo_models", type=str)
     parser.add_argument("--backup_entropy", default=False, action="store_true")
     parser.add_argument("--rollout_random", default=False, action="store_true")
     parser.add_argument("--train_dynamics_model", default=False, action="store_true")
@@ -75,7 +76,7 @@ def get_args():
 
 
 def main(args):
-    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}'
+    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}_rr{int(args.rollout_random)}_h{args.horizon}'
     exp_info = f'# Running experiment for: {exp_name}_{args.env_name} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
@@ -99,7 +100,7 @@ def main(args):
     env.action_space.seed(args.seed)
     np.random.seed(args.seed)
 
-    # TD3 agent
+    # COMBO agent
     agent = COMBOAgent(env_name=args.env_name,
                        obs_dim=obs_dim,
                        act_dim=act_dim,
@@ -200,15 +201,17 @@ def main(args):
     # Save logs
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env_name}/{exp_name}.csv")
-    # agent.save(f"{args.model_dir}/{args.env}/combo_{args.seed}")
+    agent.save(f"{args.combo_dir}/{args.env_name}/s{args.seed}")
 
 
 if __name__ == "__main__":
     args = get_args()
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
+    os.makedirs(args.combo_dir, exist_ok=True)
     os.makedirs(f"{args.log_dir}/{args.env_name}", exist_ok=True)
     os.makedirs(f"{args.model_dir}/{args.env_name}", exist_ok=True)
+    os.makedirs(f"{args.combo_dir}/{args.env_name}", exist_ok=True)
 
     # set parameters according to envs
     args.lr_actor = conf_dict[args.env_name]["lr_actor"]
