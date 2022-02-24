@@ -41,8 +41,8 @@ def eval_policy(agent: CQLAgent,
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="walker2d-medium-v2")
-    parser.add_argument("--seed", default=42, type=int)
+    parser.add_argument("--env", default="hopper-medium-v2")
+    parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--hid_dim", default=256, type=int)
     parser.add_argument("--hid_layers", default=3, type=int)
     parser.add_argument("--lr_actor", default=1e-4, type=float)
@@ -124,8 +124,7 @@ def main(args):
     start_time = time.time()
 
     # Train agent and evaluate policy
-    # for t in trange(args.max_timesteps):
-    for t in trange(50000):
+    for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, args.batch_size)
 
         # save some evaluate time

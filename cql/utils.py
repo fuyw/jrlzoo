@@ -1,5 +1,4 @@
 import collections
-import jax
 import numpy as np
 
 Batch = collections.namedtuple(
@@ -37,21 +36,18 @@ class ReplayBuffer:
 
     def sample(self, batch_size: int) -> Batch:
         idx = np.random.randint(0, self.size, size=batch_size)
-        batch = Batch(observations=jax.device_put(self.observations[idx]),
-                      actions=jax.device_put(self.actions[idx]),
-                      rewards=jax.device_put(self.rewards[idx]),
-                      discounts=jax.device_put(self.discounts[idx]),
-                      next_observations=jax.device_put(
-                          self.next_observations[idx]))
+        batch = Batch(observations=self.observations[idx],
+                      actions=self.actions[idx],
+                      rewards=self.rewards[idx],
+                      discounts=self.discounts[idx],
+                      next_observations=self.next_observations[idx])
         return batch
 
     def convert_D4RL(self, dataset):
         self.observations = dataset["observations"]
         self.actions = dataset["actions"]
         self.next_observations = dataset["next_observations"]
-        # Reward shaping
-        self.rewards = (dataset["rewards"] - 0.5) * 4.0
-        # self.rewards = dataset["rewards"]
+        self.rewards = dataset["rewards"]
         self.discounts = 1. - dataset["terminals"]
         self.size = self.observations.shape[0]
 
@@ -98,12 +94,11 @@ class InfoBuffer:
 
     def sample(self, batch_size: int) -> Batch:
         idx = np.random.randint(0, self.size, size=batch_size)
-        batch = QBatch(observations=jax.device_put(self.observations[idx]),
-                       actions=jax.device_put(self.actions[idx]),
-                       rewards=jax.device_put(self.rewards[idx]),
-                       discounts=jax.device_put(self.discounts[idx]),
-                       next_observations=jax.device_put(
-                           self.next_observations[idx]),
+        batch = QBatch(observations=self.observations[idx],
+                       actions=self.actions[idx],
+                       rewards=self.rewards[idx],
+                       discounts=self.discounts[idx],
+                       next_observations=self.next_observations[idx],
                        qpos=self.qpos[idx],
                        qvel=self.qvel[idx])
         return batch

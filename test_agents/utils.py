@@ -1,6 +1,7 @@
 import collections
 import jax
 import numpy as np
+from models.td3bc import TD3BCAgent
 
 Batch = collections.namedtuple(
     "Batch",
@@ -55,3 +56,32 @@ class ReplayBuffer:
         self.next_observations = (self.next_observations - mean)/std
         return mean, std
 
+
+def load_data(args):
+    data = np.load(f"saved_buffers/{args.env_name.split('-')[0]}/5agents.npz")
+    observations = data["observations"]
+    actions = data["actions"]
+    next_observations = data["next_observations"]
+    rewards = data["rewards"]
+    discounts = data["discounts"]
+    return observations, actions, rewards, next_observations
+ 
+
+def get_embeddings(args, agent, observations, actions):
+    if isinstance(agent, TD3BCAgent):
+        observations = (observations - mu)/std
+
+    L = len(observations)
+    batch_size = 10000
+    batch_num = int(np.ceil(L / batch_size))
+    encode = jax.jit(agent.encode)
+    embeddings = []
+    for i in trange(batch_num):
+        batch_observations = observations[i*batch_size:(i+1)*batch_size]
+        batch_actions = actions[i*batch_size:(i+1)*batch_size]
+        batch_embedding = encode(batch_observations, batch_actions)
+        embeddings.append(batch_embedding)
+
+    embeddings = np.concatenate(embeddings, axis=0)
+    assert len(embeddings) == L
+    return embeddings
