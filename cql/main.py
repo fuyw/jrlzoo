@@ -67,7 +67,7 @@ def get_args():
 
 
 def main(args):
-    exp_name = f'd4rl_s{args.seed}_alpha{args.min_q_weight}'
+    exp_name = f'cql_s{args.seed}_alpha{args.min_q_weight}'
     exp_info = f'# Running experiment for: {exp_name}_{args.env} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
@@ -125,7 +125,7 @@ def main(args):
 
     # Train agent and evaluate policy
     # for t in trange(args.max_timesteps):
-    for t in trange(150000):
+    for t in trange(50000):
         log_info = agent.update(replay_buffer, args.batch_size)
 
         # save some evaluate time
@@ -181,6 +181,7 @@ def main(args):
     log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
     with open(f"{args.log_dir}/{args.env}/{exp_name}.json", "w") as f:
         json.dump(vars(args), f)
+    agent.save(f"{args.model_dir}/{args.env}/s{args.seed}")
 
 
 if __name__ == "__main__":

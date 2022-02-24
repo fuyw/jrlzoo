@@ -55,13 +55,26 @@ class Critic(nn.Module):
     hid_dim: int = 256
     layer_num: int = 3
 
-    @nn.compact
+    def setup(self):
+        self.l1 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")
+        self.l2 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc2")
+        self.l3 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc3")
+        self.l4 = nn.Dense(1, kernel_init=kernel_initializer, name="output")
+
     def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observation, action], axis=-1)
-        for i in range(self.layer_num):
-            x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc{i+1}")(x))
-        q = nn.Dense(1, kernel_init=kernel_initializer, name="output")(x)
+        x = nn.relu(self.l1(x))
+        x = nn.relu(self.l2(x))
+        x = nn.relu(self.l3(x))
+        q = self.l4(x)
         return q
+    
+    def encode(self, observation, action):
+        x = jnp.concatenate([observation, action], axis=-1)
+        x = nn.relu(self.l1(x))
+        x = nn.relu(self.l2(x))
+        repr = self.l3(x)
+        return repr
 
 
 class DoubleCritic(nn.Module):
@@ -75,6 +88,10 @@ class DoubleCritic(nn.Module):
         q1 = self.critic1(observation, action)
         q2 = self.critic2(observation, action)
         return q1, q2
+
+    def encode(self, observations, actions):
+        repr = self.critic1.encode(observations, actions)
+        return repr
 
 
 class Scalar(nn.Module):
@@ -477,3 +494,10 @@ class COMBOAgent:
         self.critic_state = train_state.TrainState.create(
             apply_fn=self.critic.apply, params=critic_params,
             tx=optax.adam(1e-3))
+
+    def encode(self, observations, actions):
+        embeddings = self.critic.apply(
+            {"params": self.critic_state.params},
+            observations, actions,
+            method=self.critic.encode)
+        return embeddings

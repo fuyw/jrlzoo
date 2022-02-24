@@ -97,12 +97,24 @@ def plot_exps():
             ax.legend(fontsize=7, loc='lower right')
 
     # add combo result
-    for i, j, env in [(1, 0, 'hopper-medium-v2'), (1, 1, 'hopper-medium-replay-v2')]:
+    for i, j, env in [
+            (0, 0, 'halfcheetah-medium-v2'),
+            (0, 1, 'halfcheetah-medium-replay-v2'),
+            (0, 2, 'halfcheetah-medium-expert-v2'),
+            (1, 0, 'hopper-medium-v2'),
+            (1, 1, 'hopper-medium-replay-v2'),
+            (1, 2, 'hopper-medium-expert-v2'),
+            (2, 0, 'walker2d-medium-v2'),
+            (2, 1, 'walker2d-medium-replay-v2'),
+            (2, 2, 'walker2d-medium-expert-v2'),
+        ]:
         ax = axes[i][j]
         data, rewards = read_data('combo/logs', env, window=7)
         plot_ax(ax, data, colors[4], title=env, label=f'combo ({np.mean(rewards):.2f}±{np.std(rewards):.2f})')
         ax.legend(fontsize=7, loc='lower right')
-    plt.savefig('compare_algo.png')
+
+
+    plt.savefig('compare_algo.png', dpi=540)
 
 
 if __name__ == '__main__':

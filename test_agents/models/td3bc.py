@@ -63,13 +63,13 @@ class Critic(nn.Module):
         q1 = self.l3(q1)
         return q1
 
-    def Repr(self, observations: jnp.ndarray,
-             actions: jnp.ndarray) -> jnp.ndarray:
+    def encode(self, observations: jnp.ndarray,
+               actions: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observations, actions], axis=-1)
         q1 = nn.relu(self.l1(x))
         repr = self.l2(q1)
-        q1 = self.l3(nn.relu(repr))
-        return repr, q1
+        # q1 = self.l3(nn.relu(repr))
+        return repr
 
 
 class TD3BCAgent:
@@ -250,3 +250,9 @@ class TD3BCAgent:
             params=actor_params,
             tx=optax.adam(learning_rate=self.learning_rate)
         )
+
+    def encode(self, observations, actions):
+        embeddings = self.critic.apply({"params": self.critic_state.params},
+                                       observations, actions,
+                                       method=self.critic.encode)
+        return embeddings

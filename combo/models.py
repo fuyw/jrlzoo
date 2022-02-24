@@ -321,9 +321,11 @@ class DynamicsModel:
             #     model_mask * (observation_mu + observation_noise), axis=0)
             # model_reward = jnp.sum(model_mask * (reward_mu + reward_noise), axis=0)
 
+            # model_next_observation = observation + jnp.sum(model_mask * observation_mu, axis=0)
+            # model_reward = jnp.sum(model_mask * reward_mu, axis=0)
+
             model_next_observation = observation + jnp.sum(model_mask * observation_mu, axis=0)
             model_reward = jnp.sum(model_mask * reward_mu, axis=0)
-
             return model_next_observation, model_reward
 
         rollout = jax.vmap(rollout, in_axes=(None, 0, 0, 0, 0))

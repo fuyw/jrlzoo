@@ -35,24 +35,22 @@ def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int 
 
 conf_dict = {
     "walker2d-medium-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 1, "rollout_random": False},
-    "walker2d-medium-replay-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 0.5, "horizon": 1, "rollout_random": False},
+    "walker2d-medium-replay-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 1.0, "horizon": 1, "rollout_random": False},
     "walker2d-medium-expert-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 1, "rollout_random": False},
-
     "hopper-medium-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 3.0, "horizon": 5, "rollout_random": False},
     "hopper-medium-replay-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": True},
-    "hopper-medium-expert-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 3, "rollout_random": False},  # 3
-
-    "halfcheetah-medium-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 0.5, "horizon": 5, "rollout_random": False},
-    "halfcheetah-medium-replay-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 0.5, "horizon": 5, "rollout_random": False},
-    "halfcheetah-medium-expert-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 3.0, "horizon": 5, "rollout_random": False},
+    "hopper-medium-expert-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 3, "rollout_random": False},
+    "halfcheetah-medium-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": False},
+    "halfcheetah-medium-replay-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": False},
+    "halfcheetah-medium-expert-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 5.0, "horizon": 5, "rollout_random": False},
 }
 
 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_name", default="hopper-medium-expert-v2")
-    parser.add_argument("--seed", default=0, type=int)
+    parser.add_argument("--env_name", default="walker2d-medium-replay-v2")
+    parser.add_argument("--seed", default=1, type=int)
     parser.add_argument("--lr_actor", default=1e-4, type=float)
     parser.add_argument("--lr", default=3e-4, type=float)
     parser.add_argument("--min_q_weight", default=5.0, type=float)
@@ -76,7 +74,7 @@ def get_args():
 
 
 def main(args):
-    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}_rr{int(args.rollout_random)}_h{args.horizon}'
+    exp_name = f'combo_s{args.seed}_alpha{args.min_q_weight}_h{args.horizon}'
     exp_info = f'# Running experiment for: {exp_name}_{args.env_name} #'
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
