@@ -760,3 +760,17 @@ class COMBOAgent:
             f.write(serialization.to_bytes(self.actor_state.params))
         with open(f"{save_name}_critic.ckpt", "wb") as f:
             f.write(serialization.to_bytes(self.critic_state.params))
+
+    def load(self, filename):
+        with open(f"{filename}_actor.ckpt", "rb") as f:
+            actor_params = serialization.from_bytes(
+                self.actor_state.params, f.read())
+        with open(f"{filename}_critic.ckpt", "rb") as f:
+            critic_params = serialization.from_bytes(
+                self.critic_state.params, f.read())
+        self.actor_state = train_state.TrainState.create(
+            apply_fn=self.actor.apply, params=actor_params,
+            tx=optax.adam(1e-3))
+        self.critic_state = train_state.TrainState.create(
+            apply_fn=self.critic.apply, params=critic_params,
+            tx=optax.adam(1e-3))

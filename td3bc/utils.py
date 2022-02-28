@@ -54,4 +54,3 @@ class ReplayBuffer:
         self.observations = (self.observations - mean)/std
         self.next_observations = (self.next_observations - mean)/std
         return mean, std
-

@@ -8,6 +8,19 @@ Batch = collections.namedtuple(
     ["observations", "actions", "rewards", "discounts", "next_observations"])
 
 
+AGENT_DICTS = {
+    'halfcheetah-medium-v2': {'td3bc': 0, 'cql': 0, 'combo': 1},
+    'halfcheetah-medium-replay-v2': {'td3bc': 0, 'cql': 0, 'combo': 0},
+    'halfcheetah-medium-expert-v2': {'td3bc': 0, 'cql': 0, 'combo': 1},
+    'hopper-medium-v2': {'td3bc': 0, 'cql': 0, 'combo': 0},
+    'hopper-medium-replay-v2': {'td3bc': 0, 'cql': 1, 'combo': 2},
+    'hopper-medium-expert-v2': {'td3bc': 2, 'cql': 2, 'combo': 1},
+    'walker2d-medium-v2': {'td3bc': 0, 'cql': 1, 'combo': 0},
+    'walker2d-medium-replay-v2': {'td3bc': 0, 'cql': 1, 'combo': 1},
+    'hopper-medium-expert-v2': {'td3bc': 0, 'cql': 1, 'combo': 2},
+}
+
+
 class ReplayBuffer:
     def __init__(self, obs_dim: int, act_dim: int, max_size: int = int(1e6)):
         self.max_size = max_size
@@ -67,7 +80,7 @@ def load_data(args):
     return observations, actions, rewards, next_observations
  
 
-def get_embeddings(args, agent, observations, actions):
+def get_embeddings(args, agent, observations, actions, mu, std):
     if isinstance(agent, TD3BCAgent):
         observations = (observations - mu)/std
 

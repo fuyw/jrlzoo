@@ -18,7 +18,7 @@ class MLP(nn.Module):
 
 
 class ProbeTrainer:
-    def __init__(self, input_dim, output_dim, batch_size=256, lr=1e-3):
+    def __init__(self, input_dim, output_dim, batch_size=256, lr=3e-4):
         self.mlp = MLP(output_dim)
         rng = jax.random.PRNGKey(0)
         dummy_inputs = jnp.ones(input_dim)
