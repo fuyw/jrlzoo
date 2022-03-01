@@ -6,7 +6,7 @@ saved_buffers
 saved_models
 benchmarks
 mico
-tmp
+tmp*
 check_tf
 dopamine
 atari-representation-learning

@@ -127,6 +127,9 @@ def main(args):
     for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, args.batch_size)
 
+        if ((t + 1) >= int(9.8e5) and (t + 1) % args.eval_freq == 0) :
+            agent.save(f"{args.model_dir}/{args.env}/s{args.seed}_{(t + 1) // args.eval_freq}")
+
     #     # save some evaluate time
     #     if ((t + 1) >= int(9.5e5) and
     #         (t + 1) % args.eval_freq == 0) or ((t + 1) <= int(9.5e5) and
@@ -180,7 +183,7 @@ def main(args):
     # log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
     # with open(f"{args.log_dir}/{args.env}/{exp_name}.json", "w") as f:
     #     json.dump(vars(args), f)
-    agent.save(f"{args.model_dir}/{args.env}/s{args.seed}")
+    # agent.save(f"{args.model_dir}/{args.env}/s{args.seed}")
 
 
 if __name__ == "__main__":

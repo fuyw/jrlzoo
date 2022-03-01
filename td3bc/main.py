@@ -134,6 +134,9 @@ def main(args):
         #             f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
         #             f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}")
 
+        if ((t + 1) >= int(9.8e5) and (t + 1) % args.eval_freq == 0) :
+            agent.save(f"{args.model_dir}/{args.env}/s{args.seed}_{(t + 1) // args.eval_freq}")
+
     # Save logs
     # os.makedirs(args.log_dir, exist_ok=True)
     # os.makedirs(f"{args.log_dir}/{args.algo}_{args.env}", exist_ok=True)
@@ -142,7 +145,6 @@ def main(args):
 
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
-    agent.save(f"{args.model_dir}/{args.env}/s{args.seed}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import collections
 import jax
 import numpy as np
+from tqdm import trange
 from models.td3bc import TD3BCAgent
 
 Batch = collections.namedtuple(
@@ -80,7 +81,7 @@ def load_data(args):
     return observations, actions, rewards, next_observations
  
 
-def get_embeddings(args, agent, observations, actions, mu, std):
+def get_sa_embeddings(args, agent, observations, actions, mu, std):
     if isinstance(agent, TD3BCAgent):
         observations = (observations - mu)/std
 
@@ -93,6 +94,28 @@ def get_embeddings(args, agent, observations, actions, mu, std):
         batch_observations = observations[i*batch_size:(i+1)*batch_size]
         batch_actions = actions[i*batch_size:(i+1)*batch_size]
         batch_embedding = encode(batch_observations, batch_actions)
+        embeddings.append(batch_embedding)
+
+    embeddings = np.concatenate(embeddings, axis=0)
+    assert len(embeddings) == L
+    return embeddings
+
+def get_ss_embeddings(args, agent, observations, next_observations, mu, std):
+    if isinstance(agent, TD3BCAgent):
+        observations = (observations - mu)/std
+        next_observations = (next_observations - mu)/std
+
+    L = len(observations)
+    batch_size = 10000
+    batch_num = int(np.ceil(L / batch_size))
+    encode = jax.jit(agent.encode_actor)
+    embeddings = []
+    for i in trange(batch_num):
+        batch_observations = observations[i*batch_size:(i+1)*batch_size]
+        batch_next_observations = next_observations[i*batch_size:(i+1)*batch_size]
+        batch_embedding1 = encode(batch_observations)
+        batch_embedding2 = encode(batch_next_observations)
+        batch_embedding = np.concatenate([batch_embedding1, batch_embedding2], axis=-1)
         embeddings.append(batch_embedding)
 
     embeddings = np.concatenate(embeddings, axis=0)

@@ -4,17 +4,17 @@ import jax
 import os
 import numpy as np
 import pandas as pd
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".8"
 
 from tqdm import trange
 from models.combo import COMBOAgent
 from models.td3bc import TD3BCAgent
 from models.cql import CQLAgent
 from probe import ProbeTrainer
-from utils import ReplayBuffer, load_data, get_embeddings
+from utils import *
 
 
-def eval_policy(agent, env_name, seed=0, eval_episodes=10):
+def eval_policy(agent, env_name, mu, std, seed=0, eval_episodes=10):
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
     eval_rng = jax.random.PRNGKey(seed + 100)
@@ -40,7 +40,7 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--env_name", default="hopper-medium-v2")
-    parser.add_argument("--target", default="reward")
+    parser.add_argument("--target", default="action")
     args = parser.parse_args()
     return args
 
@@ -69,73 +69,66 @@ def probe_next_observations(embeddings, next_observations):
     kf_losses = trainer.train(embeddings, next_observations)
     return kf_losses
 
-# predict a* based on 𝜙(s, a)
+# predict a* based on 𝜙(s, s')
 def probe_actions(embeddings, actions):
-    pass
+    trainer = ProbeTrainer(512, act_dim)
+    kf_losses = trainer.train(embeddings, actions)
+    return kf_losses
+
 
 def probe_agents(args):
-    res_df = pd.DataFrame()
-    for Agent, agent_name, seed in [
-            (TD3BCAgent, 'td3bc', 0),
-            # (COMBOAgent, 'combo', 3)
-            # (CQLAgent, 'cql', 0)
+    for Agent, algo in [
+            # (COMBOAgent, 'combo'),
+            (TD3BCAgent, 'td3bc'),
+            # (CQLAgent, 'cql')
     ]:
+        seed = AGENT_DICTS[args.env_name][algo]
         agent = Agent(obs_dim=obs_dim, act_dim=act_dim)
-        untrained_score = eval_policy(agent, args.env_name)
+
+        # Check score before/after training
+        untrained_score = eval_policy(agent, args.env_name, mu, std)
         print(f"Score before training: {untrained_score:.2f}")  # 0.8,   1.7
-        agent.load(f"saved_agents/{agent_name}/{args.env_name}/s{seed}")
-        trained_score = eval_policy(agent, args.env_name)
+        agent.load(f"saved_agents/{algo}/{args.env_name}/s{seed}")
+        trained_score = eval_policy(agent, args.env_name, mu, std)
         print(f"Score after training: {trained_score:.2f}")     # 67.25, 94.41
 
+        # load probing data
         observations, actions, rewards, next_observations = load_data(args)
-        embeddings = get_embeddings(args, agent, observations, actions, mu, std)
+        if args.target == 'action':
+            embeddings = get_ss_embeddings(args, agent, observations, next_observations, mu, std)  # (N, 512)
+        else:
+            embeddings = get_sa_embeddings(args, agent, observations, actions, mu, std)  # (N, 256)
+
         if args.target == 'reward':
             kf_losses = probe_rewards(embeddings, rewards)
         elif args.target == 'next_obs':
             kf_losses = probe_next_observations(embeddings, next_observations)
+        elif args.target == 'action':
+            kf_losses = probe_actions(embeddings, actions)
 
-        res_df[args.target] = kf_losses
-
-        df = pd.DataFrame(reward_kf_losses, columns=['reward'])
-        df.to_csv(f'res/{agent_name}_probe_reward.csv')
-
-        # using random embeddings
-        random_embeddings = np.random.normal(size=embeddings.shape)
-        reward_kf_losses = probe_rewards(random_embeddings, rewards)
-        df = pd.DataFrame(reward_kf_losses, columns=['reward'])
-        df.to_csv(f'res/random_probe_reward.csv')
+        df = pd.DataFrame(kf_losses, columns=['cv_loss'])
+        df.to_csv(f'res/{args.env_name}/{algo}_probe_{args.target}.csv')
 
 
-args = get_args()
-def check_model(args):
-    res = []
-    # for task in ['halfcheetah', 'hopper', 'walker2d']:
-    for task in ['hopper']:
-        for level in ['medium', 'medium-replay', 'medium-expert']:
-            args.env_name = f"{task}-{level}-v2"
-            env = gym.make(args.env_name)
-            obs_dim = env.observation_space.shape[0]
-            act_dim = env.action_space.shape[0]
+def random_baseline(args):
+    observations, actions, rewards, next_observations = load_data(args)
+    for target in ['reward', 'next_obs', 'action']:
+        if target == 'action':
+            embeddings = np.random.normal(size=(len(observations), 512))
+        else:
+            embeddings = np.random.normal(size=(len(observations), 256))
 
-            # normalize state stats for TD3BC
-            replay_buffer = ReplayBuffer(obs_dim, act_dim)
-            replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
-            mu, std = replay_buffer.normalize_states()
+        if target == 'reward':
+            kf_losses = probe_rewards(embeddings, rewards)
+        elif target == 'next_obs':
+            kf_losses = probe_next_observations(embeddings, next_observations)
+        elif target == 'action':
+            kf_losses = probe_actions(embeddings, actions)
 
-            for Agent, agent_name, seed in [
-                    (TD3BCAgent, 'td3bc', 0),
-                    (COMBOAgent, 'combo', 0),
-                    (CQLAgent, 'cql', 0)
-            ]:
-                agent = Agent(obs_dim=obs_dim, act_dim=act_dim)
-                untrained_score = eval_policy(agent, args.env_name)
-                print(f"Score before training: {untrained_score:.2f}")  # 0.8,   1.7
-                agent.load(f"saved_agents/{agent_name}/{args.env_name}/s{seed}")
-                trained_score = eval_policy(agent, args.env_name)
-                print(f"Score after training: {trained_score:.2f}")     # 67.25, 94.41
-                res.append((args.env_name, agent_name, trained_score))
-    res_df = pd.DataFrame(res, columns=['env', 'algo', 'reward'])
-    res_df = res_df.pivot(index='env', columns='algo', values='reward')
-    res_df
+        df = pd.DataFrame(kf_losses, columns=['cv_loss'])
+        df.to_csv(f'res/{args.env_name}/random_probe_{target}.csv')
 
-    res_df.to_csv('env_algo_res.csv')
+
+args.target = 'action'
+os.makedirs(f'res/{args.env_name}', exist_ok=True)
+probe_agents(args)

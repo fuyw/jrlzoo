@@ -25,13 +25,19 @@ kernel_initializer = jax.nn.initializers.glorot_uniform()
 class Actor(nn.Module):
     act_dim: int
     action_limit: float = 1.0
+    hid_dim: int = 256
 
-    @nn.compact
+    def setup(self):
+        self.l1 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc1")
+        self.l2 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc2")
+        self.l3 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc3")
+        self.l4 = nn.Dense(2*self.act_dim, kernel_init=kernel_initializer, name=f"output")
+
     def __call__(self, rng: Any, observation: jnp.ndarray):
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc1")(observation))
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc2")(x))
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc3")(x))
-        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="output")(x)
+        x = nn.relu(self.l1(observation))
+        x = nn.relu(self.l2(x))
+        x = nn.relu(self.l3(x))
+        x = self.l4(x)
 
         mu, log_std = jnp.split(x, 2, axis=-1)
         log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
@@ -50,6 +56,11 @@ class Actor(nn.Module):
         sampled_action = jnp.tanh(pi_action) * self.action_limit
         return mean_action, sampled_action, logp
 
+    def encode(self, observation):
+        x = nn.relu(self.l1(observation))
+        x = nn.relu(self.l2(x))
+        embedding = self.l3(x)
+        return embedding
 
 class Critic(nn.Module):
     hid_dim: int = 256
@@ -73,8 +84,8 @@ class Critic(nn.Module):
         x = jnp.concatenate([observation, action], axis=-1)
         x = nn.relu(self.l1(x))
         x = nn.relu(self.l2(x))
-        repr = self.l3(x)
-        return repr
+        embedding = self.l3(x)
+        return embedding
 
 
 class DoubleCritic(nn.Module):
@@ -90,8 +101,8 @@ class DoubleCritic(nn.Module):
         return q1, q2
 
     def encode(self, observations, actions):
-        repr = self.critic1.encode(observations, actions)
-        return repr
+        embedding = self.critic1.encode(observations, actions)
+        return embedding
 
 
 class Scalar(nn.Module):
@@ -500,4 +511,10 @@ class COMBOAgent:
             {"params": self.critic_state.params},
             observations, actions,
             method=self.critic.encode)
+        return embeddings
+
+    def encode_actor(self, observations):
+        embeddings = self.actor.apply(
+            {"params": self.actor_state.params},
+            observations, method=self.actor.encode)
         return embeddings

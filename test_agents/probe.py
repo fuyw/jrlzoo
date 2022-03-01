@@ -18,7 +18,7 @@ class MLP(nn.Module):
 
 
 class ProbeTrainer:
-    def __init__(self, input_dim, output_dim, batch_size=256, lr=3e-4):
+    def __init__(self, input_dim, output_dim, batch_size=2048, lr=3e-4):
         self.mlp = MLP(output_dim)
         rng = jax.random.PRNGKey(0)
         dummy_inputs = jnp.ones(input_dim)
@@ -49,7 +49,7 @@ class ProbeTrainer:
             min_valid_loss = np.inf
             optimal_params = None
             patience = 0
-            for epoch in trange(100, desc=f"CV #{len(kf_losses)+1}"):
+            for epoch in trange(150, desc=f"CV #{len(kf_losses)+1}"):
                 epoch_loss = 0
                 for i in range(batch_num):
                     batch_idx = train_idx[i*self.batch_size:(i+1)*self.batch_size]
@@ -66,7 +66,7 @@ class ProbeTrainer:
                 else:
                     patience += 1
                 print(f'# Epoch {epoch}: train_loss: {epoch_loss/batch_num:6f}, valid_loss: {valid_loss:.6f}')
-                if patience == 5:
+                if patience == 10:
                     print(f'Early break at epoch {epoch}.')
                     break
 

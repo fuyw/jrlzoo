@@ -17,11 +17,12 @@ kernel_initializer = jax.nn.initializers.glorot_uniform()
 
 class Actor(nn.Module):
     act_dim: int
-    max_action: float
+    max_action: float = 1.0
+    hid_dim: int = 256
 
     def setup(self):
-        self.l1 = nn.Dense(256, kernel_init=kernel_initializer, name="fc1")
-        self.l2 = nn.Dense(256, kernel_init=kernel_initializer, name="fc2")
+        self.l1 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")
+        self.l2 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc2")
         self.l3 = nn.Dense(self.act_dim, kernel_init=kernel_initializer, name="fc3")
 
     def __call__(self, observations: jnp.ndarray) -> jnp.ndarray:
@@ -30,15 +31,22 @@ class Actor(nn.Module):
         actions = self.max_action * nn.tanh(self.l3(x))
         return actions
 
+    def encode(self, observation):
+        x = nn.relu(self.l1(observation))
+        embedding  = self.l2(x)
+        return embedding
+
 
 class Critic(nn.Module):
+    hid_dim: int = 256
+
     def setup(self):
-        self.l1 = nn.Dense(256, kernel_init=kernel_initializer, name="fc1")
-        self.l2 = nn.Dense(256, kernel_init=kernel_initializer, name="fc2")
+        self.l1 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc1")
+        self.l2 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc2")
         self.l3 = nn.Dense(1, kernel_init=kernel_initializer, name="fc3")
 
-        self.l4 = nn.Dense(256, kernel_init=kernel_initializer, name="fc4")
-        self.l5 = nn.Dense(256, kernel_init=kernel_initializer, name="fc5")
+        self.l4 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc4")
+        self.l5 = nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name="fc5")
         self.l6 = nn.Dense(1, kernel_init=kernel_initializer, name="fc6")
 
     def __call__(self, observations: jnp.ndarray,
@@ -255,4 +263,10 @@ class TD3BCAgent:
         embeddings = self.critic.apply({"params": self.critic_state.params},
                                        observations, actions,
                                        method=self.critic.encode)
+        return embeddings
+
+    def encode_actor(self, observations):
+        embeddings = self.actor.apply(
+            {"params": self.actor_state.params},
+            observations, method=self.actor.encode)
         return embeddings
