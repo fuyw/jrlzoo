@@ -135,7 +135,7 @@ def main(args):
 
 
         if ((t + 1) >= int(9.8e5) and (t + 1) % args.eval_freq == 0) :
-            agent.save(f"{args.model_dir}/{args.env_name}/s{args.seed}_{(t + 1) // args.eval_freq}")
+            agent.save(f"{args.combo_dir}/{args.env_name}/s{args.seed}_{(t + 1) // args.eval_freq}")
 
         # save some evaluate time
         # if ((t + 1) >= int(9.5e5) and
