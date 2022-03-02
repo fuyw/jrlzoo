@@ -18,7 +18,7 @@ class MLP(nn.Module):
 
 
 class ProbeTrainer:
-    def __init__(self, input_dim, output_dim, batch_size=2048, lr=3e-4):
+    def __init__(self, input_dim, output_dim, batch_size=128, lr=3e-4):
         self.mlp = MLP(output_dim)
         rng = jax.random.PRNGKey(0)
         dummy_inputs = jnp.ones(input_dim)
@@ -49,7 +49,7 @@ class ProbeTrainer:
             min_valid_loss = np.inf
             optimal_params = None
             patience = 0
-            for epoch in trange(150, desc=f"CV #{len(kf_losses)+1}"):
+            for epoch in trange(100, desc=f"CV #{len(kf_losses)+1}"):
                 epoch_loss = 0
                 for i in range(batch_num):
                     batch_idx = train_idx[i*self.batch_size:(i+1)*self.batch_size]
