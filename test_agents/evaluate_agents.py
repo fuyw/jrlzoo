@@ -10,9 +10,10 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 from tqdm import trange
 from models.combo import COMBOAgent
 from models.td3bc import TD3BCAgent
+from models.td3 import TD3Agent
 from models.cql import CQLAgent
 from probe import ProbeTrainer
-from utils import ReplayBuffer, load_data, get_embeddings, AGENT_DICTS
+from utils import ReplayBuffer, load_data, AGENT_DICTS
 
 
 def eval_policy(agent, env_name, mu, std, seed=0, eval_episodes=10):
@@ -30,6 +31,8 @@ def eval_policy(agent, env_name, mu, std, seed=0, eval_episodes=10):
             elif isinstance(agent, TD3BCAgent):
                 obs = (obs - mu)/std
                 action = agent.select_action(agent.actor_state.params, obs.squeeze())
+            elif isinstance(agent, TD3Agent):
+                action = agent.select_action(agent.actor_state.params, obs)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -37,13 +40,16 @@ def eval_policy(agent, env_name, mu, std, seed=0, eval_episodes=10):
     return d4rl_score
 
 
-AGENTS = {'td3bc': TD3BCAgent, 'combo': COMBOAgent, 'cql': CQLAgent}
+AGENTS = {'td3bc': TD3BCAgent, 'combo': COMBOAgent, 'cql': CQLAgent, 'td3': TD3Agent}
 
 
 def check_agent(algo):
     res = []
     for task in ['halfcheetah', 'hopper', 'walker2d']:
         for level in ['medium', 'medium-replay', 'medium-expert']:
+            # online td3 only runs for 3 envs
+            if algo == 'td3' and ('replay' in level or 'expert' in level): continue
+
             env_name = f"{task}-{level}-v2"
             env = gym.make(env_name)
             obs_dim = env.observation_space.shape[0]
@@ -54,16 +60,13 @@ def check_agent(algo):
             replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
             mu, std = replay_buffer.normalize_states()
 
-            for seed in range(3):
+            for seed in range(10):
                 agent = AGENTS[algo](obs_dim=obs_dim, act_dim=act_dim)
-                untrained_score = eval_policy(agent, env_name, mu, std)
-                print(f"Score before training: {untrained_score:.2f}")  # 0.8,   1.7
-                agent.load(f"saved_agents/{algo}/{env_name}/s{seed}")
-                trained_score = eval_policy(agent, env_name, mu, std)
-                print(f"Score after training: {trained_score:.2f}")     # 67.25, 94.41
-                res.append((env_name, seed, trained_score))
-    res_df = pd.DataFrame(res, columns=['env', 'seed', 'reward'])
-    res_df = res_df.pivot(index='env', columns='seed', values='reward')
+                for step in range(196, 201):
+                    agent.load(f"saved_agents/{algo}/{env_name}/s{seed}_{step}")
+                    trained_score = eval_policy(agent, env_name, mu, std)
+                    res.append((env_name, seed, step, trained_score))
+    res_df = pd.DataFrame(res, columns=['env', 'seed', 'step', 'reward'])
     res_df.to_csv(f'eval_agent_res/eval_{algo}_agent.csv')
 
 
@@ -114,4 +117,9 @@ def check_env(algo, env_name='hopper-medium-v2'):
 
     res.append((env_name, seed, trained_score))
     return res
+
+
+if __name__ == "__main__":
+    os.makedirs('eval_agent_res', exist_ok=True)
+    check_agent('td3')
 

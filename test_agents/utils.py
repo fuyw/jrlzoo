@@ -79,7 +79,7 @@ def load_data(args):
     rewards = data["rewards"]
     discounts = data["discounts"]
     return observations, actions, rewards, next_observations
- 
+
 
 def get_sa_embeddings(args, agent, observations, actions, mu, std):
     if isinstance(agent, TD3BCAgent):
@@ -99,6 +99,7 @@ def get_sa_embeddings(args, agent, observations, actions, mu, std):
     embeddings = np.concatenate(embeddings, axis=0)
     assert len(embeddings) == L
     return embeddings
+
 
 def get_ss_embeddings(args, agent, observations, next_observations, mu, std):
     if isinstance(agent, TD3BCAgent):
@@ -121,3 +122,4 @@ def get_ss_embeddings(args, agent, observations, next_observations, mu, std):
     embeddings = np.concatenate(embeddings, axis=0)
     assert len(embeddings) == L
     return embeddings
+
