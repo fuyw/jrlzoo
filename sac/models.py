@@ -1,6 +1,7 @@
 from typing import Any, Optional
 import functools
 from flax import linen as nn
+from flax import serialization
 from flax.core import FrozenDict
 from flax.training import train_state
 import distrax
@@ -18,7 +19,7 @@ LOG_STD_MIN = -10.
 kernel_initializer = jax.nn.initializers.glorot_uniform()
 
 
-class Actor2(nn.Module):
+class Actor(nn.Module):
     act_dim: int
     action_limit: float = 1.0
 
@@ -49,7 +50,7 @@ class Actor2(nn.Module):
 
 
 
-class Actor(nn.Module):
+class Actor2(nn.Module):
     act_dim: int
 
     @nn.compact
@@ -283,3 +284,23 @@ class SACAgent:
         self.critic_target_params = self.update_target_params(params, target_params)
 
         return log_info
+
+    def save(self, save_name):
+        with open(f"{save_name}_actor.ckpt", "wb") as f:
+            f.write(serialization.to_bytes(self.actor_state.params))
+        with open(f"{save_name}_critic.ckpt", "wb") as f:
+            f.write(serialization.to_bytes(self.critic_state.params))
+
+    def load(self, filename):
+        with open(f"{filename}_actor.ckpt", "rb") as f:
+            actor_params = serialization.from_bytes(
+                self.actor_state.params, f.read())
+        with open(f"{filename}_critic.ckpt", "rb") as f:
+            critic_params = serialization.from_bytes(
+                self.critic_state.params, f.read())
+        self.actor_state = train_state.TrainState.create(
+            apply_fn=self.actor.apply, params=actor_params,
+            tx=optax.adam(1e-3))
+        self.critic_state = train_state.TrainState.create(
+            apply_fn=self.critic.apply, params=critic_params,
+            tx=optax.adam(1e-3))
