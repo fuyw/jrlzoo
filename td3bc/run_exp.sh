@@ -3,9 +3,9 @@
 # Script to reproduce results
 envs=(
     # "halfcheetah-medium-v2"
-    # "halfcheetah-medium-replay-v2"
+    "halfcheetah-medium-replay-v2"
     # "halfcheetah-medium-expert-v2"
-    "hopper-medium-v2"
+    # "hopper-medium-v2"
     # "hopper-medium-replay-v2"
     # "hopper-medium-expert-v2"
     # "walker2d-medium-v2"

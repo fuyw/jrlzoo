@@ -65,6 +65,18 @@ def check_agent(algo, env_name="hopper-medium-v2"):
     res_df.to_csv(f'eval_agent_res/{algo}/{env_name}_agent.csv')
 
 
+
+def select_seed_step(algo, env_name):
+    reward_df = pd.read_csv('eval_agent_res/')
+    pass
+
+
+def select_optimal_td3_agent(env_name):
+    res_df = pd.read_csv(f'eval_agent_res/td3/{env_name}_agent.csv', index_col=0)
+    optimal_idx = res_df['reward'].argmax()
+    return res_df.iloc[optimal_idx][['seed', 'step']].values
+
+
 if __name__ == "__main__":
     os.makedirs('eval_agent_res', exist_ok=True)
 

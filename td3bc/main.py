@@ -27,7 +27,7 @@ def eval_policy(agent: TD3_BC,
         while not done:
             t += 1
             obs = (np.array(obs).reshape(1, -1) - mean) / std
-            action = agent.select_action(agent.actor_state.params, obs)
+            action = agent.select_action(agent.actor_state.params, obs.squeeze())
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -39,7 +39,7 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--algo", default="td3bc")
-    parser.add_argument("--env", default="hopper-medium-v2")
+    parser.add_argument("--env", default="halfcheetah-medium-expert-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--max_timesteps", default=int(1e6), type=int)

@@ -372,12 +372,9 @@ class TD3:
         return updated_params
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def select_action(self, params: frozen_dict.FrozenDict,
-                      observations: np.ndarray) -> jnp.ndarray:
-        observations = jax.device_put(observations[None])
-        actions = self.actor.apply({"params": params}, observations)
-        actions = actions.flatten()
-        return actions
+    def select_action(self, params: frozen_dict.FrozenDict, observation: np.ndarray) -> jnp.ndarray:
+        action = self.actor.apply({"params": params}, observation)
+        return action
 
     def train(self, replay_buffer: ReplayBuffer, batch_size: int = 256):
         self.update_step += 1
