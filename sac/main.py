@@ -1,4 +1,5 @@
 import gym
+import d4rl
 import jax
 import os
 import time
@@ -29,18 +30,19 @@ def eval_policy(agent: SACAgent,
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
-    return avg_reward
+    return eval_env.get_normalized_score(avg_reward)
+    # return avg_reward
 
 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="HalfCheetah-v2")
+    parser.add_argument("--env", default="halfcheetah-medium-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     parser.add_argument("--start_timesteps", default=int(25e3), type=int)
     parser.add_argument("--max_timesteps", default=int(3e6), type=int)
-    parser.add_argument("--eval_freq", default=int(1.5e4), type=int)
+    parser.add_argument("--eval_freq", default=int(5e3), type=int)
     parser.add_argument("--batch_size", default=256, type=int)
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--tau", default=0.005, type=float)
@@ -67,7 +69,6 @@ def main(args):
     # TD3 agent
     agent = SACAgent(obs_dim=obs_dim,
                      act_dim=act_dim,
-                     # max_action=max_action,
                      seed=args.seed,
                      tau=args.tau,
                      gamma=args.gamma,
@@ -114,7 +115,14 @@ def main(args):
             episode_timesteps = 0
             episode_num += 1
 
-        if (t + 1) % args.eval_freq == 0:
+        if ((t + 1) >= int(9.8e5) and (t + 1) % args.eval_freq == 0) :
+            agent.save(f"{args.model_dir}/{args.env}/s{args.seed}_{(t + 1) // args.eval_freq}")
+
+        # save some evaluate time
+        if ((t + 1) >= int(9.5e5) and
+            (t + 1) % args.eval_freq == 0) or ((t + 1) <= int(9.5e5) and
+                                               (t + 1) %
+                                               (2 * args.eval_freq) == 0):
             eval_reward = eval_policy(agent, args.env, args.seed)
             if t >= args.start_timesteps:
                 log_info.update({
@@ -133,10 +141,6 @@ def main(args):
                 print(f"# Step {t+1}: {eval_reward:.2f}")
 
     # Save logs
-    os.makedirs(args.log_dir, exist_ok=True)
-    os.makedirs(args.model_dir, exist_ok=True)
-    os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
-    os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{args.log_dir}/{args.env}/{args.seed}.csv")
     # agent.save(f"{args.model_dir}/{args.env}/{args.seed}")
@@ -144,5 +148,9 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args()
+    os.makedirs(args.log_dir, exist_ok=True)
+    os.makedirs(args.model_dir, exist_ok=True)
+    os.makedirs(f"{args.log_dir}/{args.env}", exist_ok=True)
+    os.makedirs(f"{args.model_dir}/{args.env}", exist_ok=True)
     print(f"\nArguments:\n{vars(args)}")
     main(args)
