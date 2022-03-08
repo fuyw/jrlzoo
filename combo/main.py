@@ -195,7 +195,7 @@ def main(args):
                 f"\tmin_q_weight: {log_info['min_q_weight']:.1f}\n"
             )
 
-            if ((t + 1) >= int(9.8e5) and (t + 1) % args.eval_freq == 0) :
+            if (t + 1) >= int(9.8e5):
                 agent.save(f"{args.combo_dir}/{args.env_name}/s{args.seed}_{(t + 1) // args.eval_freq}")
 
     # Save logs

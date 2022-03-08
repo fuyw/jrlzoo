@@ -1,11 +1,12 @@
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+# os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".5"
 import copy
 import gym
 import numpy as np
 from tqdm import tqdm
 from models import TD3
 from utils import ReplayBuffer
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".5"
 
 
 step_dict = {
@@ -15,12 +16,8 @@ step_dict = {
 }
 
 
-def eval_policy(agent: TD3,
-                env_name: str,
-                seed: int,
-                eval_episodes: int = 10) -> float:
+def eval_policy(agent: TD3, env_name: str, eval_episodes: int = 10) -> float:
     eval_env = gym.make(env_name)
-    eval_env.seed(seed + 100)
     avg_reward = 0.
     for _ in range(eval_episodes):
         t = 0
@@ -38,7 +35,6 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", default="Hopper-v2")
-    parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--learning_rate", default=3e-4, type=float)
     args = parser.parse_args()
     return args
@@ -62,12 +58,12 @@ def main(args):
 
     # Eval agents
     for step in agent_dict.keys():
-        eval_reward = eval_policy(agent_dict[step], args.env, 0)
+        eval_reward = eval_policy(agent_dict[step], args.env)
         print(f"[Step - {step}][{args.env}] Eval reward = {eval_reward:.2f}")
 
     # Collect trajectories
     replay_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(1e6))
-    traj_len = 100000
+    traj_len = 20000
     for step in tqdm(agent_dict.keys(), desc='[Collect trajectories]'):
         agent = agent_dict[step]
         t = 0
@@ -89,7 +85,7 @@ def main(args):
     # Save buffer
     os.makedirs(f'saved_buffers', exist_ok=True)
     os.makedirs(f'saved_buffers/{args.env}', exist_ok=True)
-    replay_buffer.save(f'saved_buffers/{args.env}/5agents')
+    replay_buffer.save(f'saved_buffers/{args.env}/L{replay_buffer.size/1000:.0f}K')
 
 
 if __name__ == "__main__":

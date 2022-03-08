@@ -18,8 +18,9 @@ class MLP(nn.Module):
 
 
 class ProbeTrainer:
-    def __init__(self, input_dim, output_dim, batch_size=128, lr=3e-4):
+    def __init__(self, input_dim, output_dim, batch_size=1024, lr=3e-4, epochs=100):
         self.mlp = MLP(output_dim)
+        self.epochs = epochs
         rng = jax.random.PRNGKey(0)
         dummy_inputs = jnp.ones(input_dim)
         params = self.mlp.init(rng, dummy_inputs)["params"]
@@ -40,7 +41,7 @@ class ProbeTrainer:
         kf = KFold(n_splits=5)
         kf_losses = []
         for trainval_idx, test_idx in kf.split(X):
-            trainval_X, test_X = X[trainval_idx], X[test_idx]
+            test_X = X[test_idx]
             train_idx, valid_idx = train_test_split(trainval_idx, test_size=0.1)
             train_X, valid_X, test_X = X[train_idx], X[valid_idx], X[test_idx]
             train_Y, valid_Y, test_Y = Y[train_idx], Y[valid_idx], Y[test_idx]
@@ -49,12 +50,11 @@ class ProbeTrainer:
             min_valid_loss = np.inf
             optimal_params = None
             patience = 0
-            for epoch in trange(100, desc=f"CV #{len(kf_losses)+1}"):
+            for epoch in trange(self.epochs, desc=f"CV #{len(kf_losses)+1}"):
                 epoch_loss = 0
                 for i in range(batch_num):
-                    batch_idx = train_idx[i*self.batch_size:(i+1)*self.batch_size]
-                    batch_x = X[batch_idx]
-                    batch_y = Y[batch_idx]
+                    batch_x = train_X[i*self.batch_size:(i+1)*self.batch_size]
+                    batch_y = train_Y[i*self.batch_size:(i+1)*self.batch_size]
                     loss, grad = grad_fn(self.state.params, batch_x, batch_y)
                     self.state = self.state.apply_gradients(grads=grad)
                     epoch_loss += loss.item()
@@ -66,7 +66,7 @@ class ProbeTrainer:
                 else:
                     patience += 1
                 print(f'# Epoch {epoch}: train_loss: {epoch_loss/batch_num:6f}, valid_loss: {valid_loss:.6f}')
-                if patience == 10:
+                if patience == 8:
                     print(f'Early break at epoch {epoch}.')
                     break
 
