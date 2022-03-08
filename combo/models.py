@@ -40,16 +40,11 @@ class Actor(nn.Module):
         std = jnp.exp(log_std) 
         mean_action = jnp.tanh(mu) * self.action_limit
 
-        # Pre-squash distribution and sample
-        pi_distribution = distrax.Normal(mu, std)
-        pi_action, logp = pi_distribution.sample_and_log_prob(seed=rng)
-
-        # log probability
-        logp = logp.sum(-1)
-        logp -= (2*(jnp.log(2) - pi_action - jax.nn.softplus(-2*pi_action))).sum(-1)
-
-        # Squashed actions
-        sampled_action = jnp.tanh(pi_action) * self.action_limit
+        action_distribution = distrax.Transformed(
+            distrax.MultivariateNormalDiag(mu, std),
+            distrax.Block(distrax.Tanh(), ndims=1))
+        sampled_action, logp = action_distribution.sample_and_log_prob(
+            seed=rng)
         return mean_action, sampled_action, logp
 
 

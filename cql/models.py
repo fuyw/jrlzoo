@@ -62,8 +62,7 @@ class DoubleCritic(nn.Module):
         self.critic1 = Critic(self.hid_dim, self.hid_layers)
         self.critic2 = Critic(self.hid_dim, self.hid_layers)
 
-    def __call__(self, observation: jnp.ndarray,
-                 action: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         q1 = self.critic1(observation, action)
         q2 = self.critic2(observation, action)
         return q1, q2
@@ -177,13 +176,10 @@ class CQLAgent:
                       rng: Any,
                       observation: np.ndarray,
                       eval_mode: bool = False) -> jnp.ndarray:
-        observation = jax.device_put(observation[None])
         rng, sample_rng = jax.random.split(rng)
-        mean_action, sampled_action, _ = self.actor.apply({"params": params},
-                                                          sample_rng,
-                                                          observation)
-        return rng, jnp.where(eval_mode, mean_action.flatten(),
-                              sampled_action.flatten())
+        mean_action, sampled_action, _ = self.actor.apply(
+            {"params": params}, sample_rng, observation)
+        return rng, jnp.where(eval_mode, mean_action, sampled_action)
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self, batch: Batch, critic_target_params: FrozenDict,
