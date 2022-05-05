@@ -1,8 +1,0 @@
-.DS_Store
-__pycache__
-logs
-imgs
-tmp*
-saved_models
-*dynamics_models
-*saved_buffers
