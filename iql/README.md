@@ -54,3 +54,25 @@ python train_finetune.py --env_name=antmaze-large-play-v0 --config=configs/antma
 
 ## Misc
 The implementation is based on [JAXRL](https://github.com/ikostrikov/jaxrl).
+
+python -m SimpleSAC.conservative_sac_main \
+    --env 'antmaze-medium-diverse-v2' \
+    --cql.cql_min_q_weight=5.0 \
+    --cql.cql_max_target_backup=True \
+    --cql.cql_target_action_gap=0.2 \
+    --orthogonal_init=True \
+    --cql.cql_lagrange=True \
+    --cql.cql_temp=1.0 \
+    --cql.policy_lr=1e-4 \
+    --cql.qf_lr=3e-4 \
+    --cql.cql_clip_diff_min=-200 \
+    --reward_scale=10.0 \
+    --reward_bias=-5.0 \
+    --policy_arch='256-256' \
+    --qf_arch='256-256-256' \
+    --policy_log_std_multiplier=0.0 \
+    --eval_period=50 \
+    --eval_n_trajs=100 \
+    --n_epochs=1200 \
+    --bc_epochs=40 \
+    --logging.output_dir './experiment_output'

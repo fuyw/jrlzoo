@@ -84,8 +84,8 @@ def main(args):
 
     # Save buffer
     os.makedirs(f'saved_buffers', exist_ok=True)
-    os.makedirs(f'saved_buffers/{args.env}', exist_ok=True)
-    replay_buffer.save(f'saved_buffers/{args.env}/L{replay_buffer.size/1000:.0f}K')
+    os.makedirs(f'saved_buffers/{args.env.lower()}', exist_ok=True)
+    replay_buffer.save(f'saved_buffers/{args.env.lower()}/L{replay_buffer.size/1000:.0f}K')
 
 
 if __name__ == "__main__":

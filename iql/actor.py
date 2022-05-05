@@ -23,7 +23,7 @@ def update(key: PRNGKey, actor: Model, critic: Model, value: Model,
         log_probs = dist.log_prob(batch.actions)
         actor_loss = -(exp_a * log_probs).mean()
 
-        return actor_loss, {'actor_loss': actor_loss, 'adv': (q - v).mean()}
+        return actor_loss, {'actor_loss': actor_loss, 'adv': (q - v).mean(), 'log_probs': log_probs.mean()}
 
     new_actor, info = actor.apply_gradient(actor_loss_fn)
 

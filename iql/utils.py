@@ -16,8 +16,8 @@ class ReplayBuffer:
         self.observations = np.zeros((max_size, obs_dim))
         self.actions = np.zeros((max_size, act_dim))
         self.next_observations = np.zeros((max_size, obs_dim))
-        self.rewards = np.zeros(max_size)
-        self.discounts = np.zeros(max_size)
+        self.rewards = np.zeros((max_size, 1))
+        self.discounts = np.zeros((max_size, 1))
 
     def add(self, observation: np.ndarray, action: np.ndarray,
             next_observation: np.ndarray, reward: float, done: float):
@@ -43,13 +43,14 @@ class ReplayBuffer:
         self.observations = dataset["observations"]
         self.actions = dataset["actions"]
         self.next_observations = dataset["next_observations"]
-        self.rewards = dataset["rewards"]
-        self.discounts = 1. - dataset["terminals"]
+        self.rewards = dataset["rewards"].reshape(-1, 1)
+        self.discounts = 1. - dataset["terminals"].reshape(-1, 1)
         self.size = self.observations.shape[0]
 
     def normalize_states(self, eps: float = 1e-3):
         mean = self.observations.mean(0, keepdims=True)
         std = self.observations.std(0, keepdims=True) + eps
-        self.observations = (self.observations - mean) / std
-        self.next_observations = (self.next_observations - mean) / std
+        self.observations = (self.observations - mean)/std
+        self.next_observations = (self.next_observations - mean)/std
         return mean, std
+

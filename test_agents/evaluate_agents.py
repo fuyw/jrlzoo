@@ -132,6 +132,7 @@ def select_baseline_agent():
 if __name__ == "__main__":
     os.makedirs('config', exist_ok=True)
     os.makedirs('eval_agent_res', exist_ok=True)
+    os.makedirs('eval_agent_res/cql', exist_ok=True)
 
     # for algo in ['td3bc', 'cql', 'combo']:
     #     os.makedirs(f'eval_agent_res/{algo}', exist_ok=True)
@@ -140,10 +141,12 @@ if __name__ == "__main__":
     #                      'walker2d-medium-expert-v2']:
     #         eval_agent(algo, env_name)
 
-    for env_name in ['halfcheetah-medium-v2', 
-                     'halfcheetah-medium-replay-v2',
-                     'halfcheetah-medium-expert-v2',
-                     'hopper-medium-v2',
+    for env_name in ['hopper-medium-v2',
                      'hopper-medium-replay-v2',
-                     'walker2d-medium-expert-v2']:
-        eval_agent('combo', env_name)
+                     'hopper-medium-expert-v2',
+                     'halfcheetah-medium-replay-v2',
+                     'halfcheetah-medium-expert-v2', 
+                     'walker2d-medium-expert-v2'
+                    #  'halfcheetah-medium-v2', 
+                     ]:
+        eval_agent('cql', env_name)

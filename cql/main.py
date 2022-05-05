@@ -7,6 +7,7 @@ import os
 import time
 import numpy as np
 import pandas as pd
+from flax.training import checkpoints
 from tqdm import trange
 
 from models import CQLAgent
@@ -19,6 +20,7 @@ def eval_policy(agent: CQLAgent,
                 env_name: str,
                 seed: int,
                 eval_episodes: int = 10) -> float:
+    t1 = time.time()
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
     eval_rng = jax.random.PRNGKey(seed + 100)
@@ -33,13 +35,13 @@ def eval_policy(agent: CQLAgent,
             avg_reward += reward
     avg_reward /= eval_episodes
     d4rl_score = eval_env.get_normalized_score(avg_reward) * 100
-    return d4rl_score
+    return d4rl_score, time.time() - t1
 
 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default="hopper-medium-v2")
+    parser.add_argument("--env", default="halfcheetah-medium-v2")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--hid_dim", default=256, type=int)
     parser.add_argument("--hid_layers", default=3, type=int)
@@ -116,7 +118,7 @@ def main(args):
     fix_act = jax.random.normal(jax.random.PRNGKey(2), shape=(128, act_dim))
 
     # Evaluate the untrained policy
-    logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)}]
+    logs = [{"step": 0, "reward": eval_policy(agent, args.env, args.seed)[0]}]
 
     # Initialize training stats
     start_time = time.time()
@@ -131,10 +133,11 @@ def main(args):
                                                (t + 1) %
                                                (2 * args.eval_freq) == 0):
             # eval_reward = np.NaN
-            eval_reward = eval_policy(agent, args.env, args.seed)
+            eval_reward, eval_time = eval_policy(agent, args.env, args.seed)
             log_info.update({
                 "step": t + 1,
                 "reward": eval_reward,
+                "eval_time": eval_time,
                 "time": (time.time() - start_time) / 60
             })
             logs.append(log_info)
@@ -144,7 +147,7 @@ def main(args):
                                            jax.random.PRNGKey(0), fix_obs,
                                            True)
             logger.info(
-                f"\n# Step {t+1}: eval_reward = {eval_reward:.2f}, time: {log_info['time']:.2f}\n"
+                f"\n[#Step {t+1}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
                 f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}\n"
                 f"\tactor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n"
                 f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, "
@@ -176,9 +179,13 @@ def main(args):
 
             if (t + 1) >= int(9.8e5):
                 agent.save(f"{args.model_dir}/{args.env}/s{args.seed}_{(t + 1) // args.eval_freq}")
+                checkpoints.save_checkpoint(fdir, actor_state, step, prefix="actor_", keep=15)
+                checkpoints.save_checkpoint(fdir, critic_state, step, prefix="critic_", keep=15)
+                checkpoints.save_checkpoint(fdir, value_state, step, prefix="value_", keep=15)
+
 
     log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"{args.log_dir}/{args.env}/{exp_name}.csv")
+    log_df.to_csv(f"{configs.log_dir}/{args.env}/{exp_name}.csv")
 
 
 if __name__ == "__main__":

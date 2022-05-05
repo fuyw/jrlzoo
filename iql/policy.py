@@ -9,7 +9,7 @@ from tensorflow_probability.substrates import jax as tfp
 
 tfd = tfp.distributions
 tfb = tfp.bijectors
-
+import distrax
 from common import MLP, Params, PRNGKey, default_init
 
 LOG_STD_MIN = -10.0
@@ -53,9 +53,10 @@ class NormalTanhPolicy(nn.Module):
         if not self.tanh_squash_distribution:
             means = nn.tanh(means)
 
-        base_dist = tfd.MultivariateNormalDiag(loc=means,
-                                               scale_diag=jnp.exp(log_stds) *
-                                               temperature)
+        # base_dist = tfd.MultivariateNormalDiag(loc=means,
+        #                                        scale_diag=jnp.exp(log_stds) *
+        #                                        temperature)
+        base_dist = distrax.MultivariateNormalDiag(means, jnp.exp(log_stds)*temperature)
         if self.tanh_squash_distribution:
             return tfd.TransformedDistribution(distribution=base_dist,
                                                bijector=tfb.Tanh())
@@ -63,7 +64,8 @@ class NormalTanhPolicy(nn.Module):
             return base_dist
 
 
-@functools.partial(jax.jit, static_argnames=('actor_def', 'distribution'))
+# @jax.jit
+@functools.partial(jax.jit, static_argnames=('actor_def'))
 def _sample_actions(rng: PRNGKey,
                     actor_def: nn.Module,
                     actor_params: Params,
@@ -74,10 +76,16 @@ def _sample_actions(rng: PRNGKey,
     return rng, dist.sample(seed=key)
 
 
-def sample_actions(rng: PRNGKey,
+def sample_actions1(rng: PRNGKey,
                    actor_def: nn.Module,
                    actor_params: Params,
                    observations: np.ndarray,
                    temperature: float = 1.0) -> Tuple[PRNGKey, jnp.ndarray]:
     return _sample_actions(rng, actor_def, actor_params, observations,
                            temperature)
+
+@functools.partial(jax.jit, static_argnames=('actor_def'))
+def sample_actions(rng, actor_def, actor_params, observations, temperature):
+    dist = actor_def.apply({'params': actor_params}, observations, temperature)
+    rng, key = jax.random.split(rng)
+    return rng, dist.sample(seed=key)

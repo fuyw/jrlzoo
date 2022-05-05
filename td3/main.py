@@ -32,7 +32,8 @@ def eval_policy(agent: TD3,
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
-    return avg_reward
+    d4rl_score = eval_env.get_normalized_score(avg_reward) * 100
+    return d4rl_score
 
 
 def get_args():
@@ -85,7 +86,7 @@ def main(args):
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
 
     # Evaluate the untrained policy
-    # logs = [{"step": 0, "reward": eval_policy(agent, args.env_name, args.seed)}]
+    logs = [{"step": 0, "reward": eval_policy(agent, args.env_name, args.seed)}]
 
     # Initialize training stats
     obs, done = env.reset(), False
@@ -121,35 +122,31 @@ def main(args):
             episode_timesteps = 0
             episode_num += 1
 
-        if ((t + 1) >= int(9.8e5) and (t + 1) % args.eval_freq == 0) :
-            agent.save(f"{args.model_dir}/{args.env_name}/s{args.seed}_{(t + 1) // args.eval_freq}")
+        # if ((t + 1) >= int(9.8e5) and (t + 1) % args.eval_freq == 0) :
+        #     agent.save(f"{args.model_dir}/{args.env_name}/s{args.seed}_{(t + 1) // args.eval_freq}")
 
-        # if (t + 1) % args.eval_freq == 0:
-        #     eval_reward = eval_policy(agent, args.env_name, args.seed)
-        #     if t >= args.start_timesteps:
-        #         log_info.update({
-        #             "step": t+1,
-        #             "reward": eval_reward,
-        #             "time": (time.time() - start_time) / 60
-        #         })
-        #         logs.append(log_info)
-        #         print(
-        #             f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
-        #             f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}")
-        #     else:
-        #         logs.append({"step": t+1, "reward": eval_reward})
-        #         print(f"# Step {t+1}: {eval_reward:.2f}")
+        if (t + 1) % args.eval_freq == 0:
+            eval_reward = eval_policy(agent, args.env_name, args.seed)
+            if t >= args.start_timesteps:
+                log_info.update({
+                    "step": t+1,
+                    "reward": eval_reward,
+                    "time": (time.time() - start_time) / 60
+                })
+                logs.append(log_info)
+                print(
+                    f"# Step {t+1}: {eval_reward:.2f}, critic_loss: {log_info['critic_loss']:.3f}, "
+                    f"q1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}")
+            else:
+                logs.append({"step": t+1, "reward": eval_reward})
+                print(f"# Step {t+1}: {eval_reward:.2f}")
 
-        #     if (t + 1) in SAVE_FREQ[args.env_name]:
-        #         agent.save(f"{args.model_dir}/{args.env_name}/step{int((t+1)/1e4)}_seed{args.seed}")
+            # if (t + 1) in SAVE_FREQ[args.env_name]:
+            #     agent.save(f"{args.model_dir}/{args.env_name}/step{int((t+1)/1e4)}_seed{args.seed}")
 
     # Save logs
-    # os.makedirs(args.log_dir, exist_ok=True)
-    # os.makedirs(args.model_dir, exist_ok=True)
-    # os.makedirs(f"{args.log_dir}/{args.env_name}", exist_ok=True)
-    # os.makedirs(f"{args.model_dir}/{args.env_name}", exist_ok=True)
-    # log_df = pd.DataFrame(logs)
-    # log_df.to_csv(f"{args.log_dir}/{args.env_name}/{args.seed}.csv")
+    log_df = pd.DataFrame(logs)
+    log_df.to_csv(f"{args.log_dir}/{args.env_name}/{args.seed}.csv")
 
     # Save buffers
     # os.makedirs(f'saved_buffers/{args.env_name}', exist_ok=True)
@@ -158,9 +155,7 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args()
-    # os.makedirs(args.log_dir, exist_ok=True)
-    # os.makedirs(f"{args.log_dir}/{args.env_name}", exist_ok=True)
-    os.makedirs(args.model_dir, exist_ok=True)
+    os.makedirs(f"{args.log_dir}/{args.env_name}", exist_ok=True)
     os.makedirs(f"{args.model_dir}/{args.env_name}", exist_ok=True)
     print(f"\nArguments:\n{vars(args)}")
     main(args)

@@ -12,19 +12,16 @@ from models import COMBOAgent
 from utils import ReplayBuffer
 
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".5"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 
-def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int = 10) -> float:
+def eval_policy(agent, eval_env, eval_episodes: int = 10) -> float:
     t1 = time.time()
-    eval_env = gym.make(env_name)
-    eval_env.seed(seed + 100)
-    eval_rng = jax.random.PRNGKey(seed + 100)
     avg_reward = 0.
     for _ in range(eval_episodes):
         obs, done = eval_env.reset(), False
         while not done:
-            eval_rng, action = agent.select_action(agent.actor_state.params, eval_rng, np.array(obs), True)
+            _, action = agent.eval_select_action(agent.actor_state.params, agent.rng, obs)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -33,13 +30,13 @@ def eval_policy(agent: COMBOAgent, env_name: str, seed: int, eval_episodes: int 
 
 
 conf_dict = {
-    "walker2d-medium-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 1, "rollout_random": False},
-    "walker2d-medium-replay-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 1.0, "horizon": 1, "rollout_random": False},
-    "walker2d-medium-expert-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 1, "rollout_random": False},
-    "hopper-medium-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 3.0, "horizon": 5, "rollout_random": False},
-    "hopper-medium-replay-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": True},
-    "hopper-medium-expert-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 3, "rollout_random": False},
-    "halfcheetah-medium-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": False},
+    "walker2d-medium-v2":           {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 1, "rollout_random": False},
+    "walker2d-medium-replay-v2":    {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 1.0, "horizon": 1, "rollout_random": False},
+    "walker2d-medium-expert-v2":    {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 1, "rollout_random": False},
+    "hopper-medium-v2":             {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 5, "rollout_random": False},
+    "hopper-medium-replay-v2":      {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": True},
+    "hopper-medium-expert-v2":      {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 3.0, "horizon": 3, "rollout_random": False},
+    "halfcheetah-medium-v2":        {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": False},
     "halfcheetah-medium-replay-v2": {"lr_actor": 1e-4, "lr": 3e-4, "min_q_weight": 1.0, "horizon": 5, "rollout_random": False},
     "halfcheetah-medium-expert-v2": {"lr_actor": 1e-5, "lr": 1e-4, "min_q_weight": 5.0, "horizon": 5, "rollout_random": False},
 }
@@ -64,7 +61,7 @@ def get_args():
     parser.add_argument("--auto_entropy_tuning", default=True, action="store_false")
     parser.add_argument("--log_dir", default="./logs", type=str)
     parser.add_argument("--model_dir", default="./saved_dynamics_models", type=str)
-    parser.add_argument("--combo_dir", default="./saved_combo_models", type=str)
+    parser.add_argument("--combo_dir", default="./saved_models", type=str)
     parser.add_argument("--backup_entropy", default=False, action="store_true")
     parser.add_argument("--rollout_random", default=False, action="store_true")
     parser.add_argument("--train_dynamics_model", default=False, action="store_true")
@@ -109,10 +106,6 @@ def main(args):
                        min_q_weight=args.min_q_weight,
                        rollout_random=args.rollout_random)
 
-    # Train the dynamics model
-    if args.train_dynamics_model:
-        agent.model.train()
-
     # Load the trained dynamics model
     agent.model.load(f'{args.model_dir}/{args.env_name}')
 
@@ -122,7 +115,7 @@ def main(args):
     model_buffer = ReplayBuffer(obs_dim, act_dim, max_size=int(args.horizon*1e5))
 
     # Evaluate the untrained policy
-    logs = [{"step": 0, "reward": eval_policy(agent, args.env_name, args.seed)[0]}]  # 2.38219
+    logs = [{"step": 0, "reward": eval_policy(agent, env)[0]}]  # 2.38219
 
     # Initialize training stats
     start_time = time.time()
@@ -131,12 +124,16 @@ def main(args):
     for t in trange(args.max_timesteps):
         log_info = agent.update(replay_buffer, model_buffer)
 
+        # Save every 1e5 steps & last 5 checkpoints
+        if ((t + 1) % 100000 == 0) or ((t + 1) >= int(9.8e5) and (t + 1) % args.eval_freq == 0):
+            agent.save(f"{args.combo_dir}/{args.env_name}/s{args.seed}", (t + 1) // args.eval_freq)
+
         # save some evaluate time
         if ((t + 1) >= int(9.5e5) and
             (t + 1) % args.eval_freq == 0) or ((t + 1) <= int(9.5e5) and
                                                (t + 1) %
                                                (2 * args.eval_freq) == 0):
-            eval_reward, eval_time = eval_policy(agent, args.env_name, args.seed)
+            eval_reward, eval_time = eval_policy(agent, env)
             log_info.update({
                 "step": t+1,
                 "reward": eval_reward,
@@ -184,19 +181,16 @@ def main(args):
                 f"\trandom_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, "
                 f"logp_next_action: {log_info['logp_next_action']:.2f}\n"
 
-                f"\treal_batch_rewards: {log_info['real_batch_rewards']:.2f}, "
-                f"real_batch_actions: {log_info['real_batch_actions']:.2f}, "
+                f"\treal_batch_rewards: {log_info['real_batch_rewards']:.2f}, real_batch_rewards_min: {log_info['real_batch_rewards_min']:.2f}, real_batch_rewards_max: {log_info['real_batch_rewards_max']:.2f}\n"
+                f"\treal_batch_actions: {log_info['real_batch_actions']:.2f}, "
                 f"real_batch_discounts: {log_info['real_batch_discounts']:.2f}\n"
-                f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, "
-                f"model_batch_actions: {log_info['model_batch_actions']:.2f}, "
+                f"\tmodel_batch_rewards: {log_info['model_batch_rewards']:.2f}, model_batch_rewards_min: {log_info['model_batch_rewards_min']:.2f}, model_batch_rewards_max: {log_info['model_batch_rewards_max']:.2f}\n"
+                f"\tmodel_batch_actions: {log_info['model_batch_actions']:.2f}, "
                 f"model_batch_discounts: {log_info['model_batch_discounts']:.2f}\n"
                 f"\tmodel_buffer_size: {log_info['model_buffer_size']:.0f}, "
                 f"model_buffer_ptr: {log_info['model_buffer_ptr']:.0f}\n"
                 f"\tmin_q_weight: {log_info['min_q_weight']:.1f}\n"
             )
-
-            if (t + 1) >= int(9.8e5):
-                agent.save(f"{args.combo_dir}/{args.env_name}/s{args.seed}_{(t + 1) // args.eval_freq}")
 
     # Save logs
     log_df = pd.DataFrame(logs)
@@ -205,9 +199,6 @@ def main(args):
 
 if __name__ == "__main__":
     args = get_args()
-    os.makedirs(args.log_dir, exist_ok=True)
-    os.makedirs(args.model_dir, exist_ok=True)
-    os.makedirs(args.combo_dir, exist_ok=True)
     os.makedirs(f"{args.log_dir}/{args.env_name}", exist_ok=True)
     os.makedirs(f"{args.model_dir}/{args.env_name}", exist_ok=True)
     os.makedirs(f"{args.combo_dir}/{args.env_name}", exist_ok=True)

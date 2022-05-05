@@ -1,8 +1,8 @@
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Sequence, Tuple
 from flax import linen as nn
 from flax import serialization
 from flax.core import FrozenDict
-from flax.training import train_state
+from flax.training import train_state, checkpoints
 import functools
 import gym
 import d4rl
@@ -24,54 +24,99 @@ LOG_STD_MIN = -5.
 kernel_initializer = jax.nn.initializers.glorot_uniform()
 
 
-class Actor(nn.Module):
-    act_dim: int
-    action_limit: float = 1.0
+def atanh(x: jnp.ndarray):
+    one_plus_x = jnp.clip(1 + x, a_min=1e-6)
+    one_minus_x = jnp.clip(1 - x, a_min=1e-6)
+    return 0.5 * jnp.log(one_plus_x / one_minus_x)
+
+
+class MLP(nn.Module):
+    hidden_dims: Sequence[int] = (256, 256)
+    init_fn: Callable = nn.initializers.glorot_uniform()
+    activate_final: bool = True
 
     @nn.compact
-    def __call__(self, rng: Any, observation: jnp.ndarray):
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc1")(observation))
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc2")(x))
-        x = nn.relu(nn.Dense(256, kernel_init=kernel_initializer, name="fc3")(x))
-        x = nn.Dense(2 * self.act_dim, kernel_init=kernel_initializer, name="output")(x)
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        for i, size in enumerate(self.hidden_dims):
+            x = nn.Dense(size, kernel_init=self.init_fn)(x)
+            if i + 1 < len(self.hidden_dims) or self.activate_final:
+                x = nn.relu(x)
+        return x
 
+
+class Actor(nn.Module):
+    act_dim: int
+    max_action: float = 1.0
+    hidden_dims: Sequence[int] = (256, 256, 256)
+    init_fn: Callable = nn.initializers.glorot_uniform()
+
+    def setup(self):
+        self.net = MLP(self.hidden_dims, activate_final=True)
+        self.out_layer = nn.Dense(2*self.act_dim, kernel_init=self.init_fn)
+    
+    def __call__(self, rng: Any, observation: jnp.ndarray) -> jnp.ndarray:
+        x = self.net(observation)
+        x = self.out_layer(x)
         mu, log_std = jnp.split(x, 2, axis=-1)
         log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std) 
-        mean_action = jnp.tanh(mu) * self.action_limit
+        std = jnp.exp(log_std)
 
+        mean_action = nn.tanh(mu)
         action_distribution = distrax.Transformed(
             distrax.MultivariateNormalDiag(mu, std),
             distrax.Block(distrax.Tanh(), ndims=1))
-        sampled_action, logp = action_distribution.sample_and_log_prob(
-            seed=rng)
-        return mean_action, sampled_action, logp
+        sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
+        return mean_action*self.max_action, sampled_action*self.max_action, logp
+
+    def get_logp(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
+        x = self.net(observation)
+        x = self.out_layer(x)
+        mu, log_std = jnp.split(x, 2, axis=-1)
+        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        std = jnp.exp(log_std)
+        action_distribution = distrax.Normal(mu, std)
+        raw_action = atanh(action)
+        logp = action_distribution.log_prob(raw_action).sum(-1)
+        logp -= 2*(jnp.log(2) - raw_action - jax.nn.softplus(-2*raw_action)).sum(-1)
+        return logp
 
 
 class Critic(nn.Module):
-    hid_dim: int = 256
-    layer_num: int = 3
+    hidden_dims: Sequence[int] = (256, 256, 256)
+    init_fn: Callable = nn.initializers.glorot_uniform()
 
-    @nn.compact
-    def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        x = jnp.concatenate([observation, action], axis=-1)
-        for i in range(self.layer_num):
-            x = nn.relu(nn.Dense(self.hid_dim, kernel_init=kernel_initializer, name=f"fc{i+1}")(x))
-        q = nn.Dense(1, kernel_init=kernel_initializer, name="output")(x)
-        return q
+    def setup(self):
+        self.net = MLP(self.hidden_dims, init_fn=self.init_fn, activate_final=True)
+        self.out_layer = nn.Dense(1, kernel_init=self.init_fn)
+
+    def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        x = jnp.concatenate([observations, actions], axis=-1)
+        x = self.net(x)
+        q = self.out_layer(x)
+        return q.squeeze(-1)
+
+    def encode(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        x = jnp.concatenate([observations, actions], axis=-1)
+        x = self.net(x)
+        return x
 
 
 class DoubleCritic(nn.Module):
-    hid_dim: int = 256
+    hidden_dims: Sequence[int] = (256, 256, 256)
+    init_fn: Callable = nn.initializers.glorot_uniform()
 
     def setup(self):
-        self.critic1 = Critic(self.hid_dim)
-        self.critic2 = Critic(self.hid_dim)
+        self.critic1 = Critic(self.hidden_dims, init_fn=self.init_fn)
+        self.critic2 = Critic(self.hidden_dims, init_fn=self.init_fn)
 
-    def __call__(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        q1 = self.critic1(observation, action)
-        q2 = self.critic2(observation, action)
+    def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        q1 = self.critic1(observations, actions)
+        q2 = self.critic2(observations, actions)
         return q1, q2
+
+    def encode(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        embedding = self.critic1.encode(observations, actions)
+        return embedding
 
 
 class Scalar(nn.Module):
@@ -197,9 +242,21 @@ class DynamicsModel:
             apply_fn=self.model.apply, params=model_params,
             tx=optax.adamw(learning_rate=self.lr,
             weight_decay=self.weight_decay))
-        # elite_idx = np.loadtxt(f'{filename}/elite_models.txt', dtype=np.int32)[:self.elite_num]
-        # self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
+        elite_idx = np.loadtxt(f'{filename}/elite_models.txt', dtype=np.int32)[:self.elite_num]
+        self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
         normalize_stat = np.load(f'{filename}/normalize_stat.npz')
+        self.obs_mean = normalize_stat['obs_mean'].squeeze()
+        self.obs_std = normalize_stat['obs_std'].squeeze()
+
+    def load_(self, filename):
+        self.save_dir = filename
+        self.model_state = checkpoints.restore_checkpoint(ckpt_dir=f"{self.save_dir}",
+                                                          target=self.model_state,
+                                                          step=0,
+                                                          prefix="dynamics_model_")
+        elite_idx = np.loadtxt(f"{self.save_dir}/elite_models.txt", dtype=np.int32)[:self.elite_num]
+        self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
+        normalize_stat = np.load(f'{self.save_dir}/normalize_stat.npz')
         self.obs_mean = normalize_stat['obs_mean']
         self.obs_std = normalize_stat['obs_std']
 
@@ -298,57 +355,50 @@ class DynamicsModel:
         np.savez(f"{self.save_file}/normalize_stat",
                  obs_mean=self.obs_mean, obs_std=self.obs_std)
 
-    def step(self, key, observations, actions):
-        model_idx = jax.random.randint(key, shape=(actions.shape[0],), minval=0, maxval=self.elite_num)
-        model_masks = self.elite_mask[model_idx].reshape(-1, self.ensemble_num, 1)
-
+    def rollout(self, params, observations, actions, model_masks):
         @jax.jit
-        def rollout(params, rng, observation, action, model_mask):
+        def rollout_fn(observation, action, model_mask):
             x = jnp.concatenate([observation, action], axis=-1).reshape(1, -1)
             model_mu, model_log_var = self.model.apply({"params": params}, x)
             observation_mu, reward_mu = jnp.split(model_mu, [self.obs_dim], axis=-1)
-
-            # model_std = jnp.sqrt(jnp.exp(model_log_var))  # (7, 12)
-            # model_noise = model_std * jax.random.normal(rng, (self.ensemble_num, self.obs_dim+1))  # (7, 12)
-            # observation_noise, reward_noise = jnp.split(model_noise, [self.obs_dim], axis=-1)
-
-            # model_next_observation = observation + jnp.sum(
-            #     model_mask * (observation_mu + observation_noise), axis=0)
-            # model_reward = jnp.sum(model_mask * (reward_mu + reward_noise), axis=0)
-
-            # model_next_observation = observation + jnp.sum(model_mask * observation_mu, axis=0)
-            # model_reward = jnp.sum(model_mask * reward_mu, axis=0)
-
             model_next_observation = observation + jnp.sum(model_mask * observation_mu, axis=0)
             model_reward = jnp.sum(model_mask * reward_mu, axis=0)
             return model_next_observation, model_reward
-
-        rollout = jax.vmap(rollout, in_axes=(None, 0, 0, 0, 0))
-        rollout_rng = jnp.stack(jax.random.split(key, num=actions.shape[0]))
-        next_observations, rewards = rollout(self.model_state.params, rollout_rng, observations, actions, model_masks)
+        next_observations, rewards = jax.vmap(rollout_fn, in_axes=(0, 0, 0))(observations, actions, model_masks)
         next_observations = self.denormalize(next_observations)
+        return next_observations, rewards
+
+    def step(self, key, observations, actions):
+        model_idx = jax.random.randint(key, shape=(actions.shape[0],), minval=0, maxval=self.elite_num)
+        model_masks = self.elite_mask[model_idx].reshape(-1, self.ensemble_num, 1)
+        next_observations, rewards = self.rollout(self.model_state.params, observations, actions, model_masks)
         terminals = self.static_fn.termination_fn(observations, actions, next_observations)
         return next_observations, rewards.squeeze(), terminals.squeeze()
 
-    def step2(self, key, observations, actions):
-        @jax.jit
-        def rollout(params, observation, action):
-            x = jnp.concatenate([observation, action], axis=-1).reshape(1, -1)
-            model_mu, _ = self.model.apply({"params": params}, x)
-            observation_mu, reward_mu = jnp.split(model_mu, [self.obs_dim], axis=-1)
-            model_next_observation = observation + observation_mu 
-            return model_next_observation, reward_mu
-        rollout = jax.vmap(rollout, in_axes=(None, 0, 0))
-        next_observations, rewards = rollout(self.model_state.params, observations, actions)
-        return next_observations, rewards.squeeze()
+    # def step(self, key, observations, actions):
+    #     model_idx = jax.random.randint(key, shape=(actions.shape[0],), minval=0, maxval=self.elite_num)
+    #     model_masks = self.elite_mask[model_idx].reshape(-1, self.ensemble_num, 1)
+
+    #     @jax.jit
+    #     def rollout(params, rng, observation, action, model_mask):
+    #         x = jnp.concatenate([observation, action], axis=-1).reshape(1, -1)
+    #         model_mu, model_log_var = self.model.apply({"params": params}, x)
+    #         observation_mu, reward_mu = jnp.split(model_mu, [self.obs_dim], axis=-1)
+    #         model_next_observation = observation + jnp.sum(model_mask * observation_mu, axis=0)
+    #         model_reward = jnp.sum(model_mask * reward_mu, axis=0)
+    #         return model_next_observation, model_reward
+    #     rollout = jax.vmap(rollout, in_axes=(None, 0, 0, 0, 0))
+    #     rollout_rng = jnp.stack(jax.random.split(key, num=actions.shape[0]))
+    #     next_observations, rewards = rollout(self.model_state.params, rollout_rng, observations, actions, model_masks)
+    #     next_observations = self.denormalize(next_observations)
+    #     terminals = self.static_fn.termination_fn(observations, actions, next_observations)
+    #     return next_observations, rewards.squeeze(), terminals.squeeze()
 
     def normalize(self, observations):
-        assert (self.obs_mean is not None) and (self.obs_std is not None)
         new_observations = (observations - self.obs_mean) / self.obs_std
         return new_observations
 
     def denormalize(self, observations):
-        assert (self.obs_mean is not None) and (self.obs_std is not None)
         new_observations = observations * self.obs_std + self.obs_mean
         return new_observations
 
@@ -521,20 +571,18 @@ class COMBOAgent:
 
             # We use frozen_params so that gradients can flow back to the actor without being used to update the critic.
             sampled_q1, sampled_q2 = self.critic.apply({"params": frozen_critic_params}, observation, sampled_action)
-            sampled_q = jnp.squeeze(jnp.minimum(sampled_q1, sampled_q2))
+            sampled_q = jnp.minimum(sampled_q1, sampled_q2)
 
             # Actor loss
             actor_loss = (alpha * logp - sampled_q)
 
             # Critic loss
             q1, q2 = self.critic.apply({"params": critic_params}, observation, action)
-            q1 = jnp.squeeze(q1)
-            q2 = jnp.squeeze(q2)
 
             # Use frozen_actor_params to avoid affect Actor parameters
             _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng2, next_observation)
             next_q1, next_q2 = self.critic.apply({"params": critic_target_params}, next_observation, next_action)
-            next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2))
+            next_q = jnp.minimum(next_q1, next_q2)
             if self.backup_entropy:
                 next_q -= alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
@@ -567,12 +615,12 @@ class COMBOAgent:
 
             random_density = np.log(0.5 ** self.act_dim)
             cql_concat_q1 = jnp.concatenate([
-                jnp.squeeze(cql_random_q1) - random_density,
-                jnp.squeeze(cql_q1) - cql_logp,
+                cql_random_q1 - random_density,
+                cql_q1 - cql_logp,
             ])
             cql_concat_q2 = jnp.concatenate([
-                jnp.squeeze(cql_random_q2) - random_density,
-                jnp.squeeze(cql_q2) - cql_logp,
+                cql_random_q2 - random_density,
+                cql_q2 - cql_logp,
             ])
 
             ood_q1 = jax.scipy.special.logsumexp(cql_concat_q1)
@@ -668,13 +716,12 @@ class COMBOAgent:
         actor_grads, critic_grads, alpha_grads = gradients
 
         # Update TrainState
-        actor_state = actor_state.apply_gradients(grads=actor_grads)
-        critic_state = critic_state.apply_gradients(grads=critic_grads)
-        alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
+        new_actor_state = actor_state.apply_gradients(grads=actor_grads)
+        new_critic_state = critic_state.apply_gradients(grads=critic_grads)
+        new_alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
+        new_critic_target_params = self.update_target_params(new_critic_state.params, critic_target_params)
+        return log_info, new_actor_state, new_critic_state, new_alpha_state, new_critic_target_params
 
-        return log_info, actor_state, critic_state, alpha_state
-
-    @functools.partial(jax.jit, static_argnames=("self"))
     def update_target_params(self, params: FrozenDict, target_params: FrozenDict):
         def _update(param, target_param):
             return self.tau * param + (1 - self.tau) * target_param
@@ -684,10 +731,14 @@ class COMBOAgent:
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def select_action(self, params: FrozenDict, rng: Any, observation: np.ndarray, eval_mode: bool = False) -> jnp.ndarray:
-        observation = jax.device_put(observation[None])
         rng, sample_rng = jax.random.split(rng)
         mean_action, sampled_action, _ = self.actor.apply({"params": params}, sample_rng, observation)
-        return rng, jnp.where(eval_mode, mean_action.flatten(), sampled_action.flatten())
+        return rng, jnp.where(eval_mode, mean_action, sampled_action)
+
+    @functools.partial(jax.jit, static_argnames=("self"), device=jax.devices("cpu")[0])
+    def eval_select_action(self, params: FrozenDict, rng: Any, observation: np.ndarray) -> jnp.ndarray:
+        mean_action, _, _ = self.actor.apply({"params": params}, rng, observation)
+        return rng, mean_action
 
     def update(self, replay_buffer, model_buffer):
         select_action = jax.vmap(self.select_action, in_axes=(None, 0, 0, None))
@@ -728,21 +779,20 @@ class COMBOAgent:
 
         # CQL training with COMBO
         self.rng, key = jax.random.split(self.rng)
-        log_info, self.actor_state, self.critic_state, self.alpha_state = self.train_step(
+        log_info, self.actor_state, self.critic_state, self.alpha_state, self.critic_target_params = self.train_step(
             concat_observations, concat_actions, concat_rewards, concat_discounts,
             concat_next_observations, self.critic_target_params, self.actor_state,
             self.critic_state, self.alpha_state, key
         )
 
-        # upate target network
-        params = self.critic_state.params
-        target_params = self.critic_target_params
-        self.critic_target_params = self.update_target_params(params, target_params)
-
         log_info['real_batch_rewards'] = real_batch.rewards.sum()
+        log_info['real_batch_rewards_min'] = real_batch.rewards.min()
+        log_info['real_batch_rewards_max'] = real_batch.rewards.max()
         log_info['real_batch_actions'] = abs(real_batch.actions).reshape(-1).sum()
         log_info['real_batch_discounts'] = real_batch.discounts.sum()
         log_info['model_batch_rewards'] = model_batch.rewards.sum()
+        log_info['model_batch_rewards_min'] = model_batch.rewards.min()
+        log_info['model_batch_rewards_max'] = model_batch.rewards.max()
         log_info['model_batch_actions'] = abs(model_batch.actions).reshape(-1).sum()
         log_info['model_batch_discounts'] = model_batch.discounts.sum()
         log_info['model_buffer_size'] = model_buffer.size
@@ -750,11 +800,9 @@ class COMBOAgent:
         self.update_step += 1
         return log_info
 
-    def save(self, save_name):
-        with open(f"{save_name}_actor.ckpt", "wb") as f:
-            f.write(serialization.to_bytes(self.actor_state.params))
-        with open(f"{save_name}_critic.ckpt", "wb") as f:
-            f.write(serialization.to_bytes(self.critic_state.params))
+    def save(self, fname: str, cnt: int):
+        checkpoints.save_checkpoint(fname, self.actor_state, cnt, prefix="actor_", keep=10, overwrite=True)
+        checkpoints.save_checkpoint(fname, self.critic_state, cnt, prefix="critic_", keep=10, overwrite=True)
 
     def load(self, filename):
         with open(f"{filename}_actor.ckpt", "rb") as f:

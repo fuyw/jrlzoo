@@ -1,5 +1,5 @@
 from typing import Dict
-
+import time
 import flax.linen as nn
 import gym
 import numpy as np
@@ -7,6 +7,7 @@ import numpy as np
 
 def evaluate(agent: nn.Module, env: gym.Env,
              num_episodes: int) -> Dict[str, float]:
+    t1 = time.time()
     stats = {'return': [], 'length': []}
 
     for _ in range(num_episodes):
@@ -22,4 +23,4 @@ def evaluate(agent: nn.Module, env: gym.Env,
     for k, v in stats.items():
         stats[k] = np.mean(v)
 
-    return stats
+    return stats, time.time() - t1

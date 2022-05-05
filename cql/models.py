@@ -14,7 +14,6 @@ from utils import Batch
 
 LOG_STD_MAX = 2.
 LOG_STD_MIN = -10.
-
 kernel_initializer = jax.nn.initializers.glorot_uniform()
 
 

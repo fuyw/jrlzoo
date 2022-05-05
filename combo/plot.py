@@ -81,3 +81,22 @@ def plot_exps(env):
 if __name__ == '__main__':
     env = 'hopper-medium-v2'
     plot_exps(env)
+
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+fdir = 'logs/hopper-medium-v2'
+df1 = pd.read_csv(f'{fdir}/combo_s0_alpha3.0_h5.csv', index_col=0).set_index('step')
+df2 = pd.read_csv(f'{fdir}/combo_s4_alpha3.0_h5.csv', index_col=0).set_index('step')
+df3 = pd.read_csv(f'{fdir}/combo_s6_alpha3.0_h5.csv', index_col=0).set_index('step')
+df4 = pd.read_csv(f'{fdir}/combo_s7_alpha3.0_h5.csv', index_col=0).set_index('step')
+plt_idx = np.arange(0, 1010000, 10000)
+_, ax = plt.subplots()
+ax.plot(plt_idx, df1.loc[plt_idx, 'reward'], label='seed1')
+ax.plot(plt_idx, df2.loc[plt_idx, 'reward'], label='seed2')
+ax.plot(plt_idx, df3.loc[plt_idx, 'reward'], label='seed3')
+ax.plot(plt_idx, df4.loc[plt_idx, 'reward'], label='seed4')
+plt.legend()
+plt.savefig('a.png')

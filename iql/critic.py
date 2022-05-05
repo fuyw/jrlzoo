@@ -28,12 +28,13 @@ def update_v(critic: Model, value: Model, batch: Batch,
 
     return new_value, info
 
-
+# new_critic, critic_info = update_q(critic, new_value, batch, discount)
 def update_q(critic: Model, target_value: Model, batch: Batch,
              discount: float) -> Tuple[Model, InfoDict]:
-    next_v = target_value(batch.next_observations)
+    next_v = target_value(batch.next_observations)  # (256,)
 
-    target_q = batch.rewards + discount * batch.masks * next_v
+    # target_q = batch.rewards + discount * batch.masks * next_v
+    target_q = batch.rewards.squeeze() + discount * batch.discounts.squeeze() * next_v
 
     def critic_loss_fn(critic_params: Params) -> Tuple[jnp.ndarray, InfoDict]:
         q1, q2 = critic.apply({'params': critic_params}, batch.observations,
@@ -42,7 +43,7 @@ def update_q(critic: Model, target_value: Model, batch: Batch,
         return critic_loss, {
             'critic_loss': critic_loss,
             'q1': q1.mean(),
-            'q2': q2.mean()
+            'q2': q2.mean(),
         }
 
     new_critic, info = critic.apply_gradient(critic_loss_fn)

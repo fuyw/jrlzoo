@@ -4,10 +4,12 @@ os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '.2'
 from typing import Tuple
 
 import gym
+import d4rl
 import numpy as np
 import pandas as pd
 import time
 import tqdm
+from utils import ReplayBuffer
 from absl import app, flags
 from ml_collections import config_flags
 
@@ -16,8 +18,6 @@ import wrappers
 from dataset_utils import D4RLDataset, split_into_trajectories
 from evaluation import evaluate
 from learner import Learner
-from utils import ReplayBuffer
-import d4rl
 
 
 FLAGS = flags.FLAGS
@@ -36,39 +36,23 @@ config_flags.DEFINE_config_file(
     lock_config=False)
 
 
-def normalize(dataset, env_name):
-    normalize_info_df = pd.read_csv('configs/minmax_traj_reward.csv', index_col=0).set_index('env_name')
+
+def normalize(dataset, env_name, eps=1e-5):
+    normalize_info_df = pd.read_csv('configs2/minmax_traj_reward.csv', index_col=0).set_index('env_name')
     min_traj_reward, max_traj_reward = normalize_info_df.loc[env_name, ['min_traj_reward', 'max_traj_reward']]
     dataset.rewards = dataset.rewards / (max_traj_reward - min_traj_reward) * 1000
 
-
-def make_env_and_dataset(env_name: str,
-                         seed: int):
-    env = gym.make(env_name)
-
-    env = wrappers.EpisodeMonitor(env)
-    env = wrappers.SinglePrecision(env)
-
-    env.seed(seed)
-    env.action_space.seed(seed)
-    env.observation_space.seed(seed)
-
-    dataset = D4RLDataset(env)
-
-    if 'antmaze' in FLAGS.env_name:
-        dataset.rewards -= 1.0
-        # See https://github.com/aviralkumar2907/CQL/blob/master/d4rl/examples/cql_antmaze_new.py#L22
-        # but I found no difference between (x - 0.5) * 4 and x - 1.0
-    elif ('halfcheetah' in FLAGS.env_name or 'walker2d' in FLAGS.env_name
-          or 'hopper' in FLAGS.env_name):
-        normalize(dataset)
-
-    return env, dataset
+def normalize_buffer(buffer, env_name, eps=1e-5):
+    normalize_info_df = pd.read_csv('configs2/minmax_traj_reward.csv', index_col=0).set_index('env_name')
+    min_traj_reward, max_traj_reward = normalize_info_df.loc[env_name, ['min_traj_reward', 'max_traj_reward']]
+    buffer.rewards = buffer.rewards / (max_traj_reward - min_traj_reward) * 1000
+    lim = 1 - eps
+    buffer.actions = np.clip(buffer.actions, -lim, lim)
 
 
 def main(_):
+    FLAGS(sys.argv)
     start_time = time.time()
-    # env, dataset = make_env_and_dataset(FLAGS.env_name, FLAGS.seed)
     env = gym.make(FLAGS.env_name)
     env = wrappers.EpisodeMonitor(env)
     env = wrappers.SinglePrecision(env)
@@ -80,10 +64,14 @@ def main(_):
     act_dim = env.action_space.shape[0]
 
     # dataset = D4RLDataset(env)
+    # normalize(dataset, FLAGS.env_name)
+
     dataset = ReplayBuffer(obs_dim, act_dim)
     dataset.convert_D4RL(d4rl.qlearning_dataset(env))
+    normalize_buffer(dataset, FLAGS.env_name)
 
-    normalize(dataset, FLAGS.env_name)
+    # abs(dataset.masks - buffer.discounts.squeeze()).reshape(-1).max()
+    # normalize2(dataset, FLAGS.env_name)
 
     kwargs = dict(FLAGS.config)
     agent = Learner(FLAGS.seed,
@@ -109,7 +97,7 @@ def main(_):
                 'time': (time.time() - start_time) / 60                
             })
             logs.append(update_info)
-            print(f'#Step = {i}: reward={update_info["reward"]:.2f}, eval_time={update_info["eval_time"]:.2f}, actor_loss={update_info["actor_loss"]:.3f}, val_loss={update_info["value_loss"]:.1f}, q1={update_info["q1"]:.1f}')
+            print(f'#Step = {i}: reward={update_info["reward"]:.2f}, actor_loss={update_info["actor_loss"]:.3f}, val_loss={update_info["value_loss"]:.1f}, logp={update_info["log_probs"]:.1f}, q1={update_info["q1"]:.1f}')
 
     # Save logs
     os.makedirs('logs', exist_ok=True)
