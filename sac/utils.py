@@ -1,6 +1,8 @@
 import collections
 import jax
+import logging
 import numpy as np
+from flax.core import FrozenDict
 
 Batch = collections.namedtuple(
     "Batch",
@@ -8,6 +10,7 @@ Batch = collections.namedtuple(
 
 
 class ReplayBuffer:
+
     def __init__(self, obs_dim: int, act_dim: int, max_size: int = int(1e6)):
         self.max_size = max_size
         self.ptr = 0
@@ -32,10 +35,30 @@ class ReplayBuffer:
 
     def sample(self, batch_size: int) -> Batch:
         idx = np.random.randint(0, self.size, size=batch_size)
-        batch = Batch(observations=jax.device_put(self.observations[idx]),
-                      actions=jax.device_put(self.actions[idx]),
-                      rewards=jax.device_put(self.rewards[idx]),
-                      discounts=jax.device_put(self.discounts[idx]),
-                      next_observations=jax.device_put(
-                          self.next_observations[idx]))
+        batch = Batch(observations=self.observations[idx],
+                      actions=self.actions[idx],
+                      rewards=self.rewards[idx],
+                      discounts=self.discounts[idx],
+                      next_observations=self.next_observations[idx])
         return batch
+
+
+def get_logger(fname: str) -> logging.Logger:
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        filename=fname,
+                        filemode='w',
+                        force=True)
+    logger = logging.getLogger()
+    return logger
+
+
+def target_update(params: FrozenDict, target_params: FrozenDict,
+                  tau: float) -> FrozenDict:
+
+    def _update(param: FrozenDict, target_param: FrozenDict):
+        return tau * param + (1 - tau) * target_param
+
+    updated_params = jax.tree_util.tree_map(_update, params, target_params)
+    return updated_params
