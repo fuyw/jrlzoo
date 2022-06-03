@@ -1,79 +1,94 @@
-from typing import Any, Tuple
-
-import functools
-
+from typing import Any, Callable, Sequence, Tuple
 from flax import linen as nn
-from flax import serialization
-from flax.core import frozen_dict
-from flax.training import train_state
+from flax.core import FrozenDict
+from flax.training import train_state, checkpoints
+import functools
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
+from utils import target_update, Batch
 
-from utils import Batch, ReplayBuffer
 
-kernel_initializer = jax.nn.initializers.glorot_uniform()
+def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
+    if initializer == "orthogonal":
+        return nn.initializers.orthogonal(gain)
+    elif initializer == "glorot_uniform":
+        return nn.initializers.glorot_uniform()
+    elif initializer == "glorot_normal":
+        return nn.initializers.glorot_normal()
+    return nn.initializers.lecun_normal()
+
+
+class MLP(nn.Module):
+    hidden_dims: Sequence[int] = (256, 256)
+    init_fn: Callable = nn.initializers.glorot_uniform()
+    activate_final: bool = True
+
+    @nn.compact
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        for i, size in enumerate(self.hidden_dims):
+            x = nn.Dense(size, kernel_init=self.init_fn)(x)
+            if i + 1 < len(self.hidden_dims) or self.activate_final:
+                x = nn.relu(x)
+        return x
+
+
+class Critic(nn.Module):
+    hidden_dims: Sequence[int] = (256, 256)
+    initializer: str = "glorot_uniform"
+
+    def setup(self):
+        self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
+        self.out_layer = nn.Dense(1, kernel_init=init_fn(self.initializer, 1.0))
+
+    def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        x = jnp.concatenate([observations, actions], axis=-1)
+        x = self.net(x)
+        q = self.out_layer(x)
+        return q.squeeze(-1)
+
+    def encode(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        x = jnp.concatenate([observations, actions], axis=-1)
+        x = self.net(x)
+        return x
+
+
+class DoubleCritic(nn.Module):
+    hidden_dims: Sequence[int] = (256, 256)
+    initializer: str = "glorot_uniform"
+
+    def setup(self):
+        self.critic1 = Critic(self.hidden_dims, initializer=self.initializer)
+        self.critic2 = Critic(self.hidden_dims, initializer=self.initializer)
+
+    def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        q1 = self.critic1(observations, actions)
+        q2 = self.critic2(observations, actions)
+        return q1, q2
+
+    def Q1(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        q1 = self.critic1(observations, actions)
+        return q1
 
 
 class Actor(nn.Module):
     act_dim: int
-    max_action: float
+    max_action: float = 1.0
+    hidden_dims: Sequence[int] = (256, 256)
+    initializer: str = "glorot_uniform"
 
     def setup(self):
-        self.l1 = nn.Dense(256, kernel_init=kernel_initializer, name="fc1")
-        self.l2 = nn.Dense(256, kernel_init=kernel_initializer, name="fc2")
-        self.l3 = nn.Dense(self.act_dim, kernel_init=kernel_initializer, name="fc3")
+        self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
+        self.out_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1e-2))
 
     def __call__(self, observations: jnp.ndarray) -> jnp.ndarray:
-        x = nn.relu(self.l1(observations))
-        x = nn.relu(self.l2(x))
-        actions = self.max_action * nn.tanh(self.l3(x))
-        return actions
+        x = self.net(observations)
+        x = self.out_layer(x)
+        mean_action = nn.tanh(x) * self.max_action
+        return mean_action
 
 
-class Critic(nn.Module):
-    def setup(self):
-        self.l1 = nn.Dense(256, kernel_init=kernel_initializer, name="fc1")
-        self.l2 = nn.Dense(256, kernel_init=kernel_initializer, name="fc2")
-        self.l3 = nn.Dense(1, kernel_init=kernel_initializer, name="fc3")
-
-        self.l4 = nn.Dense(256, kernel_init=kernel_initializer, name="fc4")
-        self.l5 = nn.Dense(256, kernel_init=kernel_initializer, name="fc5")
-        self.l6 = nn.Dense(1, kernel_init=kernel_initializer, name="fc6")
-
-    def __call__(self, observations: jnp.ndarray,
-                 actions: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        x = jnp.concatenate([observations, actions], axis=-1)
-
-        q1 = nn.relu(self.l1(x))
-        q1 = nn.relu(self.l2(q1))
-        q1 = self.l3(q1)
-
-        q2 = nn.relu(self.l4(x))
-        q2 = nn.relu(self.l5(q2))
-        q2 = self.l6(q2)
-
-        return q1, q2
-
-    def Q1(self, observations: jnp.ndarray,
-           actions: jnp.ndarray) -> jnp.ndarray:
-        x = jnp.concatenate([observations, actions], axis=-1)
-        q1 = nn.relu(self.l1(x))
-        q1 = nn.relu(self.l2(q1))
-        q1 = self.l3(q1)
-        return q1
-
-    def Repr(self, observations: jnp.ndarray,
-             actions: jnp.ndarray) -> jnp.ndarray:
-        x = jnp.concatenate([observations, actions], axis=-1)
-        q1 = nn.relu(self.l1(x))
-        repr = nn.relu(self.l2(q1))
-        q1 = self.l3(repr)
-        return repr, q1
-
-
-class TD3_BC:
+class TD3BCAgent:
     def __init__(self,
                  obs_dim: int,
                  act_dim: int,
@@ -83,17 +98,19 @@ class TD3_BC:
                  noise_clip: float = 0.5,
                  policy_noise: float = 0.2,
                  policy_freq: int = 2,
-                 learning_rate: float = 3e-4,
+                 lr: float = 3e-4,
                  alpha: float = 2.5,
-                 seed: int = 42):
+                 seed: int = 42,
+                 hidden_dims: Sequence[int] = (256, 256),
+                 initializer: str = "glorot_uniform"):
 
         self.max_action = max_action
+        self.noise_clip = noise_clip
+        self.policy_noise = policy_noise
+        self.policy_freq = policy_freq
+        self.alpha = alpha
         self.gamma = gamma
         self.tau = tau
-        self.alpha = alpha
-        self.policy_noise = policy_noise
-        self.noise_clip = noise_clip
-        self.policy_freq = policy_freq
 
         rng = jax.random.PRNGKey(seed)
         self.actor_rng, self.critic_rng = jax.random.split(rng, 2)
@@ -102,330 +119,112 @@ class TD3_BC:
         dummy_obs = jnp.ones([1, obs_dim], dtype=jnp.float32)
         dummy_act = jnp.ones([1, act_dim], dtype=jnp.float32)
 
-        # Initialize the actor
-        self.actor = Actor(act_dim, max_action)
+        self.actor = Actor(act_dim=act_dim, max_action=max_action,
+                           hidden_dims=hidden_dims, initializer=initializer)
         actor_params = self.actor.init(self.actor_rng, dummy_obs)["params"]
         self.actor_target_params = actor_params
-        self.actor_state = train_state.TrainState.create(
-            apply_fn=Actor.apply,
-            params=actor_params,
-            tx=optax.adam(learning_rate=learning_rate))
+        self.actor_state = train_state.TrainState.create(apply_fn=Actor.apply,
+                                                         params=actor_params,
+                                                         tx=optax.adam(learning_rate=lr))
 
         # Initialize the critic
-        self.critic = Critic()
+        self.critic = DoubleCritic(hidden_dims=hidden_dims, initializer=initializer)
         critic_params = self.critic.init(self.critic_rng, dummy_obs, dummy_act)["params"]
         self.critic_target_params = critic_params
-        self.critic_state = train_state.TrainState.create(
-            apply_fn=Critic.apply,
-            params=critic_params,
-            tx=optax.adam(learning_rate=learning_rate))
-
+        self.critic_state = train_state.TrainState.create(apply_fn=Critic.apply,
+                                                          params=critic_params,
+                                                          tx=optax.adam(learning_rate=lr))
         self.update_step = 0
 
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def actor_train_step(self, batch: Batch,
+    # sample on cpu can accelerate a little bit
+    @functools.partial(jax.jit, static_argnames=("self"), device=jax.devices("cpu")[0])
+    def sample_action(self, params: FrozenDict, observation: jnp.ndarray) -> jnp.ndarray:
+        sampled_action = self.actor.apply({"params": params}, observation)
+        return sampled_action
+
+    def actor_train_step(self,
+                         batch: Batch,
                          actor_state: train_state.TrainState,
-                         critic_state: train_state.TrainState,):
-        def loss_fn(actor_params, critic_params):
-            actions = self.actor.apply({"params": actor_params}, batch.observations)      # (B, act_dim)
-            q_val = self.critic.apply({"params": critic_params}, batch.observations,
-                                      actions, method=Critic.Q1)                          # (B, 1)
-            lmbda = self.alpha / jnp.abs(jax.lax.stop_gradient(q_val)).mean()             # ()
-            bc_loss = jnp.mean((actions - batch.actions)**2)                              # ()
-            actor_loss = -lmbda * jnp.mean(q_val) + bc_loss                               # ()
-            return actor_loss, {"actor_loss": actor_loss, "bc_loss": bc_loss}
-
-        (actor_loss, actor_info), actor_grads = jax.value_and_grad(
-            loss_fn, argnums=0, has_aux=True)(actor_state.params, critic_state.params)
-
-        # Update Actor TrainState
+                         critic_params: FrozenDict):
+        def loss_fn(params: FrozenDict):
+            actions = self.actor.apply({"params": params}, batch.observations)
+            q = self.critic.apply({"params": critic_params}, batch.observations, actions, method=DoubleCritic.Q1)
+            lmbda = self.alpha / jnp.abs(jax.lax.stop_gradient(q)).mean()
+            bc_loss = jnp.mean((actions - batch.actions)**2, axis=-1)
+            actor_loss = -lmbda * q + bc_loss
+            avg_actor_loss = actor_loss.mean()
+            return avg_actor_loss, {
+                "actor_loss": avg_actor_loss,
+                "max_actor_loss": actor_loss.max(),
+                "min_actor_loss": actor_loss.min(),
+                "bc_loss": bc_loss.mean(),
+                "max_bc_loss": bc_loss.max(),
+                "min_bc_loss": bc_loss.min(),
+            }
+        (_, actor_info), actor_grads = jax.value_and_grad(loss_fn, has_aux=True)(actor_state.params)
         actor_state = actor_state.apply_gradients(grads=actor_grads)
-
         return actor_info, actor_state
 
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def critic_train_step(self, batch: Batch, critic_key: Any,
+    def critic_train_step(self,
+                          batch: Batch,
+                          critic_key: Any,
                           critic_state: train_state.TrainState,
-                          actor_target_params: frozen_dict.FrozenDict,
-                          critic_target_params: frozen_dict.FrozenDict):
+                          actor_target_params: FrozenDict,
+                          critic_target_params: FrozenDict):
 
-        # Add noise to actions
-        noise = jax.random.normal(critic_key, batch.actions.shape) * self.policy_noise             # (B, act_dim)
+        noise = jax.random.normal(critic_key, batch.actions.shape) * self.policy_noise
         noise = jnp.clip(noise, -self.noise_clip, self.noise_clip)
         next_actions = self.actor.apply({"params": actor_target_params}, batch.next_observations)  # (B, act_dim)
         next_actions = jnp.clip(next_actions + noise, -self.max_action, self.max_action)
 
-        # Compute the target Q value
-        next_q1, next_q2 = self.critic.apply({"params": critic_target_params},
-                                             batch.next_observations, next_actions)                # (B, 1), (B, 1)
-        next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2))                                        # (B,)
-        target_q = batch.rewards + self.gamma * batch.discounts * next_q                           # (B,)
-
-        def loss_fn(critic_params: frozen_dict.FrozenDict, batch: Batch):
-            q1, q2 = self.critic.apply({"params": critic_params},
-                                       batch.observations, batch.actions)
-            q1 = jnp.squeeze(q1)
-            q2 = jnp.squeeze(q2)
-            critic_loss = ((q1 - target_q)**2 + (q2 - target_q)**2).mean()
-            return critic_loss, {
-                "critic_loss": critic_loss,
-                "q1": q1.mean(),
-                "q2": q2.mean()
-            }
-
-        (critic_loss, critic_info), critic_grads = jax.value_and_grad(
-            loss_fn, argnums=0, has_aux=True)(critic_state.params, batch)
-
-        #  update Critic TrainState
-        critic_state = critic_state.apply_gradients(grads=critic_grads)
-
-        return critic_info, critic_state
-
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def update_target_params(self, params: frozen_dict.FrozenDict,
-                             target_params: frozen_dict.FrozenDict):
-        def _update(param, target_param):
-            return self.tau * param + (1 - self.tau) * target_param
-
-        updated_params = jax.tree_multimap(_update, params, target_params)
-        return updated_params
-
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def select_action(self, params: frozen_dict.FrozenDict,
-                      observations: np.ndarray) -> jnp.ndarray:
-        actions = self.actor.apply({"params": params}, observations)
-        return actions
-
-    def train(self, replay_buffer: ReplayBuffer, batch_size: int = 256):
-        self.update_step += 1
-
-        # Sample replay buffer
-        batch = replay_buffer.sample(batch_size)
-
-        # Critic update
-        self.critic_rng, critic_key = jax.random.split(self.critic_rng)
-        critic_info, self.critic_state = self.critic_train_step(
-            batch, critic_key, self.critic_state, self.actor_target_params,
-            self.critic_target_params)
-
-        # Delayed policy update
-        if self.update_step % self.policy_freq == 0:
-            actor_info, self.actor_state = self.actor_train_step(
-                batch, self.actor_state, self.critic_state)
-            critic_info.update(actor_info)
-
-            # update target network
-            params = (self.actor_state.params, self.critic_state.params)
-            target_params = (self.actor_target_params,
-                             self.critic_target_params)
-            updated_params = self.update_target_params(params, target_params)
-            self.actor_target_params, self.critic_target_params = updated_params
-
-        return critic_info
-
-    def save(self, filename):
-        critic_file = filename + '_critic.ckpt'
-        with open(critic_file, 'wb') as f:
-            f.write(serialization.to_bytes(self.critic_state.params))
-        actor_file = filename + '_actor.ckpt'
-        with open(actor_file, 'wb') as f:
-            f.write(serialization.to_bytes(self.actor_state.params))
-
-    def load(self, filename):
-        critic_file = filename + '_critic.ckpt'
-        with open(critic_file, 'rb') as f:
-            critic_params = serialization.from_bytes(
-                self.critic_state.params, f.read())
-        self.critic_state = train_state.TrainState.create(
-            apply_fn=Critic.apply,
-            params=critic_params,
-            tx=optax.adam(learning_rate=self.learning_rate))
-
-        actor_file = filename + '_actor.ckpt'
-        with open(actor_file, 'rb') as f:
-            actor_params = serialization.from_bytes(
-                self.actor_state.params, f.read())
-        self.actor_state = train_state.TrainState.create(
-            apply_fn=Actor.apply,
-            params=actor_params,
-            tx=optax.adam(learning_rate=self.learning_rate)
-        )
-
-
-class TD3:
-    def __init__(self,
-                 obs_dim: int,
-                 act_dim: int,
-                 max_action: float = 1.0,
-                 tau: float = 0.005,
-                 gamma: float = 0.99,
-                 noise_clip: float = 0.5,
-                 policy_noise: float = 0.2,
-                 policy_freq: int = 2,
-                 learning_rate: float = 3e-4,
-                 seed: int = 42):
-
-        self.max_action = max_action
-        self.gamma = gamma
-        self.tau = tau
-        self.policy_noise = policy_noise
-        self.noise_clip = noise_clip
-        self.policy_freq = policy_freq
-
-        rng = jax.random.PRNGKey(seed)
-        self.actor_rng, self.critic_rng = jax.random.split(rng, 2)
-
-        # Dummy inputs
-        dummy_obs = jnp.ones([1, obs_dim], dtype=jnp.float32)
-        dummy_act = jnp.ones([1, act_dim], dtype=jnp.float32)
-
-        # Initialize the actor
-        self.actor = Actor(act_dim, max_action)
-        actor_params = self.actor.init(self.actor_rng, dummy_obs)["params"]
-        self.actor_target_params = actor_params
-        self.actor_state = train_state.TrainState.create(
-            apply_fn=Actor.apply,
-            params=actor_params,
-            tx=optax.adam(learning_rate=learning_rate))
-
-        # Initialize the critic
-        self.critic = Critic()
-        critic_params = self.critic.init(self.critic_rng, dummy_obs, dummy_act)["params"]
-        self.critic_target_params = critic_params
-        self.critic_state = train_state.TrainState.create(
-            apply_fn=Critic.apply,
-            params=critic_params,
-            tx=optax.adam(learning_rate=learning_rate))
-
-        self.update_step = 0
-
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def actor_train_step(self, actor_state: train_state.TrainState,
-                         critic_state: train_state.TrainState,
-                         observations: jnp.ndarray):
-        def loss_fn(actor_params, critic_params):
-            actions = self.actor.apply({"params": actor_params}, observations)
-            q_val = self.critic.apply({"params": critic_params},
-                                      observations,
-                                      actions,
-                                      method=Critic.Q1)
-            actor_loss = -jnp.mean(q_val)
-            return actor_loss
-
-        actor_loss, actor_grads = jax.value_and_grad(loss_fn, argnums=0)(
-            actor_state.params, critic_state.params)
-
-        # Update Actor TrainState
-        actor_state = actor_state.apply_gradients(grads=actor_grads)
-
-        actor_info = {"actor_loss": actor_loss}
-        return actor_info, actor_state
-
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def critic_train_step(self, batch: Batch, critic_key: Any,
-                          critic_state: train_state.TrainState,
-                          actor_target_params: frozen_dict.FrozenDict,
-                          critic_target_params: frozen_dict.FrozenDict):
-        # Add noise to actions
-        noise = jax.random.normal(critic_key,
-                                  batch.actions.shape) * self.policy_noise
-        noise = jnp.clip(noise, -self.noise_clip, self.noise_clip)
-        next_actions = self.actor.apply({"params": actor_target_params},
-                                        batch.next_observations)
-        next_actions = jnp.clip(next_actions + noise, -self.max_action,
-                                self.max_action)
-
-        # Compute the target Q value
-        next_q1, next_q2 = self.critic.apply({"params": critic_target_params},
-                                             batch.next_observations,
-                                             next_actions)
-        next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2))
+        # compute target value w.r.t. target network
+        next_q1, next_q2 = self.critic.apply({"params": critic_target_params}, batch.next_observations, next_actions)
+        next_q = jnp.minimum(next_q1, next_q2)
         target_q = batch.rewards + self.gamma * batch.discounts * next_q
-
-        def loss_fn(critic_params: frozen_dict.FrozenDict, batch: Batch):
-            q1, q2 = self.critic.apply({"params": critic_params},
-                                       batch.observations, batch.actions)
-            q1 = jnp.squeeze(q1)
-            q2 = jnp.squeeze(q2)
-            critic_loss = ((q1 - target_q)**2 + (q2 - target_q)**2).mean()
-            return critic_loss, {
-                "critic_loss": critic_loss,
-                "q1": q1.mean(),
-                "q2": q2.mean()
+        def loss_fn(params: FrozenDict):
+            q1, q2 = self.critic.apply({"params": params}, batch.observations, batch.actions)
+            critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
+            avg_critic_loss = critic_loss.mean()
+            return avg_critic_loss, {
+                "critic_loss": avg_critic_loss, "max_critic_loss": critic_loss.max(), "min_critic_loss": critic_loss.min(),
+                "target_q": target_q.mean(), "max_target_q": target_q.max(), "min_target_q": target_q.min(),
+                "q1": q1.mean(), "max_q1": q1.max(), "min_q1": q1.min(),
+                "q2": q2.mean(), "max_q2": q2.max(), "min_q2": q2.min(),
             }
-
-        (critic_loss, critic_info), critic_grads = jax.value_and_grad(
-            loss_fn, argnums=0, has_aux=True)(critic_state.params, batch)
-
-        #  update Critic TrainState
+        (_, critic_info), critic_grads = jax.value_and_grad(loss_fn, has_aux=True)(critic_state.params)
         critic_state = critic_state.apply_gradients(grads=critic_grads)
-
         return critic_info, critic_state
 
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def update_target_params(self, params: frozen_dict.FrozenDict,
-                             target_params: frozen_dict.FrozenDict):
-        def _update(param, target_param):
-            return self.tau * param + (1 - self.tau) * target_param
+    @functools.partial(jax.jit, static_argnames=("self", "delay_update"))
+    def train_step(self,
+                   batch: Batch,
+                   actor_state: train_state.TrainState,
+                   critic_state: train_state.TrainState,
+                   actor_target_params: FrozenDict,
+                   critic_target_params: FrozenDict,
+                   critic_key: Any,
+                   delay_update: bool):
+        critic_info, new_critic_state = self.critic_train_step(
+            batch, critic_key, critic_state, actor_target_params, critic_target_params)
+        if delay_update:
+            actor_info, new_actor_state = self.actor_train_step(batch, actor_state, critic_state.params)
+            params = (new_actor_state.params, new_critic_state.params)
+            target_params = (actor_target_params, critic_target_params)
+            new_actor_target_params, new_critic_target_params = target_update(params, target_params, self.tau)
+            return new_actor_state, new_critic_state, new_actor_target_params, new_critic_target_params, {**actor_info, **critic_info}
+        return new_critic_state, critic_info
 
-        updated_params = jax.tree_multimap(_update, params, target_params)
-        return updated_params
-
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def select_action(self, params: frozen_dict.FrozenDict, observation: np.ndarray) -> jnp.ndarray:
-        action = self.actor.apply({"params": params}, observation)
-        return action
-
-    def train(self, replay_buffer: ReplayBuffer, batch_size: int = 256):
+    def update(self, batch: Batch):
         self.update_step += 1
-
-        # Sample replay buffer
-        batch = replay_buffer.sample(batch_size)
-
-        # Critic update
         self.critic_rng, critic_key = jax.random.split(self.critic_rng)
-        critic_info, self.critic_state = self.critic_train_step(
-            batch, critic_key, self.critic_state, self.actor_target_params,
-            self.critic_target_params)
-
-        # Delayed policy update
         if self.update_step % self.policy_freq == 0:
-            actor_info, self.actor_state = self.actor_train_step(
-                self.actor_state, self.critic_state, batch.observations)
+            self.actor_state, self.critic_state, self.actor_target_params, self.critic_target_params, log_info = self.train_step(
+                batch, self.actor_state, self.critic_state, self.actor_target_params, self.critic_target_params, critic_key, True)
+        else:
+            self.critic_state, log_info = self.train_step(
+                batch, self.actor_state, self.critic_state, self.actor_target_params, self.critic_target_params, critic_key, False)
+        return log_info
 
-            # update target network
-            params = (self.actor_state.params, self.critic_state.params)
-            target_params = (self.actor_target_params,
-                             self.critic_target_params)
-            updated_params = self.update_target_params(params, target_params)
-            self.actor_target_params, self.critic_target_params = updated_params
-
-        return critic_info
-
-    def save(self, filename):
-        critic_file = filename + '_critic.ckpt'
-        with open(critic_file, 'wb') as f:
-            f.write(serialization.to_bytes(self.critic_state.params))
-        actor_file = filename + '_actor.ckpt'
-        with open(actor_file, 'wb') as f:
-            f.write(serialization.to_bytes(self.actor_state.params))
-
-    def load(self, filename):
-        critic_file = filename + '_critic.ckpt'
-        with open(critic_file, 'rb') as f:
-            critic_params = serialization.from_bytes(
-                self.critic_state.params, f.read())
-        self.critic_state = train_state.TrainState.create(
-            apply_fn=Critic.apply,
-            params=critic_params,
-            tx=optax.adam(learning_rate=self.learning_rate))
-
-        actor_file = filename + '_actor.ckpt'
-        with open(actor_file, 'rb') as f:
-            actor_params = serialization.from_bytes(
-                self.actor_state.params, f.read())
-        self.actor_state = train_state.TrainState.create(
-            apply_fn=Actor.apply,
-            params=actor_params,
-            tx=optax.adam(learning_rate=self.learning_rate)
-        )
+    def save(self, fname: str, cnt: int):
+        checkpoints.save_checkpoint(fname, self.actor_state, cnt, prefix="actor_", keep=20, overwrite=True)
+        checkpoints.save_checkpoint(fname, self.critic_state, cnt, prefix="critic_", keep=20, overwrite=True)

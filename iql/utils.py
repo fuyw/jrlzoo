@@ -1,6 +1,10 @@
 import collections
 import jax
+import jax.numpy as jnp
+import logging
 import numpy as np
+from flax.core import FrozenDict
+
 
 Batch = collections.namedtuple(
     "Batch",
@@ -16,8 +20,8 @@ class ReplayBuffer:
         self.observations = np.zeros((max_size, obs_dim))
         self.actions = np.zeros((max_size, act_dim))
         self.next_observations = np.zeros((max_size, obs_dim))
-        self.rewards = np.zeros((max_size, 1))
-        self.discounts = np.zeros((max_size, 1))
+        self.rewards = np.zeros(max_size)
+        self.discounts = np.zeros(max_size)
 
     def add(self, observation: np.ndarray, action: np.ndarray,
             next_observation: np.ndarray, reward: float, done: float):
@@ -43,14 +47,35 @@ class ReplayBuffer:
         self.observations = dataset["observations"]
         self.actions = dataset["actions"]
         self.next_observations = dataset["next_observations"]
-        self.rewards = dataset["rewards"].reshape(-1, 1)
-        self.discounts = 1. - dataset["terminals"].reshape(-1, 1)
+        self.rewards = dataset["rewards"].squeeze()
+        self.discounts = 1. - dataset["terminals"].squeeze()
         self.size = self.observations.shape[0]
 
-    def normalize_states(self, eps: float = 1e-3):
-        mean = self.observations.mean(0, keepdims=True)
-        std = self.observations.std(0, keepdims=True) + eps
+    def normalize_obs(self, eps: float = 1e-3):
+        mean = self.observations.mean(0)
+        std = self.observations.std(0) + eps
         self.observations = (self.observations - mean)/std
         self.next_observations = (self.next_observations - mean)/std
         return mean, std
 
+
+def get_logger(fname: str) -> logging.Logger:
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        filename=fname,
+                        filemode='w',
+                        force=True)
+    logger = logging.getLogger()
+    return logger
+
+
+def target_update(params: FrozenDict, target_params: FrozenDict, tau: float) -> FrozenDict:
+    def _update(param: FrozenDict, target_param: FrozenDict):
+        return tau*param + (1-tau)*target_param
+    updated_params = jax.tree_multimap(_update, params, target_params)
+    return updated_params
+
+
+def get_kernel_norm(kernel_params: jnp.array):
+    return jnp.linalg.norm(kernel_params)

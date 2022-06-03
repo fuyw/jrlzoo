@@ -1,170 +1,83 @@
+from absl import app, flags
+from ml_collections import config_flags
+import os
+import train
+from typing import Any, Dict, Tuple
+import os
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 import jax
 import jax.numpy as jnp
+import ml_collections
+import gym
+import d4rl
+import optax
+import time
+import numpy as np
+import pandas as pd
 from flax.core import FrozenDict
-
-batch = replay_buffer.sample(128)
-frozen_actor_params = agent.actor_state.params
-frozen_critic_params = agent.critic_state.params
-observations = batch.observations
-actions = batch.actions
-rewards = batch.rewards
-discounts = batch.discounts
-next_observations = batch.next_observations
-
-critic_target_params = agent.critic_target_params
+from flax.training import train_state, checkpoints
+from functools import partial
+from tqdm import trange
+from models import CQLAgent
+from utils import ReplayBuffer, Batch, get_logger
+import functools
 
 
-def loss_fn(actor_params: FrozenDict, critic_params: FrozenDict,
-            alpha_params: FrozenDict, observation: jnp.ndarray,
-            action: jnp.ndarray, reward: jnp.ndarray, discount: jnp.ndarray,
-            next_observation: jnp.ndarray, rng: jnp.ndarray):
-    """compute loss for a single transition"""
-    rng, rng1, rng2 = jax.random.split(rng, 3)
 
-    # Sample actions with Actor
-    _, sampled_action, logp = agent.actor.apply({"params": actor_params}, rng1,
-                                                observation)
+# config_flags.DEFINE_config_file("config", default="configs/antmaze.py")
+config_flags.DEFINE_config_file("config", default="configs/antmaze.py")
+FLAGS = flags.FLAGS
 
-    # Alpha loss: stop gradient to avoid affect Actor parameters
-    log_alpha = agent.log_alpha.apply({"params": alpha_params})
-    alpha_loss = -log_alpha * jax.lax.stop_gradient(logp +
-                                                    agent.target_entropy)
-    alpha = jnp.exp(log_alpha)
+import sys
+FLAGS(sys.argv)
+configs = FLAGS.config
 
-    # We use frozen_params so that gradients can flow back to the actor without being used to update the critic.
-    sampled_q1, sampled_q2 = agent.critic.apply(
-        {"params": frozen_critic_params}, observation, sampled_action)
-    sampled_q = jnp.squeeze(jnp.minimum(sampled_q1, sampled_q2))
+env = gym.make(configs.env_name)
+obs_dim = env.observation_space.shape[0]
+act_dim = env.action_space.shape[0]
+max_action = env.action_space.high[0]
+if configs.target_entropy is None:
+    target_entropy = -act_dim
+else:
+    target_entropy = target_entropy
 
-    # Actor loss
-    alpha = jax.lax.stop_gradient(
-        alpha)  # stop gradient to avoid affect Alpha parameters
-    actor_loss = (alpha * logp - sampled_q)
-
-    # Critic loss
-    q1, q2 = agent.critic.apply({"params": critic_params}, observation, action)
-    q1 = jnp.squeeze(q1)
-    q2 = jnp.squeeze(q2)
-
-    # Use frozen_actor_params to avoid affect Actor parameters
-    _, next_action, logp_next_action = agent.actor.apply(
-        {"params": frozen_actor_params}, rng2, next_observation)
-    next_q1, next_q2 = agent.critic.apply({"params": critic_target_params},
-                                          next_observation, next_action)
-
-    next_q = jnp.squeeze(jnp.minimum(next_q1, next_q2))
-    if agent.backup_entropy:
-        next_q -= alpha * logp_next_action
-    target_q = reward + agent.gamma * discount * next_q
-    critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
-
-    # CQL loss
-    rng3, rng4 = jax.random.split(rng, 2)
-    cql_random_actions = jax.random.uniform(rng3,
-                                            shape=(agent.num_random,
-                                                   agent.act_dim),
-                                            minval=-1.0,
-                                            maxval=1.0)
-
-    # Sample 10 actions with current state
-    repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0),
-                                     repeats=agent.num_random,
-                                     axis=0)
-    repeat_next_observations = jnp.repeat(jnp.expand_dims(next_observation,
-                                                          axis=0),
-                                          repeats=agent.num_random,
-                                          axis=0)
-    _, cql_sampled_actions, cql_logp = agent.actor.apply(
-        {"params": frozen_actor_params}, rng3, repeat_observations)
-    _, cql_next_actions, cql_logp_next_action = agent.actor.apply(
-        {"params": frozen_actor_params}, rng4, repeat_next_observations)
-
-    cql_random_q1, cql_random_q2 = agent.critic.apply(
-        {"params": critic_params}, repeat_observations, cql_random_actions)
-    cql_q1, cql_q2 = agent.critic.apply({"params": critic_params},
-                                        repeat_observations,
-                                        cql_sampled_actions)
-    cql_next_q1, cql_next_q2 = agent.critic.apply({"params": critic_params},
-                                                  repeat_observations,
-                                                  cql_next_actions)
-
-    random_density = np.log(0.5**agent.act_dim)
-    cql_concat_q1 = jnp.concatenate([
-        jnp.squeeze(cql_random_q1) - random_density,
-        jnp.squeeze(cql_next_q1) - cql_logp_next_action,
-        jnp.squeeze(cql_q1) - cql_logp
-    ])
-    cql_concat_q2 = jnp.concatenate([
-        jnp.squeeze(cql_random_q2) - random_density,
-        jnp.squeeze(cql_next_q2) - cql_logp_next_action,
-        jnp.squeeze(cql_q2) - cql_logp
-    ])
-
-    # CQL0: conservative penalty
-    logsumexp_cql_concat_q1 = jax.scipy.special.logsumexp(cql_concat_q1)
-    logsumexp_cql_concat_q2 = jax.scipy.special.logsumexp(cql_concat_q2)
-
-    # CQL1: maximize Q(s, a) in the dataset
-    # cql1_loss = (logsumexp_cql_concat_q1 - q1) * agent.min_q_weight
-    # cql2_loss = (logsumexp_cql_concat_q2 - q2) * agent.min_q_weight
-
-    cql1_loss = logsumexp_cql_concat_q1 * agent.min_q_weight
-    cql2_loss = logsumexp_cql_concat_q2 * agent.min_q_weight
-
-    # Loss weight form Dopamine
-    total_loss = 0.5 * critic_loss + actor_loss + alpha_loss + cql1_loss + cql2_loss
-    log_info = {
-        "critic_loss": critic_loss,
-        "actor_loss": actor_loss,
-        "alpha_loss": alpha_loss,
-        "cql1_loss": cql1_loss,
-        "cql2_loss": cql2_loss,
-        "q1": q1,
-        "q2": q2,
-        "target_q": target_q,
-        "sampled_q": sampled_q.mean(),
-        "logsumexp_cql_concat_q1": logsumexp_cql_concat_q1,
-        "logsumexp_cql_concat_q2": logsumexp_cql_concat_q2,
-        "cql_q1_avg": cql_q1.mean(),
-        "cql_q1_min": cql_q1.min(),
-        "cql_q1_max": cql_q1.max(),
-        "cql_q2_avg": cql_q2.mean(),
-        "cql_q2_min": cql_q2.min(),
-        "cql_q2_max": cql_q2.max(),
-        "cql_concat_q1_avg": cql_concat_q1.mean(),
-        "cql_concat_q1_min": cql_concat_q1.min(),
-        "cql_concat_q1_max": cql_concat_q1.max(),
-        "cql_concat_q2_avg": cql_concat_q2.mean(),
-        "cql_concat_q2_min": cql_concat_q2.min(),
-        "cql_concat_q2_max": cql_concat_q2.max(),
-        "cql_logp": cql_logp.mean(),
-        "cql_logp_next_action": cql_logp_next_action.mean(),
-        "cql_next_q1_avg": cql_next_q1.mean(),
-        "cql_next_q1_min": cql_next_q1.min(),
-        "cql_next_q1_max": cql_next_q1.max(),
-        "cql_next_q2_avg": cql_next_q2.mean(),
-        "cql_next_q2_min": cql_next_q2.min(),
-        "cql_next_q2_max": cql_next_q2.max(),
-        "random_q1_avg": cql_random_q1.mean(),
-        "random_q1_min": cql_random_q1.min(),
-        "random_q1_max": cql_random_q1.max(),
-        "random_q2_avg": cql_random_q2.mean(),
-        "random_q2_min": cql_random_q2.min(),
-        "random_q2_max": cql_random_q2.max(),
-        "alpha": alpha,
-        "logp": logp,
-        "logp_next_action": logp_next_action
-    }
-
-    return total_loss, log_info
+agent = CQLAgent(obs_dim=obs_dim,
+                 act_dim=act_dim,
+                 max_action=max_action,
+                 seed=configs.seed,
+                 tau=configs.tau,
+                 gamma=configs.gamma,
+                 critic_lr=configs.critic_lr,
+                 actor_lr=configs.actor_lr,
+                 target_entropy=configs.target_entropy,
+                 backup_entropy=configs.backup_entropy,
+                 max_target_backup=configs.max_target_backup,
+                 num_random=configs.num_random,
+                 min_q_weight=configs.min_q_weight,
+                 bc_timesteps=configs.bc_timesteps,
+                 with_lagrange=configs.with_lagrange,
+                 lagrange_thresh=configs.lagrange_thresh,
+                 cql_clip_diff_min=configs.cql_clip_diff_min,
+                 cql_clip_diff_max=configs.cql_clip_diff_max,
+                 policy_log_std_multiplier=configs.policy_log_std_multiplier,
+                 policy_log_std_offset=configs.policy_log_std_offset,
+                 actor_hidden_dims=(256, 256),
+                 critic_hidden_dims=(256, 256),
+                 initializer=configs.initializer)
 
 
-grad_fn = jax.vmap(jax.value_and_grad(loss_fn, argnums=(0, 1, 2),
-                                      has_aux=True),
-                   in_axes=(None, None, None, 0, 0, 0, 0, 0, 0))
-rng = jnp.stack(jax.random.split(jax.random.PRNGKey(0), num=actions.shape[0]))
-(_, log_info), gradients = grad_fn(agent.actor_state.params,
-                                   agent.critic_state.params,
-                                   agent.alpha_state.params, observations,
-                                   actions, rewards, discounts,
-                                   next_observations, rng)
+agent.load("saved_models/antmaze-large-play-v0/cql_s0_L2/", 50)
+
+# replay buffer
+replay_buffer = ReplayBuffer(obs_dim, act_dim)
+replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
+batch = replay_buffer.sample(200)
+log_info = agent.update(batch)
+key = jax.random.PRNGKey(100)
+cql_alpha = agent.log_cql_alpha.apply({"params": agent.cql_alpha_state.params})
+res = agent.cql_train_step(batch, key, agent.alpha_state, agent.actor_state, agent.critic_state,
+                           agent.critic_target_params, cql_alpha, False)
+log_info = res[-1]
+log_cql_alpha = agent.log_cql_alpha.apply({"params": agent.cql_alpha_state.params})
+res_lag = agent.lagrange_train_step(agent.cql_alpha_state, log_info["cql_diff1"], log_info["cql_diff2"])
+print(res_lag[-1])

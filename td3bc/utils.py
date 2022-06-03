@@ -1,6 +1,10 @@
 import collections
 import jax
+import jax.numpy as jnp
+import logging
 import numpy as np
+from flax.core import FrozenDict
+
 
 Batch = collections.namedtuple(
     "Batch",
@@ -32,25 +36,46 @@ class ReplayBuffer:
 
     def sample(self, batch_size: int) -> Batch:
         idx = np.random.randint(0, self.size, size=batch_size)
-        batch = Batch(observations=jax.device_put(self.observations[idx]),
-                      actions=jax.device_put(self.actions[idx]),
-                      rewards=jax.device_put(self.rewards[idx]),
-                      discounts=jax.device_put(self.discounts[idx]),
-                      next_observations=jax.device_put(
-                          self.next_observations[idx]))
+        batch = Batch(observations=self.observations[idx],
+                      actions=self.actions[idx],
+                      rewards=self.rewards[idx],
+                      discounts=self.discounts[idx],
+                      next_observations=self.next_observations[idx])
         return batch
 
     def convert_D4RL(self, dataset):
         self.observations = dataset["observations"]
         self.actions = dataset["actions"]
         self.next_observations = dataset["next_observations"]
-        self.rewards = dataset["rewards"].reshape(-1)
-        self.discounts = 1. - dataset["terminals"].reshape(-1)
+        self.rewards = dataset["rewards"].squeeze()
+        self.discounts = 1. - dataset["terminals"].squeeze()
         self.size = self.observations.shape[0]
 
-    def normalize_states(self, eps: float = 1e-3):
-        mean = self.observations.mean(0, keepdims=True)
-        std = self.observations.std(0, keepdims=True) + eps
+    def normalize_obs(self, eps: float = 1e-3):
+        mean = self.observations.mean(0)
+        std = self.observations.std(0) + eps
         self.observations = (self.observations - mean)/std
         self.next_observations = (self.next_observations - mean)/std
         return mean, std
+
+
+def get_logger(fname: str) -> logging.Logger:
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        filename=fname,
+                        filemode='w',
+                        force=True)
+    logger = logging.getLogger()
+    return logger
+
+
+def target_update(params: FrozenDict, target_params: FrozenDict, tau: float) -> FrozenDict:
+    def _update(param: FrozenDict, target_param: FrozenDict):
+        return tau*param + (1-tau)*target_param
+    updated_params = jax.tree_multimap(_update, params, target_params)
+    return updated_params
+
+
+def get_kernel_norm(kernel_params: jnp.array):
+    return jnp.linalg.norm(kernel_params)

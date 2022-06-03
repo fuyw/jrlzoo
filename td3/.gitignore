@@ -1,1 +1,5 @@
-res
+.DS_Store
+__pycache__
+saved_models
+logs
+tmp*

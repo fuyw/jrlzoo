@@ -13,11 +13,12 @@ colors = [
 linestyles = ['solid', 'dashed', 'dashdot', 'dotted']
 
 
-env_names = ['halfcheetah', 'hopper', 'walker2d']
-levels = ['medium', 'medium-replay', 'medium-expert']
-tasks = [
-    f'{env_name}-{level}-v2' for env_name in env_names for level in levels
-]
+mujoco_tasks = ["halfcheetah-medium-v2", "halfcheetah-medium-replay-v2", "halfcheetah-medium-expert-v2",
+                "hopper-medium-v2", "hopper-medium-replay-v2", "hopper-medium-expert-v2",
+                "walker2d-medium-v2", "walker2d-medium-replay-v2", "walker2d-medium-expert-v2"]
+antmaze_tasks = ["antmaze-umaze-v0", "antmaze-umaze-diverse-v0",
+                 "antmaze-medium-play-v0", "antmaze-medium-diverse-v0",
+                 "antmaze-large-play-v0", "antmaze-large-diverse-v0"]
 
 
 def smooth(x, window=3):
@@ -70,33 +71,24 @@ def plot_ax(ax, data, fill_color, title=None, log=False, label=None):
     ax.set_xticklabels([0, 0.2, 0.4, 0.6, 0.8, 1])
 
 
-def plot_exps(env):
-    _, ax = plt.subplots()
-    data, rewards = read_data(f'logs', env_name=env, window=7)
-    plot_ax(ax, data, colors[0], title=env, label=f'{np.mean(rewards):.2f}±{np.std(rewards):.2f}')
-    ax.legend(fontsize=7, loc='lower right')
-    plt.savefig(f'imgs/{env}.png')
+def plot_exps(tasks, fname="mujoco", nrows=3, ncols=3, smooth_window=1):
+    mpl.rcParams['xtick.labelsize'] = 7
+    mpl.rcParams['ytick.labelsize'] = 7
+    mpl.rcParams['axes.linewidth'] = 0.5
+    mpl.rcParams['xtick.major.pad'] = '0.1'
+    mpl.rcParams['ytick.major.pad'] = '0'
+
+    _, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols*4, nrows*4))
+    plt.subplots_adjust(hspace=0.2, wspace=0.15)
+    for idx, env_name in enumerate(tasks):
+        ax = axes[idx // ncols][idx % ncols]
+        data, rewards = read_data(log_dir='logs', env_name=env_name, window=smooth_window)
+        plot_ax(ax, data, 'b', title=env_name, label=f'({np.mean(rewards):.2f}±{np.std(rewards):.2f})')
+        ax.legend(fontsize=7, loc='lower right')
+    plt.tight_layout()
+    plt.savefig(f'imgs/{fname}.png', dpi=360)
 
 
 if __name__ == '__main__':
-    env = 'hopper-medium-v2'
-    plot_exps(env)
-
-
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-fdir = 'logs/hopper-medium-v2'
-df1 = pd.read_csv(f'{fdir}/combo_s0_alpha3.0_h5.csv', index_col=0).set_index('step')
-df2 = pd.read_csv(f'{fdir}/combo_s4_alpha3.0_h5.csv', index_col=0).set_index('step')
-df3 = pd.read_csv(f'{fdir}/combo_s6_alpha3.0_h5.csv', index_col=0).set_index('step')
-df4 = pd.read_csv(f'{fdir}/combo_s7_alpha3.0_h5.csv', index_col=0).set_index('step')
-plt_idx = np.arange(0, 1010000, 10000)
-_, ax = plt.subplots()
-ax.plot(plt_idx, df1.loc[plt_idx, 'reward'], label='seed1')
-ax.plot(plt_idx, df2.loc[plt_idx, 'reward'], label='seed2')
-ax.plot(plt_idx, df3.loc[plt_idx, 'reward'], label='seed3')
-ax.plot(plt_idx, df4.loc[plt_idx, 'reward'], label='seed4')
-plt.legend()
-plt.savefig('a.png')
+    plot_exps(mujoco_tasks, "mujoco", nrows=3, ncols=3, smooth_window=7)
+    # plot_exps(antmaze_tasks, "antmaze", 2, 3)

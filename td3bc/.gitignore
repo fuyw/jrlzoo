@@ -1,2 +1,6 @@
-exp_logs
-exp_saved_models
+.DS_Store
+__pycache__
+saved_models
+imgs
+logs
+tmp*

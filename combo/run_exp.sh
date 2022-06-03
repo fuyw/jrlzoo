@@ -1,31 +1,24 @@
 #!/bin/bash
 
 # Script to reproduce results
-envs=(
-    "hopper-medium-v2"
-    # "hopper-medium-replay-v2"
-    "hopper-medium-expert-v2"
-    "halfcheetah-medium-v2"
-    "walker2d-medium-v2"
-    "halfcheetah-medium-replay-v2"
-    "walker2d-medium-replay-v2"
-    "walker2d-medium-expert-v2"
-    "halfcheetah-medium-expert-v2"
+mujoco_envs=(
+    "hopper-medium-replay-v2"
+    # "hopper-medium-v2"
+    # "walker2d-medium-expert-v2"
+    # "walker2d-medium-v2"
+    # "walker2d-medium-replay-v2"
+    # "hopper-medium-expert-v2"
+    # "halfcheetah-medium-v2"
+    # "halfcheetah-medium-replay-v2"
+    # "halfcheetah-medium-expert-v2"
 )
-
-for ((i=0;i<1;i+=1))
-do 
-    for env_name in ${envs[*]}
+for ((i=8;i<9;i+=1))
+do
+    for env in ${mujoco_envs[*]}
     do
         python main.py \
-        --env_name $env_name \
-        --seed $i
+        --config=configs/mujoco.py \
+        --config.env_name=$env \
+        --config.seed=$i
     done
 done
-
-# for ((i=0;i<3;i+=1))
-# do 
-#     python main.py \
-#     --env ${envs[$i]} \
-#     --seed ${seeds[$i]}
-# done

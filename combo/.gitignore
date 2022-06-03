@@ -1,5 +1,8 @@
+.DS_Store
+__pycache__
 saved_td3_buffers
-saved_combo_models
-saved_dynamics_models
-logs_old
-logs_alpha3
+saved_buffers
+saved*models*
+*dynamics_models
+tmp*
+logs*

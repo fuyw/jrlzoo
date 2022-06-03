@@ -1,10 +1,8 @@
-# JaxIQL
+# JaxTD3BC
 
-A Jax implementation of in-sample Q-learning [(IQL)](https://arxiv.org/abs/2110.06169).
+A Jax implementation of TD3BC.
 
 ![res](imgs/mujoco.png)
-
-![res](imgs/antmaze.png)
 
 To run experiments in `mujoco` environment
 ```

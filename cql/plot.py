@@ -6,17 +6,14 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 os.makedirs('imgs', exist_ok=True)
-colors = [
-    "#1f77b4", "#ff7f0e", "#d62728", "#9467bd", "#2ca02c", "#8c564b",
-    "#e377c2", "#bcbd22", "#17becf"
-]
-linestyles = ['solid', 'dashed', 'dashdot', 'dotted']
 
-env_names = ['halfcheetah', 'hopper', 'walker2d']
-levels = ['medium', 'medium-replay', 'medium-expert']
-tasks = [
-    f'{env_name}-{level}-v2' for env_name in env_names for level in levels
-]
+
+mujoco_tasks = ["halfcheetah-medium-v2", "halfcheetah-medium-replay-v2", "halfcheetah-medium-expert-v2",
+                "hopper-medium-v2", "hopper-medium-replay-v2", "hopper-medium-expert-v2",
+                "walker2d-medium-v2", "walker2d-medium-replay-v2", "walker2d-medium-expert-v2"]
+antmaze_tasks = ["antmaze-umaze-v0", "antmaze-umaze-diverse-v0",
+                 "antmaze-medium-play-v0", "antmaze-medium-diverse-v0",
+                 "antmaze-large-play-v0", "antmaze-large-diverse-v0"]
 
 
 def smooth(x, window=3):
@@ -26,17 +23,21 @@ def smooth(x, window=3):
     return smoothed_x.reshape(-1, 1)
 
 
-def read_data(env_name='hopper-medium-v2', col='reward', window=1):
+def read_data(log_dir, env_name='hopper-medium-v2', col='reward', window=1):
     rewards = []
     res_lst = []
-    for i in range(5):
-        df = pd.read_csv(f'logs/{env_name}/s{i}.csv',
-                         index_col=0).set_index('step')
-        plot_idx = [10000 * i for i in range(101)]
-        res_idx = range(955000, 1005000, 5000)
-        x = df.loc[plot_idx, col].values
+    csv_files = [i for i in os.listdir(f'{log_dir}/{env_name}') if '.csv' in i]
+    for csv_file in csv_files:
+        df = pd.read_csv(f'{log_dir}/{env_name}/{csv_file}', index_col=0).set_index('step')
+        if 'v2' in env_name:
+            plot_idx = [10000 * i for i in range(101)]  # plot every 1e4 steps
+            x = df.loc[plot_idx, col].values
+            res_idx = range(955000, 1005000, 5000)      # eval every 5e3 steps
+            rewards.append(df.loc[res_idx, 'reward'].mean())
+        else:
+            x = df[col].values
+            rewards.append(df.iloc[-1]['reward'].mean())
         res_lst.append(smooth(x, window=window))
-        rewards.append(df.loc[res_idx, 'reward'].mean())
     res_lst = np.concatenate(res_lst, axis=-1)
     rewards = np.array(rewards)
     return res_lst, rewards
@@ -65,100 +66,26 @@ def plot_ax(ax, data, fill_color, title=None, log=False, label=None):
     ax.grid(True, alpha=0.3, lw=0.3)
     ax.xaxis.set_ticks_position('none')
     ax.yaxis.set_ticks_position('none')
-    ax.set_xticks(range(0, 120, 20))
-    ax.set_xticklabels([0, 0.2, 0.4, 0.6, 0.8, 1])
 
 
-def plot_exp():
-    # matplotlib plot setting
+def plot_exps(tasks, fname="mujoco", nrows=3, ncols=3, smooth_window=1):
     mpl.rcParams['xtick.labelsize'] = 7
     mpl.rcParams['ytick.labelsize'] = 7
     mpl.rcParams['axes.linewidth'] = 0.5
     mpl.rcParams['xtick.major.pad'] = '0.1'
     mpl.rcParams['ytick.major.pad'] = '0'
 
-    _, axes = plt.subplots(nrows=3, ncols=3, figsize=(12, 12))
+    _, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols*4, nrows*4))
     plt.subplots_adjust(hspace=0.2, wspace=0.15)
-    for idx, env in enumerate(tasks):
-        ax = axes[idx // 3][idx % 3]
-        data, rewards = read_data(env_name=f'{env}')
-        plot_ax(ax,
-                data,
-                colors[0],
-                title=f'{env}',
-                label=f'{np.mean(rewards):.2f} ({np.std(rewards):.2f})')
+    for idx, env_name in enumerate(tasks):
+        ax = axes[idx // ncols][idx % ncols]
+        data, rewards = read_data(log_dir='logs', env_name=env_name, window=smooth_window)
+        plot_ax(ax, data, 'b', title=env_name, label=f'({np.mean(rewards):.2f}±{np.std(rewards):.2f})')
         ax.legend(fontsize=7, loc='lower right')
-
-    # patches = [mpatches.Patch(color=colors[i], label=labels[i]) for i, metric in enumerate(metrics)]
-    # plt.figlegend(handles=patches, loc='upper center', fontsize=8.5, ncol=len(metrics), frameon=False, bbox_to_anchor=(0.5, 0.95), handlelength=0.7)
     plt.tight_layout()
-    plt.savefig('cql.png', dpi=720)
-
-
-def plot_cql_min_q_weight(prefix_name):
-    _, axes = plt.subplots(nrows=3, ncols=5, figsize=(21, 12))
-    for min_q_weight in [1.0, 3.0, 5.0]:
-        df = pd.read_csv(
-            f'logs/hopper-medium-v2/{prefix_name}_alpha{min_q_weight}.csv',
-            index_col=0)
-        df['critic_loss'] /= 2
-        for idx, col in enumerate([
-                'reward', 'actor_loss', 'critic_loss', 'cql1_loss',
-                'cql2_loss', 'q1', 'q2', 'ood_q1', 'ood_q2'
-        ]):
-            ax = axes[idx // 5][idx % 5]
-            ax.plot(df['step'].values, df[col].values, label=str(min_q_weight))
-            ax.legend()
-            ax.set_title(col)
-    for idx, min_q_weight in enumerate([1.0, 3.0, 5.0]):
-        df = pd.read_csv(
-            f'logs/hopper-medium-v2/{prefix_name}_alpha{min_q_weight}.csv',
-            index_col=0)
-        df['critic_loss'] /= 2
-        idx = 9 + idx
-        ax = axes[idx // 5][idx % 5]
-        cql_loss = df['cql1_loss'] + df['cql2_loss']
-        ax.plot(df['step'].values, cql_loss.values, label='cql_loss')
-        ax.plot(df['step'].values,
-                df['critic_loss'].values,
-                label='critic_loss')
-        ax.legend()
-        ax.set_title(f'min_q_weight = {min_q_weight}')
-
-        idx = 3 + idx
-        ax = axes[idx // 5][idx % 5]
-        ax.plot(df['step'].values, df['ood_q1'].values, label='ood_q1')
-        ax.plot(df['step'].values, df['q1'].values, label='q1')
-        ax.legend()
-        ax.set_title(f'min_q_weight = {min_q_weight}')
-    # axes[-1, -1].axis('off')
-    # axes[-1, -2].axis('off')
-    plt.savefig(f'imgs/{prefix_name}.png')
-
-def compare_cql_critic_losses():
-    _, axes = plt.subplots(nrows=1, ncols=3, figsize=(12, 4))
-    for idx, min_q_weight in enumerate([1.0, 3.0, 5.0]):
-        fname = f'd4rl_cql0_s0_alpha{min_q_weight}_early'
-        df = pd.read_csv(f'logs/hopper-medium-v2/{fname}.csv', index_col=0)
-        df['critic_loss'] /= 2
-        cql_loss = df['cql1_loss'] + df['cql2_loss']
-        ax = axes[idx]
-        ax.plot(df['step'].values, cql_loss.values, label='cql_loss')
-        ax.plot(df['step'].values, df['critic_loss'].values, label='critic_loss')
-        ax.legend()
-        ax.set_title(f'min_q_weight = {min_q_weight}')
-    plt.savefig(f'imgs/d4rl_cql0_s0_early.png')
+    plt.savefig(f'imgs/{fname}.png', dpi=360)
 
 
 if __name__ == '__main__':
-    # plot_exp()
-
-    for prefix_name in [
-            'd4rl_online_cql0_s0',
-            'd4rl_cql0_s0',
-            'd4rl_online_cql1_s0',
-            'd4rl_cql1_s0'
-    ]:
-        plot_cql_min_q_weight(prefix_name)
-
-    # compare_cql_critic_losses()
+    plot_exps(mujoco_tasks, "mujoco", nrows=3, ncols=3, smooth_window=7)
+    # plot_exps(antmaze_tasks, "antmaze", 2, 3)

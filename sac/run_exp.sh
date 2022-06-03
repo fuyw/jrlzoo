@@ -2,11 +2,13 @@
 
 # Script to reproduce results
 envs=(
-    "quadruped-run"
-    "hopper-hop"
+    "cartpole-balance"
+    # "cheetah-run"
+    # "quadruped-run"
+    # "hopper-hop"
 )
 
-for seed in 0 1 2
+for seed in 0
 do 
     for env in ${envs[*]}
     do
