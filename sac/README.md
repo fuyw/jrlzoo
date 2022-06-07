@@ -1,9 +1,8 @@
-# SAC on DeepMind Control Suite
-
-
+# Soft Actor-Critic (SAC)
 ## Baselines
-Using a `configs.updates_per_step = 32`:
-- cheetah-run: 900
-- finger-turn_hard: 800
-- hopper-hop: 200
-- humanoid: 30
+
+Performance on some benchmark tasks.
+
+|     Env Name    |     FPS     | Reward |
+|-----------------|-------------| ----- |
+|  HalfCheetah-v2 |  1020~1050  |data3|

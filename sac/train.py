@@ -1,7 +1,4 @@
-"""Online SAC Agent
-quadruped-run (~450fps)
-hopper-hop    (~950fps) 1ups ==> (~45fps) 32ups
-"""
+"""Online SAC Agent"""
 from typing import Tuple
 import os
 
