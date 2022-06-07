@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+
 
 os.makedirs('imgs', exist_ok=True)
 colors = [
@@ -56,11 +56,6 @@ def plot_ax(ax, data, fill_color, title=None, label=None):
     if title:
         ax.set_title(title, fontsize=8.5, pad=2.5)
     ax.grid(True, alpha=0.3, lw=0.3)
-    # ax.xaxis.set_ticks_position('none')
-    # ax.yaxis.set_ticks_position('none')
-    # ax.set_xticks(range(0, 240, 40))
-    # ax.set_xticklabels([0, 0.2, 0.4, 0.6, 0.8, 1])
-
 
 def plot_exp():
     # matplotlib plot setting

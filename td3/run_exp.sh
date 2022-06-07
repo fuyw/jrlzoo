@@ -2,10 +2,10 @@
 
 # Script to reproduce results
 mujoco_envs=(
-    "HalfCheetah-v2"
+    # "HalfCheetah-v2"
     "Hopper-v2"
-    "Walker2d-v2"
-    "Ant-v2"
+    # "Walker2d-v2"
+    # "Ant-v2"
 )
 
 for i in 0 1 2
