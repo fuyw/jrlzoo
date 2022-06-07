@@ -21,33 +21,33 @@ def smooth(x, window=3):
 
 
 # read experiment res with different seeds
-def read_data(env_name='Ant-v2', col='reward', window=7):
+def read_data(logdir, col='reward', window=7):
     res_lst = []
     csv_files = [
-        i for i in os.listdir(f"logs/{env_name}") if '.csv' in i
+        i for i in os.listdir(logdir) if '.csv' in i
     ]
     for csv_file in csv_files:
-        df = pd.read_csv(f'logs/{env_name}/{csv_file}',
-                         index_col=0).set_index('step')
+        df = pd.read_csv(f'{logdir}/{csv_file}', index_col=0).set_index('step')
         x = df[col].values
         res_lst.append(smooth(x, window=window))
     res_lst = np.concatenate(res_lst, axis=-1)
     return res_lst
 
 
-def plot_ax(ax, data, fill_color, title=None, log=False, label=None):
+def plot_ax(ax, data, fill_color, title=None, label=None):
+    multiple = 30_000
     sigma = np.std(data, axis=1)
     mu = np.mean(data, axis=1)
     if label:
-        ax.plot(range(len(mu)),
+        ax.plot(np.arange(len(mu))*multiple,
                 mu,
                 color=fill_color,
                 ls='solid',
                 lw=0.6,
                 label=label)
     else:
-        ax.plot(range(len(mu)), mu, color=fill_color, ls='solid', lw=0.6)
-    ax.fill_between(range(len(mu)),
+        ax.plot(np.arange(len(mu))*multiple, mu, color=fill_color, ls='solid', lw=0.6)
+    ax.fill_between(np.arange(len(mu))*multiple,
                     mu + sigma,
                     mu - sigma,
                     alpha=0.3,
@@ -70,14 +70,14 @@ def plot_exp():
     mpl.rcParams['xtick.major.pad'] = '0.1'
     mpl.rcParams['ytick.major.pad'] = '0'
 
-    _, axes = plt.subplots(nrows=1, ncols=3, figsize=(12, 4))
+    _, axes = plt.subplots(nrows=1, ncols=4, figsize=(16, 4))
     plt.subplots_adjust(hspace=0.2, wspace=0.15)
-    for idx, env in enumerate(['HalfCheetah', 'Hopper', 'Walker2d']):
+    for idx, env in enumerate(['HalfCheetah', 'Hopper', 'Walker2d', 'Ant']):
         ax = axes[idx]
-        data_jax = read_data(env_name=f'{env.lower()}-v2')
-        plot_ax(ax, data_jax, colors[0], title=f'{env}')
+        data = read_data(logdir=f'logs/{env.lower()}-v2/ups1', window=5)
+        plot_ax(ax, data, colors[0], title=f'{env}-v2')
     plt.tight_layout()
-    plt.savefig('sac.png', dpi=720)
+    plt.savefig('imgs/sac.png', dpi=560)
 
 
 def plot_single(env_name="quadruped-run"):
@@ -93,5 +93,6 @@ def plot_single(env_name="quadruped-run"):
 
 
 if __name__ == '__main__':
-    # plot_exp()
-    plot_single("quadruped-run")
+    os.makedirs('imgs', exist_ok=True)
+    plot_exp()
+    # plot_single("quadruped-run")

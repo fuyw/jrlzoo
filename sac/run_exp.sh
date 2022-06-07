@@ -12,7 +12,7 @@ envs=(
     "Ant-v2"
 )
 
-for seed in 0 1 2
+for seed in 3 4
 do 
     for env in ${envs[*]}
     do
