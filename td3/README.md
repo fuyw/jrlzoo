@@ -9,6 +9,6 @@ Performance on some benchmark tasks.
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
 |  HalfCheetah-v2 |  1220~1240  |  14000   |
-|  Hopper-v2      |  990~1010   |   3300   |
-|  Walker2d-v2    |  960~980    |   5000   |
-|  Ant-v2         |  730~750    |   4500   |
+|  Hopper-v2      |  1170~1190  |   3300   |
+|  Walker2d-v2    |  1090~1090  |   5000   |
+|  Ant-v2         |  900~920    |   4500   |
