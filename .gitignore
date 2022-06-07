@@ -1,6 +1,15 @@
 .DS_Store
 __pycache__
 tmp
+res
 imgs
-logs
+*logs*
+case_study
 saved_models
+saved_buffers
+MTD3BC
+JaxCOMBO
+JaxCQL
+JaxIQL
+JaxTD3*
+MIQL

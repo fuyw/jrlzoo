@@ -75,7 +75,8 @@ class Critic(nn.Module):
 
 class DoubleCritic(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "glorot_uniform"
+    # initializer: str = "glorot_uniform"
+    initializer: str = "orthogonal"
 
     def setup(self):
         self.critic1 = Critic(self.hidden_dims, initializer=self.initializer)
@@ -97,7 +98,8 @@ class Actor(nn.Module):
     act_dim: int
     max_action: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "glorot_uniform"
+    # initializer: str = "glorot_uniform"
+    initializer: str = "orthogonal"
 
     def setup(self):
         self.net = MLP(self.hidden_dims,
@@ -106,7 +108,7 @@ class Actor(nn.Module):
         self.mu_layer = nn.Dense(self.act_dim,
                                  kernel_init=init_fn(
                                      self.initializer,
-                                     5 / 3))  # only affect orthogonal init
+                                     5/3))  # only affect orthogonal init
         self.std_layer = nn.Dense(self.act_dim,
                                   kernel_init=init_fn(self.initializer, 1.0))
 
@@ -206,24 +208,16 @@ class SACAgent:
             params=self.log_alpha.init(alpha_key)["params"],
             tx=optax.adam(lr))
 
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def sample_action(self, params: FrozenDict, rng: Any,
-                      observation: np.ndarray) -> jnp.ndarray:
+    @functools.partial(jax.jit, static_argnames=("self", "eval_mode"))
+    def _sample_action(self, params: FrozenDict, rng: Any, observation: np.ndarray, eval_mode: bool = False) -> jnp.ndarray:
         rng, sample_rng = jax.random.split(rng)
-        _, sampled_action, _ = self.actor.apply({"params": params}, sample_rng,
-                                                observation)
-        # actions = np.asarray(actions)
-        # return np.clip(actions, -1, 1)
-        return rng, sampled_action.clip(-1.0, 1.0)
+        mean_action, sampled_action, _ = self.actor.apply({"params": params}, sample_rng, observation)
+        return rng, jnp.where(eval_mode, mean_action, sampled_action)
 
-    @functools.partial(jax.jit,
-                       static_argnames=("self"),
-                       device=jax.devices("cpu")[0])
-    def eval_sample_action(self, params: FrozenDict,
-                           observation: np.ndarray) -> jnp.ndarray:
-        mean_action, _, _ = self.actor.apply({"params": params}, self.rng,
-                                             observation)
-        return mean_action.clip(-1.0, 1.0)
+    def sample_action(self, params: FrozenDict, rng: Any, observation: np.ndarray, eval_mode: bool = False) -> np.ndarray:
+        rng, sampled_action = self._sample_action(params, rng, observation, eval_mode)
+        sampled_action = np.asarray(sampled_action)
+        return rng, sampled_action.clip(-1.0, 1.0)
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self, batch: Batch, key: Any,
@@ -275,8 +269,8 @@ class SACAgent:
                 next_action)
             next_q = jnp.minimum(next_q1, next_q2) - alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
-            critic_loss1 = 0.5 * (q1 - target_q)**2
-            critic_loss2 = 0.5 * (q2 - target_q)**2
+            critic_loss1 = (q1 - target_q)**2
+            critic_loss2 = (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
 
             # Loss weight form Dopamine

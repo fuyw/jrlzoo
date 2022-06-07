@@ -1,6 +1,6 @@
 """Online SAC Agent
 quadruped-run (~450fps)
-hopper-hop    (~540fps) 1ups ==> (~45fps) 32ups
+hopper-hop    (~950fps) 1ups ==> (~45fps) 32ups
 """
 from typing import Tuple
 import os
@@ -25,7 +25,8 @@ def eval_policy(agent: SACAgent,
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
-            action = agent.eval_sample_action(agent.actor_state.params, obs)
+            # dummy rng in evaluation step
+            agent.rng, action = agent.sample_action(agent.actor_state.params, agent.rng, obs, True)
             obs, reward, done, _ = env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
