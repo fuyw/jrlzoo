@@ -5,6 +5,7 @@ from flax.training import train_state, checkpoints
 import functools
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 from utils import target_update, Batch
 
@@ -136,11 +137,15 @@ class TD3Agent:
                                                           tx=optax.adam(learning_rate=lr))
         self.update_step = 0
 
-    # sample on cpu can accelerate a little bit
-    @functools.partial(jax.jit, static_argnames=("self"), device=jax.devices("cpu")[0])
-    def sample_action(self, params: FrozenDict, observation: jnp.ndarray) -> jnp.ndarray:
+    @functools.partial(jax.jit, static_argnames=("self"))
+    def _sample_action(self, params: FrozenDict, observation: np.ndarray) -> jnp.ndarray:
         sampled_action = self.actor.apply({"params": params}, observation)
         return sampled_action
+
+    def sample_action(self, params: FrozenDict, observation: np.ndarray) -> np.ndarray:
+        sampled_action = self._sample_action(params, observation)
+        sampled_action = np.asarray(sampled_action)
+        return sampled_action.clip(-1.0, 1.0)
 
     def actor_train_step(self, batch: Batch, actor_state: train_state.TrainState, critic_params: FrozenDict):
         def loss_fn(params: FrozenDict):

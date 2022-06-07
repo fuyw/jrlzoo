@@ -1,15 +1,14 @@
-# JaxTD3
+# Twin Delayed Deep Deterministic Policy Gradients (TD3)
 
-A Jax implementation of TD3.
+A Jax implemenation of TD3 for continuous control tasks.
 
-![res](imgs/res.png)
+## Baselines
 
-To run experiments in `mujoco` environment
-```
-python main.py --config=configs/mujoco.py --config.env_name=halfcheetah-medium-v2 --config.seed=0
-```
+Performance on some benchmark tasks.
 
-To run experiments in `antmaze` environment
-```
-python main.py --config=configs/antmaze.py --config.env_name=antmaze-medium-play-v0 --config.seed=0
-```
+|     Env Name    |     FPS     |  Reward  |
+|-----------------|-------------|----------|
+|  HalfCheetah-v2 |  1220~1240  |  14000   |
+|  Hopper-v2      |  990~1010   |   3300   |
+|  Walker2d-v2    |  960~980    |   5000   |
+|  Ant-v2         |  730~750    |   4500   |

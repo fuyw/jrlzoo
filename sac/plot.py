@@ -74,7 +74,7 @@ def plot_exp():
     plt.subplots_adjust(hspace=0.2, wspace=0.15)
     for idx, env in enumerate(['HalfCheetah', 'Hopper', 'Walker2d', 'Ant']):
         ax = axes[idx]
-        data = read_data(logdir=f'logs/{env.lower()}-v2/ups1', window=5)
+        data = read_data(logdir=f'logs/{env.lower()}-v2/ups1', window=1)
         plot_ax(ax, data, colors[0], title=f'{env}-v2')
     plt.tight_layout()
     plt.savefig('imgs/sac.png', dpi=560)

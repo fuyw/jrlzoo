@@ -11,4 +11,4 @@ Performance on some benchmark tasks.
 |  HalfCheetah-v2 |  1020~1050  |  14000   |
 |  Hopper-v2      |  990~1010   |   3300   |
 |  Walker2d-v2    |  960~980    |   5000   |
-|  Ant-v2         |  990~1010   |   4500   |
+|  Ant-v2         |  730~750    |   4500   |
