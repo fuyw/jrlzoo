@@ -45,6 +45,7 @@ def plot_ax(ax, data, fill_color, title=None, label=None):
                 ls='solid',
                 lw=0.6,
                 label=label)
+        ax.legend(loc='best')
     else:
         ax.plot(np.arange(len(mu))*multiple, mu, color=fill_color, ls='solid', lw=0.6)
     ax.fill_between(np.arange(len(mu))*multiple,
@@ -70,7 +71,8 @@ def plot_exp():
     for idx, env in enumerate(['HalfCheetah', 'Hopper', 'Walker2d', 'Ant']):
         ax = axes[idx]
         data = read_data(logdir=f'logs/{env.lower()}-v2/ups1', window=1)
-        plot_ax(ax, data, colors[0], title=f'{env}-v2')
+        rewards = data[-10:].mean(1)
+        plot_ax(ax, data, colors[0], title=f'{env}-v2', label=f"{np.mean(rewards):.1f}±{np.std(rewards):.1f}")
     plt.tight_layout()
     plt.savefig('imgs/sac.png', dpi=560)
 
@@ -90,4 +92,3 @@ def plot_single(env_name="quadruped-run"):
 if __name__ == '__main__':
     os.makedirs('imgs', exist_ok=True)
     plot_exp()
-    # plot_single("quadruped-run")
