@@ -2,17 +2,18 @@
 
 # Script to reproduce results
 envs=(
-    "cheetah-run"
-    "quadruped-run"
-    "hopper-hop"
-    "cartpole-balance"
+    "humanoid-run"
+    # "cheetah-run"
+    # "quadruped-run"
+    # "hopper-hop"
+    # "cartpole-balance"
 
     # "HalfCheetah-v2"
     # "Hopper-v2"
     # "Walker2d-v2"
     # "Ant-v2"
 )
-
+sleep 0.3h
 for seed in 0 1 2 3 4
 do 
     for env in ${envs[*]}
