@@ -22,5 +22,6 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
-|  cheetah-ran    |  990~1010   |  14311   |
+|  cheetah-run    |  990~1010   |  14311   |
 |  quadruped-run  |  730~750    |          | 
+|  hopper-hop     |  930~960    |          |

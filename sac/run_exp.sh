@@ -5,7 +5,7 @@ envs=(
     "cheetah-run"
     "quadruped-run"
     "hopper-hop"
-    # "cartpole-balance"
+    "cartpole-balance"
 
     # "HalfCheetah-v2"
     # "Hopper-v2"
