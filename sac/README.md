@@ -6,6 +6,8 @@ A Jax implemenation of SAC for continuous control tasks.
 
 Performance on some benchmark tasks: the average of the last 10 evaluation scores across 5 random seeds.
 
+### MuJoCo
+
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
@@ -15,3 +17,10 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 |  Ant-v2         |  730~750    |   5927   |
 
 ![](imgs/sac.png)
+
+### DeepMind Control Suite
+
+|     Env Name    |     FPS     |  Reward  |
+|-----------------|-------------|----------|
+|  cheetah-ran    |  990~1010   |  14311   |
+|  quadruped-run  |  730~750    |          | 
