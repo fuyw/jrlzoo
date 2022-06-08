@@ -2,7 +2,6 @@
 __pycache__
 tmp
 res
-imgs
 *logs*
 case_study
 saved_models

@@ -4,14 +4,14 @@ A Jax implemenation of SAC for continuous control tasks.
 
 ## Baselines
 
-Performance on some benchmark tasks: the average of the last 10 evaluation scores.
+Performance on some benchmark tasks: the average of the last 10 evaluation scores across 5 random seeds.
 
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
-|  HalfCheetah-v2 |  1020~1050  |  14591   |
-|  Hopper-v2      |  990~1010   |   3000   |
-|  Walker2d-v2    |  960~980    |   4951   |
-|  Ant-v2         |  730~750    |   5574   |
+|  HalfCheetah-v2 |  1020~1050  |  14311   |
+|  Hopper-v2      |  990~1010   |   2947   |
+|  Walker2d-v2    |  960~980    |   5447   |
+|  Ant-v2         |  730~750    |   5927   |
 
 ![](imgs/sac.png)

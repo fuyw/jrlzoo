@@ -4,11 +4,13 @@ A Jax implemenation of TD3 for continuous control tasks.
 
 ## Baselines
 
-Performance on some benchmark tasks.
+Performance on some benchmark tasks: the average of the last 10 evaluation scores across 5 random seeds.
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
-|  HalfCheetah-v2 |  1220~1240  |  14000   |
-|  Hopper-v2      |  1170~1190  |   3300   |
-|  Walker2d-v2    |  1120~1150  |   5000   |
-|  Ant-v2         |  900~920    |   4500   |
+|  HalfCheetah-v2 |  1220~1240  |  13742   |
+|  Hopper-v2      |  1170~1190  |   3049   |
+|  Walker2d-v2    |  1120~1150  |   5011   |
+|  Ant-v2         |  900~920    |   5949   |
+
+![](imgs/td3.png)
