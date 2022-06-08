@@ -1,6 +1,6 @@
 # Jaxrl
 
-An RL codebase implemented in JAX. Each baseline algorithm is self-contained in the corresponding folder.
+An RL codebase in JAX which focuses on efficiency and simplicity. Each baseline algorithm is self-contained in the corresponding folder.
 
 ## On-policy RL
 - A2C
