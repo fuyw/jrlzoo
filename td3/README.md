@@ -13,4 +13,15 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 |  Walker2d-v2    |  1120~1150  |   5011   |
 |  Ant-v2         |  900~920    |   5949   |
 
-![](imgs/td3.png)
+![](imgs/mujoco.png)
+
+### DeepMind Control Suite
+
+|     Env Name    |     FPS     |  Reward  |
+|-----------------|-------------|----------|
+|  cheetah-run    |   1130~1150 |   857    |
+|  quadruped-run  |   860~890   |   578    | 
+|  humanoid-run   |   770~790   |    43    |
+|  hopper-hop     |   1060~1080 |   112    |
+
+![](imgs/dmc.png)

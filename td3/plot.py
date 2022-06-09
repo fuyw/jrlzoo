@@ -33,7 +33,7 @@ def read_data(logdir, col='reward', window=7):
 
 
 def plot_ax(ax, data, fill_color, title=None, label=None):
-    multiple = 30_000
+    multiple = 30_000 if 'v2' in title else 10_000
     sigma = np.std(data, axis=1)
     mu = np.mean(data, axis=1)
     if label:
@@ -57,7 +57,7 @@ def plot_ax(ax, data, fill_color, title=None, label=None):
     ax.grid(True, alpha=0.3, lw=0.3)
 
 
-def plot_exp():
+def plot_exp(envs, exp_name):
     # matplotlib plot setting
     mpl.rcParams['xtick.labelsize'] = 7
     mpl.rcParams['ytick.labelsize'] = 7
@@ -67,27 +67,18 @@ def plot_exp():
 
     _, axes = plt.subplots(nrows=1, ncols=4, figsize=(16, 4))
     plt.subplots_adjust(hspace=0.2, wspace=0.15)
-    for idx, env in enumerate(['HalfCheetah', 'Hopper', 'Walker2d', 'Ant']):
+    for idx, env in enumerate(envs):
         ax = axes[idx]
-        data = read_data(logdir=f'logs/{env.lower()}-v2', window=1)
+        data = read_data(logdir=f'logs/{env.lower()}', window=1)
         rewards = data[-10:].mean(1)
-        plot_ax(ax, data, colors[0], title=f'{env}-v2', label=f"{np.mean(rewards):.1f}±{np.std(rewards):.1f}")
+        plot_ax(ax, data, colors[0], title=f'{env}', label=f"{np.mean(rewards):.1f}±{np.std(rewards):.1f}")
     plt.tight_layout()
-    plt.savefig('imgs/td3.png', dpi=560)
-
-
-def plot_single(env_name="quadruped-run"):
-    cols = ["reward", "time"]
-    _, axes = plt.subplots(nrows=1, ncols=2, figsize=(10, 4))
-    for idx, col in enumerate(cols):
-        ax = axes[idx]
-        data = read_data(env_name, col)
-        mu, _ = data.mean(1), data.std(1)
-        ax.plot(range(len(mu)), mu)
-        ax.set_title(col)
-    plt.savefig(f"imgs/{env_name}.png", dpi=320)
+    plt.savefig(f'imgs/{exp_name}.png', dpi=560)
 
 
 if __name__ == '__main__':
     os.makedirs('imgs', exist_ok=True)
-    plot_exp()
+    dmc_envs = ["cheetah-run", "quadruped-run", "humanoid-run", "hopper-hop"]
+    mj_envs = ['HalfCheetah-v2', 'Hopper-v2', 'Walker2d-v2', 'Ant-v2']
+    plot_exp(dmc_envs, 'dmc')
+    plot_exp(mj_envs, 'mujoco')

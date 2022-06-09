@@ -12,6 +12,7 @@ import pandas as pd
 from tqdm import trange
 from models import TD3Agent
 from utils import ReplayBuffer, get_logger
+from gym_utils import make_env
 
 
 def eval_policy(agent: TD3Agent, env: gym.Env, eval_episodes: int = 10) -> Tuple[float, float]:
@@ -39,7 +40,9 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
     logger.info(f"Exp configurations:\n{configs}")
 
     # initialize the d4rl environment 
-    env = gym.make(configs.env_name)
+    # env = gym.make(configs.env_name)
+    env = make_env(configs.env_name, configs.seed)
+    eval_env = make_env(configs.env_name, configs.seed + 42)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     max_action = env.action_space.high[0]
@@ -59,11 +62,9 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
 
     # replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
-    logs = [{"step":0, "reward":eval_policy(agent, env, configs.eval_episodes)[0]}]
+    logs = [{"step":0, "reward":eval_policy(agent, eval_env, configs.eval_episodes)[0]}]
 
     obs, done = env.reset(), False
-    episode_num = 0
-    episode_reward = 0
     episode_timesteps = 0
     for t in trange(1, configs.max_timesteps+1):
         episode_timesteps += 1
@@ -75,12 +76,12 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                     0, max_action * configs.expl_noise,
                     size=act_dim)).clip(-max_action, max_action)
 
-        next_obs, reward, done, _ = env.step(action)
-        done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
+        next_obs, reward, done, info = env.step(action)
+        done_bool = float(done) if 'TimeLimit.truncated' not in info else 0
+        # done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
 
         replay_buffer.add(obs, action, next_obs, reward, done_bool)
         obs = next_obs
-        episode_reward += reward
 
         if t > configs.start_timesteps:
             batch = replay_buffer.sample(configs.batch_size)
@@ -88,12 +89,10 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
 
         if done:
             obs, done = env.reset(), False
-            episode_reward = 0
             episode_timesteps = 0
-            episode_num += 1
 
         if t % configs.eval_freq == 0:
-            eval_reward, eval_time = eval_policy(agent, env, configs.eval_episodes)
+            eval_reward, eval_time = eval_policy(agent, eval_env, configs.eval_episodes)
             if t > configs.start_timesteps:
                 log_info.update({
                     "step": t,
