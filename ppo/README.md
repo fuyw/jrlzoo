@@ -1,15 +1,9 @@
-# JaxTD3
+# JaxPPO
 
-A Jax implementation of TD3.
+A Jax implementation of PPO.
 
-![res](imgs/res.png)
+## Reference
 
-To run experiments in `mujoco` environment
-```
-python main.py --config=configs/mujoco.py --config.env_name=halfcheetah-medium-v2 --config.seed=0
-```
+[Implementation details](https://github.com/vwxyzjn/ppo-implementation-details)
+[ICLR Blog](https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/)
 
-To run experiments in `antmaze` environment
-```
-python main.py --config=configs/antmaze.py --config.env_name=antmaze-medium-play-v0 --config.seed=0
-```

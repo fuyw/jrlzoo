@@ -1,4 +1,4 @@
-# Jaxrl
+# Jrlzoo
 
 An RL codebase in JAX which focuses on efficiency and simplicity. Each baseline algorithm is self-contained in the corresponding folder.
 
