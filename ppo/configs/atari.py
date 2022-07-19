@@ -5,7 +5,7 @@ def get_config():
     config = ml_collections.ConfigDict()
 
     # Atari game name
-    config.env_name = "PongNoFrameskip-v4"
+    config.env_name = "BreakoutNoFrameskip-v4"
 
     # Total number of frames
     config.total_frames = int(1e7)
