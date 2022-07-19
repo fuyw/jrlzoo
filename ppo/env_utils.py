@@ -64,6 +64,6 @@ def get_num_actions(env_name: str):
     This determines the number of outputs in the actor part of the
     actor-critic model.
     """
-    env = gym.make(env_name, new_step_api=True)
+    env = gym.make(env_name)
     return env.action_space.n
 

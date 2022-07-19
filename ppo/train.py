@@ -1,4 +1,7 @@
 from typing import List, Callable, Any, Tuple
+import os
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
+
 import collections
 import functools
 import ml_collections
@@ -18,14 +21,12 @@ from flax.training import train_state
 
 import env_utils
 from tqdm import trange
+from utils import ExpTuple, get_logger
 
 
 #####################
 # Utility Functions #
 #####################
-ExpTuple = collections.namedtuple('ExpTuple', ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
-
-
 def process_experience(experience: List[List[ExpTuple]],
                        actor_steps: int,
                        num_agents: int,
@@ -144,11 +145,9 @@ class RemoteSimulator:
             while not done:
                 # (1) send observation to the learner
                 conn.send(state)
-                print(f"[Actor{rank}] send state.")
 
                 # (2) receive sampled action from the learner
                 action = conn.recv()
-                print(f"[Actor{rank}] receive action.")
 
                 # (3) interact with the environment
                 obs, reward, done, _ = env.step(action)
@@ -157,7 +156,6 @@ class RemoteSimulator:
 
                 # (4) send next observation to the learner
                 conn.send(experience)
-                print(f"[Actor{rank}] send back experience.")
                 if done:
                     break
                 state = next_state
@@ -323,6 +321,13 @@ def get_lr_scheduler(config, loop_steps, iterations_per_step):
 # Main Function #
 #################
 def train_and_evaluate(config: ml_collections.ConfigDict):
+    start_time = time.time()
+    timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    exp_name = f"ppo_s{config.seed}_{timestamp}"
+    exp_info = f"# Running experiment for: {exp_name}_{config.env_name} #"
+    logger = get_logger(f"logs/{config.env_name}/{exp_name}.log")
+    logger.info(f"Exp configurations:\n{config}")
+
     # initialize eval env
     eval_env = env_utils.create_env(config.env_name, clip_rewards=False)
 
@@ -371,5 +376,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                                       entropy_coeff=config.entropy_coeff)
 
         # evaluate
-        if (step+1) % 5 == 0:
+        if (step+1) % 50 == 0:
+            eval_reward, eval_time = eval_policy(ppo_state, eval_env)
+            logger.info(f"#Step {step+1}: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
+                        f"total_time={(time.time()-start_time)/60:.2f}min")
 

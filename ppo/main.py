@@ -9,8 +9,9 @@ FLAGS = flags.FLAGS
 
 
 def main(argv):
-    configs = FLAGS.config
-    train.train_and_evaluate(configs)
+    config = FLAGS.config
+    os.makedirs(f"logs/{config.env_name}", exist_ok=True)
+    train.train_and_evaluate(config)
 
 
 if __name__ == "__main__":
