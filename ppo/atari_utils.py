@@ -1,53 +1,24 @@
-# Copyright 2022 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# coding=utf-8
-# Copyright 2019 The SEED Authors
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""A class implementing minimal Atari 2600 preprocessing.
-Adapted from SEED RL, originally adapted from Dopamine.
-"""
-
 import cv2
-from gym.spaces.box import Box
 import numpy as np
+from gym.spaces.box import Box
 
 
 class AtariPreprocessing:
     """A class implementing image preprocessing for Atari 2600 agents.
-  Specifically, this provides the following subset from the JAIR paper
-  (Bellemare et al., 2013) and Nature DQN paper (Mnih et al., 2015):
+
+    Specifically, this provides the following subset from the JAIR paper
+    (Bellemare et al., 2013) and Nature DQN paper (Mnih et al., 2015):
     * Frame skipping (defaults to 4).
     * Terminal signal when a life is lost (off by default).
     * Grayscale and max-pooling of the last two frames.
     * Downsample the screen to a square image (defaults to 84x84).
-  More generally, this class follows the preprocessing guidelines set down in
-  Machado et al. (2018), "Revisiting the Arcade Learning Environment:
-  Evaluation Protocols and Open Problems for General Agents".
-  It also provides random starting no-ops, which are used in the Rainbow, Apex
-  and R2D2 papers.
-  """
+
+    More generally, this class follows the preprocessing guidelines set down in
+    Machado et al. (2018), "Revisiting the Arcade Learning Environment:
+    Evaluation Protocols and Open Problems for General Agents".
+    It also provides random starting no-ops, which are used in the Rainbow, Apex
+    and R2D2 papers.
+    """
     def __init__(self,
                  environment,
                  frame_skip=4,
@@ -55,18 +26,19 @@ class AtariPreprocessing:
                  screen_size=84,
                  max_random_noops=0):
         """Constructor for an Atari 2600 preprocessor.
-    Args:
-      environment: Gym environment whose observations are preprocessed.
-      frame_skip: int, the frequency at which the agent experiences the game.
-      terminal_on_life_loss: bool, If True, the step() method returns
-        is_terminal=True whenever a life is lost. See Mnih et al. 2015.
-      screen_size: int, size of a resized Atari 2600 frame.
-      max_random_noops: int, maximum number of no-ops to apply at the beginning
-        of each episode to reduce determinism. These no-ops are applied at a
-        low-level, before frame skipping.
-    Raises:
-      ValueError: if frame_skip or screen_size are not strictly positive.
-    """
+
+        Args:
+            environment: Gym environment whose observations are preprocessed.
+            frame_skip: int, the frequency at which the agent experiences the game.
+            terminal_on_life_loss: bool, If True, the step() method returns
+            is_terminal=True whenever a life is lost. See Mnih et al. 2015.
+            screen_size: int, size of a resized Atari 2600 frame.
+            max_random_noops: int, maximum number of no-ops to apply at the beginning
+                of each episode to reduce determinism. These no-ops are applied at a
+                low-level, before frame skipping.
+        Raises:
+            ValueError: if frame_skip or screen_size are not strictly positive.
+        """
         if frame_skip <= 0:
             raise ValueError(
                 'Frame skip should be strictly positive, got {}'.format(
@@ -132,10 +104,10 @@ class AtariPreprocessing:
 
     def reset(self):
         """Resets the environment.
-    Returns:
-      observation: numpy array, the initial observation emitted by the
-        environment.
-    """
+        Returns:
+            observation: numpy array, the initial observation emitted by the
+                environment.
+        """
         self.environment.reset()
         self.apply_random_noops()
 
@@ -146,35 +118,37 @@ class AtariPreprocessing:
 
     def render(self, mode):
         """Renders the current screen, before preprocessing.
-    This calls the Gym API's render() method.
-    Args:
-      mode: Mode argument for the environment's render() method.
-        Valid values (str) are:
-          'rgb_array': returns the raw ALE image.
-          'human': renders to display via the Gym renderer.
-    Returns:
-      if mode='rgb_array': numpy array, the most recent screen.
-      if mode='human': bool, whether the rendering was successful.
+
+        This calls the Gym API's render() method.
+        Args:
+            mode: Mode argument for the environment's render() method.
+                Valid values (str) are:
+                    'rgb_array': returns the raw ALE image.
+                    'human': renders to display via the Gym renderer.
+        Returns:
+            if mode='rgb_array': numpy array, the most recent screen.
+            if mode='human': bool, whether the rendering was successful.
     """
         return self.environment.render(mode)
 
     def step(self, action):
         """Applies the given action in the environment.
-    Remarks:
-      * If a terminal state (from life loss or episode end) is reached, this may
-        execute fewer than self.frame_skip steps in the environment.
-      * Furthermore, in this case the returned observation may not contain valid
-        image data and should be ignored.
-    Args:
-      action: The action to be executed.
-    Returns:
-      observation: numpy array, the observation following the action.
-      reward: float, the reward following the action.
-      is_terminal: bool, whether the environment has reached a terminal state.
-        This is true when a life is lost and terminal_on_life_loss, or when the
-        episode is over.
-      info: Gym API's info data structure.
-    """
+
+        Remarks:
+            * If a terminal state (from life loss or episode end) is reached, this may
+              execute fewer than self.frame_skip steps in the environment.
+            * Furthermore, in this case the returned observation may not contain valid
+              image data and should be ignored.
+        Args:
+            action: The action to be executed.
+        Returns:
+            observation: numpy array, the observation following the action.
+            reward: float, the reward following the action.
+            is_terminal: bool, whether the environment has reached a terminal state.
+                This is true when a life is lost and terminal_on_life_loss, or when the
+                episode is over.
+            info: Gym API's info data structure.
+        """
         accumulated_reward = 0.
 
         for time_step in range(self.frame_skip):
@@ -205,21 +179,23 @@ class AtariPreprocessing:
 
     def _fetch_grayscale_observation(self, output):
         """Returns the current observation in grayscale.
-    The returned observation is stored in 'output'.
-    Args:
-      output: numpy array, screen buffer to hold the returned observation.
-    Returns:
-      observation: numpy array, the current observation in grayscale.
-    """
+
+        The returned observation is stored in 'output'.
+        Args:
+            output: numpy array, screen buffer to hold the returned observation.
+        Returns:
+            observation: numpy array, the current observation in grayscale.
+        """
         self.environment.ale.getScreenGrayscale(output)
         return output
 
     def _pool_and_resize(self):
         """Transforms two frames into a Nature DQN observation.
-    For efficiency, the transformation is done in-place in self.screen_buffer.
-    Returns:
-      transformed_screen: numpy array, pooled, resized screen.
-    """
+
+        For efficiency, the transformation is done in-place in self.screen_buffer.
+        Returns:
+            transformed_screen: numpy array, pooled, resized screen.
+        """
         # Pool if there are enough screens to do so.
         if self.frame_skip > 1:
             np.maximum(self.screen_buffer[0],

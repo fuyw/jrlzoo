@@ -1,7 +1,6 @@
 from typing import Tuple
 
 import os
-
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 import gym
@@ -30,16 +29,12 @@ def save_video(save_dir, file_name, frames):
 
 
 @jax.jit
-def sample_action(actor_state: train_state.TrainState,
-                  observation: np.ndarray) -> np.ndarray:
-    sampled_action = actor_state.apply_fn({"params": actor_state.params},
-                                          observation)
+def sample_action(actor_state: train_state.TrainState, observation: np.ndarray) -> np.ndarray:
+    sampled_action = actor_state.apply_fn({"params": actor_state.params}, observation)
     return sampled_action
 
 
-def eval_policy(actor_state: train_state.TrainState,
-                env: gym.Env,
-                eval_episodes: int = 10) -> Tuple[float, float]:
+def eval_policy(actor_state: train_state.TrainState, env: gym.Env, eval_episodes: int = 10) -> Tuple[float, float]:
     t1 = time.time()
     avg_reward = 0.
     for _ in range(eval_episodes):
@@ -60,13 +55,13 @@ for env_name in ['HalfCheetah-v2', 'Hopper-v2', 'Walker2d-v2']:
 
     actor = Actor(act_dim=act_dim)
     actor_params = actor.init(jax.random.PRNGKey(0), dummy_obs)["params"]
-    actor_state = train_state.TrainState.create(apply_fn=actor.apply,
-                                                params=actor_params,
-                                                tx=optax.adam(0.1))
+    actor_state = train_state.TrainState.create(
+        apply_fn=actor.apply,
+        params=actor_params,
+        tx=optax.adam(0.1))
 
     eval_reward1, _ = eval_policy(actor_state, env)
-    actor_state = checkpoints.restore_checkpoint(
-        f'saved_models/{env_name}/s1/actor_100', actor_state)
+    actor_state = checkpoints.restore_checkpoint(f'saved_models/{env_name}/s1/actor_100', actor_state)
     eval_reward2, _ = eval_policy(actor_state, env)
     print(f'Reward before training: {eval_reward1:.2f}')
     print(f'Reward after training: {eval_reward2:.2f}')
@@ -88,6 +83,4 @@ for env_name in ['HalfCheetah-v2', 'Hopper-v2', 'Walker2d-v2']:
 
     save_video("saved_video", f"{env_name}", frames)
     fps = 30 if 'HalfCheetah' in env_name else 100
-    os.system(
-        f"ffmpeg -r {fps} -i saved_video/{env_name}/frame_%01d.png -vcodec mpeg4 -y saved_video/{env_name}.mp4"
-    )
+    os.system(f"ffmpeg -r {fps} -i saved_video/{env_name}/frame_%01d.png -vcodec mpeg4 -y saved_video/{env_name}.mp4")

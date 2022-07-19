@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from flax.core import FrozenDict
 
+
 Batch = collections.namedtuple(
     "Batch",
     ["observations", "actions", "rewards", "discounts", "next_observations"])
@@ -53,8 +54,8 @@ class ReplayBuffer:
     def normalize_states(self, eps: float = 1e-3):
         mean = self.observations.mean(0, keepdims=True)
         std = self.observations.std(0, keepdims=True) + eps
-        self.observations = (self.observations - mean) / std
-        self.next_observations = (self.next_observations - mean) / std
+        self.observations = (self.observations - mean)/std
+        self.next_observations = (self.next_observations - mean)/std
         return mean, std
 
 
@@ -69,12 +70,10 @@ def get_logger(fname):
     return logger
 
 
-def target_update(params: FrozenDict, target_params: FrozenDict,
-                  tau: float) -> FrozenDict:
+def target_update(params: FrozenDict, target_params: FrozenDict, tau: float) -> FrozenDict:
     def _update(param: FrozenDict, target_param: FrozenDict):
-        return tau * param + (1 - tau) * target_param
-
-    updated_params = jax.tree_multimap(_update, params, target_params)
+        return tau*param + (1-tau)*target_param
+    updated_params = jax.tree_util.tree_map(_update, params, target_params)
     return updated_params
 
 
