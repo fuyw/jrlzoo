@@ -118,8 +118,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                                           num_agents=config.num_agents,
                                           gamma=config.gamma,
                                           lmbda=config.lmbda)
-        iterations = trajectories[0].shape[
-            0] // config.batch_size  # 512 / 256 = 2
+        iterations = trajectories[0].shape[0] // config.batch_size
+
+        obs_sum = trajectories[0].sum()
+        act_sum = trajectories[1].sum()
 
         for _ in range(config.num_epochs):
             permutation = np.random.permutation(config.num_agents *
@@ -137,6 +139,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         # evaluate
         if (step + 1) % 50 == 0:
             eval_reward, eval_time = eval_policy(agent, eval_env)
-            logger.info(f"#Step {step+1}: eval_reward={eval_reward:.2f}, "
+            logger.info(f"\n#Step {step+1}: eval_reward={eval_reward:.2f}, "
                         f"eval_time={eval_time:.2f}s, "
-                        f"total_time={(time.time()-start_time)/60:.2f}min")
+                        f"total_time={(time.time()-start_time)/60:.2f}min\n"
+                        f"\tvalue_loss={log_info['value_loss']:.3f}, "
+                        f"pg_loss={log_info['pg_loss']:.3f}, "
+                        f"entropy_loss={log_info['entropy_loss']:.3f}, "
+                        f"total_loss={log_info['total_loss']:.3f}\n"
+                        f"\tobs_sum={obs_sum:.0f}, act_sum = {act_sum:.0f}\n")

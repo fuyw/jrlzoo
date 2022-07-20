@@ -113,7 +113,7 @@ class ActorCritic(nn.Module):
 # PPO Agent #
 #############
 class PPOAgent:
-
+    """PPOAgent adapted from Flax PPO example."""
     def __init__(self, config, act_dim: int, lr: float):
         self.vf_coeff = config.vf_coeff
         self.entropy_coeff = config.entropy_coeff
@@ -151,7 +151,6 @@ class PPOAgent:
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self, learner_state, batch, clip_param: float):
-
         def loss_fn(params, observations, actions, old_log_probs, targets,
                     advantages):
             action_distributions, values = self.learner.apply(
@@ -176,10 +175,10 @@ class PPOAgent:
                 self.entropy_coeff * entropy
             log_info = {
                 "value_loss": value_loss,
-                "pg_loss": pg_loss,
-                "clipped_loss": clipped_loss,
+                "pg_loss": pg_loss.mean(),
+                "clipped_loss": clipped_loss.mean(),
                 "total_loss": total_loss,
-                "entropy": entropy,
+                "entropy_loss": entropy,
                 "log_prob_ratio": ratios.mean(),
             }
             return total_loss, log_info

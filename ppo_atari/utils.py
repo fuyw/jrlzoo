@@ -30,9 +30,9 @@ def process_experience(experience: List[List[ExpTuple]],
                        obs_shape: Tuple[int] = (84, 84, 4)):
     """Process experiences for Atari agents
 
-    Default: continuous states & discrete actions.
+    Default: continuous observations & discrete actions.
     """
-    states = np.zeros((actor_steps, num_agents, *obs_shape), dtype=np.float32)
+    observations = np.zeros((actor_steps, num_agents, *obs_shape), dtype=np.float32)
     actions = np.zeros((actor_steps, num_agents), dtype=np.int32)
     rewards = np.zeros((actor_steps, num_agents), dtype=np.float32)
     values = np.zeros((actor_steps + 1, num_agents), dtype=np.float32)
@@ -41,12 +41,12 @@ def process_experience(experience: List[List[ExpTuple]],
     assert len(experience) == actor_steps + 1
     for t in range(len(experience) - 1):
         for agent_id, exp_agent in enumerate(experience[t]):
-            states[t, agent_id, ...] = exp_agent.state
+            observations[t, agent_id, ...] = exp_agent.state
             actions[t, agent_id] = exp_agent.action
             rewards[t, agent_id] = exp_agent.reward
             values[t, agent_id] = exp_agent.value
             log_probs[t, agent_id] = exp_agent.log_prob
-            # Dones need to be 0 for terminal states.
+            # Dones need to be 0 for terminal observations.
             dones[t, agent_id] = float(not exp_agent.done)
 
     # experience[-1] for next_values
@@ -58,7 +58,7 @@ def process_experience(experience: List[List[ExpTuple]],
     targets = advantages + values[:-1, :]
 
     # concatenate results
-    trajectories = (states, actions, log_probs, targets, advantages)
+    trajectories = (observations, actions, log_probs, targets, advantages)
     trajectory_len = num_agents * actor_steps
     trajectories = tuple(
         map(lambda x: np.reshape(x, (trajectory_len, *x.shape[2:])),
@@ -79,7 +79,7 @@ def gae_advantages(rewards: np.ndarray, terminal_masks: np.ndarray,
     advantages = []
     gae = 0.
     for t in reversed(range(len(rewards))):
-        # Masks used to set next state value to 0 for terminal states.
+        # Masks used to set next state value to 0 for terminal observations.
         value_diff = discount * values[t + 1] * terminal_masks[t] - values[t]
         delta = rewards[t] + value_diff
 
