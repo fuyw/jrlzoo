@@ -36,31 +36,21 @@ def policy_action(apply_fn: Callable[..., Any],
     return out
 
 
-@functools.partial(jax.jit, static_argnums=0)
-def sample_action(apply_fn: Callable[..., Any],
-                  params: flax.core.frozen_dict.FrozenDict,
-                  observations: np.ndarray):
-    action_distributions, values = apply_fn({"params": params}, observations)
-    actions, log_probs = action_distributions.sample_and_log_prob(seed=rng)
-    return actions, log_probs, values
-
-
 def eval_policy(ppo_state, env, eval_episodes: int = 10) -> Tuple[float]:
     t1 = time.time()
     avg_reward = 0.
     for _ in range(eval_episodes):
         obs, done = env.reset(), False  # obs.shape = (84, 84, 4)
         while not done:
-            rng, key = jax.random.split(rng, 2)
             log_probs, _ = policy_action(ppo_state.apply_fn,
                                          ppo_state.params,
                                          obs[None, ...])
 
             probs = np.exp(np.array(log_probs, dtype=np.float32))
             probabilities = probs[0] / probs[0].sum()
-            sampled_action = np.random.choice(probs.shape[1], p=probabilities)
+            action = np.random.choice(probs.shape[1], p=probabilities)
 
-            next_obs, reward, done, _ = env.step(sampled_action)
+            next_obs, reward, done, _ = env.step(action)
             avg_reward += reward
             obs = next_obs
     avg_reward /= eval_episodes
@@ -95,6 +85,7 @@ def get_experience(state: train_state.TrainState,
         log_probs, values = policy_action(state.apply_fn,
                                           state.params,
                                           simulator_observations)
+        log_probs, values = jax.device_get((log_probs, values))
         probs = np.exp(np.array(log_probs))
         for i, simulator in enumerate(simulators):
             action = np.random.choice(probs.shape[1], p=probs[i])
@@ -123,14 +114,14 @@ def loss_fn(params: flax.core.FrozenDict,
             entropy_coeff: float):
     """Evaluate the PPO loss function."""
     states, actions, old_log_probs, returns, advantages = minibatch
-    action_distributions, values = apply_fn({"params":params}, states)
     log_probs, values = policy_action(apply_fn, params, states)
     probs = jnp.exp(log_probs)
-    entropy = jnp.sum(-probs*log_probs, axis=1).mean()
-    log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
-    #log_probs = action_distributions.log_prob(actions)
-    #entropy = action_distributions.entropy().mean()
+
     value_loss = jnp.mean(jnp.square(returns - values), axis=0)
+
+    entropy = jnp.sum(-probs*log_probs, axis=1).mean()
+
+    log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
     ratios = jnp.exp(log_probs_act_taken - old_log_probs)
 
     # Advantage normalization (following the OpenAI baselines).
@@ -199,8 +190,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     model = ActorCritic(act_dim=act_dim)
 
     # initialize params
-    rng = jax.random.PRNGKey(config.seed)
-    ppo_params = model.init(rng, jnp.ones((1, 84, 84, 4)))["params"]
+    key = jax.random.PRNGKey(config.seed)
+    ppo_params = model.init(key, jnp.ones((1, 84, 84, 4)))["params"]
 
     # determine training steps
     loop_steps = config.total_frames // (config.num_agents * config.actor_steps)
@@ -229,11 +220,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             permutation = np.random.permutation(config.num_agents * config.actor_steps)
             trajectories = tuple(x[permutation] for x in trajectories)
             ppo_state, _, log_info = train_step(ppo_state,
-                                                trajectories,
-                                                config.batch_size,
-                                                clip_param=clip_param,
-                                                vf_coeff=config.vf_coeff,
-                                                entropy_coeff=config.entropy_coeff)
+                                      trajectories,
+                                      config.batch_size,
+                                      clip_param=clip_param,
+                                      vf_coeff=config.vf_coeff,
+                                      entropy_coeff=config.entropy_coeff)
 
         # evaluate
         if (step+1) % 100 == 0:
