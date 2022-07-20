@@ -1,4 +1,5 @@
 from flax import linen as nn
+import distrax
 import multiprocessing as mp
 import jax.numpy as jnp
 import env_utils
@@ -21,11 +22,12 @@ class ActorCritic(nn.Module):
         x = nn.Dense(features=512, name="hidden", dtype=jnp.float32)(x)
         x = nn.relu(x)
 
-        logits = nn.Dense(features=self.act_dim, name="logits", dtype=jnp.float32)(x)
-        policy_log_probabilities = nn.log_softmax(logits)
         value = nn.Dense(features=1, name="value", dtype=jnp.float32)(x)
-
-        return policy_log_probabilities, value
+        logits = nn.Dense(features=self.act_dim, name="logits", dtype=jnp.float32)(x)
+        # policy_log_probabilities = nn.log_softmax(logits)
+        # return policy_log_probabilities, value
+        action_distribution = distrax.Categorical(logits=logits)
+        return action_distribution, value.squeeze(-1)
 
 
 class RemoteSimulator:
@@ -65,4 +67,3 @@ class RemoteSimulator:
                 if done:
                     break
                 obs = next_obs
-
