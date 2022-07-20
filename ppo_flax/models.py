@@ -24,10 +24,8 @@ class ActorCritic(nn.Module):
 
         value = nn.Dense(features=1, name="value", dtype=jnp.float32)(x)
         logits = nn.Dense(features=self.act_dim, name="logits", dtype=jnp.float32)(x)
-        # policy_log_probabilities = nn.log_softmax(logits)
-        # return policy_log_probabilities, value
-        action_distribution = distrax.Categorical(logits=logits)
-        return action_distribution, value.squeeze(-1)
+        log_probs = nn.log_softmax(logits)
+        return log_probs, value.squeeze(-1)
 
 
 class RemoteSimulator:

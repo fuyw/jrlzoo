@@ -29,37 +29,46 @@ from utils import ExpTuple, get_logger, process_experience
 # Utility Functions #
 #####################
 @functools.partial(jax.jit, static_argnums=0)
+def policy_action(apply_fn: Callable[..., Any],
+                  params: flax.core.frozen_dict.FrozenDict,
+                  state: np.ndarray):
+    out = apply_fn({"params": params}, state)
+    return out
+
+
+@functools.partial(jax.jit, static_argnums=0)
 def sample_action(apply_fn: Callable[..., Any],
                   params: flax.core.frozen_dict.FrozenDict,
-                  rng: Any,
                   observations: np.ndarray):
     action_distributions, values = apply_fn({"params": params}, observations)
     actions, log_probs = action_distributions.sample_and_log_prob(seed=rng)
     return actions, log_probs, values
 
 
-def eval_policy(ppo_state, env, rng, eval_episodes: int = 10) -> Tuple[float]:
+def eval_policy(ppo_state, env, eval_episodes: int = 10) -> Tuple[float]:
     t1 = time.time()
     avg_reward = 0.
     for _ in range(eval_episodes):
         obs, done = env.reset(), False  # obs.shape = (84, 84, 4)
         while not done:
             rng, key = jax.random.split(rng, 2)
-            sampled_action, _, _ = sample_action(ppo_state.apply_fn,
-                                                 ppo_state.params,
-                                                 key,
-                                                 obs[None, ...])
-            sampled_action = np.asarray(sampled_action)
+            log_probs, _ = policy_action(ppo_state.apply_fn,
+                                         ppo_state.params,
+                                         obs[None, ...])
+
+            probs = np.exp(np.array(log_probs, dtype=np.float32))
+            probabilities = probs[0] / probs[0].sum()
+            sampled_action = np.random.choice(probs.shape[1], p=probabilities)
+
             next_obs, reward, done, _ = env.step(sampled_action)
             avg_reward += reward
             obs = next_obs
     avg_reward /= eval_episodes
-    return rng, avg_reward, time.time() - t1
+    return avg_reward, time.time() - t1
 
 
 def get_experience(state: train_state.TrainState,
                    simulators: List[RemoteSimulator],
-                   rng: Any,
                    steps_per_actor: int):
     #TODO: inference in the subprocess
     #TODO: use sequential actors
@@ -76,35 +85,31 @@ def get_experience(state: train_state.TrainState,
     # Range up to steps_per_actor + 1 to get one more value needed for GAE.
     for _ in range(steps_per_actor + 1):
         # (1) receive remote actor states
-        simulator_states = []
+        simulator_observations = []
         for simulator in simulators:
             simulator_state = simulator.conn.recv()
-            simulator_states.append(simulator_state)
-        simulator_states = np.concatenate(simulator_states, axis=0)
+            simulator_observations.append(simulator_state)
+        simulator_observations = np.concatenate(simulator_observations, axis=0)
 
         # (2) sample actions locally, and send sampled actions to remote actors
-        rng, key = jax.random.split(rng)
-        actions, log_probs, values = sample_action(state.apply_fn,
-                                                   state.params,
-                                                   key,
-                                                   simulator_states)
-        # actions, log_probs, values = jax.device_get((actions, log_probs, values))
-        actions = np.asarray(actions)
-        log_probs = np.asarray(log_probs)
-        values = np.asarray(values)
+        log_probs, values = policy_action(state.apply_fn,
+                                          state.params,
+                                          simulator_observations)
+        probs = np.exp(np.array(log_probs))
         for i, simulator in enumerate(simulators):
-            simulator.conn.send(actions[i])
+            action = np.random.choice(probs.shape[1], p=probs[i])
+            simulator.conn.send(action)
 
         # (3) receive next states, rewards from remote actors
         experiences = []
         for i, simulator in enumerate(simulators):
             simulator_state, action, reward, done = simulator.conn.recv()
             value = values[i]
-            log_prob = log_probs[i]
+            log_prob = log_probs[i][action]
             sample = ExpTuple(simulator_state, action, reward, value, log_prob, done)
             experiences.append(sample)      # List of ExpTuple
         all_experiences.append(experiences)  # List of List of ExpTuple
-    return rng, all_experiences
+    return all_experiences
 
 
 #############
@@ -119,15 +124,14 @@ def loss_fn(params: flax.core.FrozenDict,
     """Evaluate the PPO loss function."""
     states, actions, old_log_probs, returns, advantages = minibatch
     action_distributions, values = apply_fn({"params":params}, states)
-    #log_probs, values = policy_action(apply_fn, params, states)
-    #values = values[:, 0]  # Convert shapes: (batch, 1) to (batch, ).
-    #probs = jnp.exp(log_probs)
-    #entropy = jnp.sum(-probs*log_probs, axis=1).mean()
-    #log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
-    log_probs = action_distributions.log_prob(actions)
-    entropy = action_distributions.entropy().mean()
+    log_probs, values = policy_action(apply_fn, params, states)
+    probs = jnp.exp(log_probs)
+    entropy = jnp.sum(-probs*log_probs, axis=1).mean()
+    log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
+    #log_probs = action_distributions.log_prob(actions)
+    #entropy = action_distributions.entropy().mean()
     value_loss = jnp.mean(jnp.square(returns - values), axis=0)
-    ratios = jnp.exp(log_probs - old_log_probs)
+    ratios = jnp.exp(log_probs_act_taken - old_log_probs)
 
     # Advantage normalization (following the OpenAI baselines).
     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
@@ -196,7 +200,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
     # initialize params
     rng = jax.random.PRNGKey(config.seed)
-    rng, rollout_rng, eval_rng = jax.random.split(rng, 3)
     ppo_params = model.init(rng, jnp.ones((1, 84, 84, 4)))["params"]
 
     # determine training steps
@@ -211,9 +214,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
     # start training
     for step in trange(loop_steps, desc="[Loop steps]"):
-        rollout_rng, all_experiences = get_experience(state=ppo_state,
+        all_experiences = get_experience(state=ppo_state,
                                          simulators=simulators,
-                                         rng=rollout_rng,
                                          steps_per_actor=config.actor_steps)
         trajectories = process_experience(experience=all_experiences,
                                           actor_steps=config.actor_steps,
@@ -235,7 +237,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
         # evaluate
         if (step+1) % 100 == 0:
-            eval_rng, eval_reward, eval_time = eval_policy(ppo_state, eval_env, eval_rng)
+            eval_reward, eval_time = eval_policy(ppo_state, eval_env)
             logger.info(f"\n#Step {step+1}: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
                         f"total_time={(time.time()-start_time)/60:.2f}min\n"
                         f"\tvalue_loss={log_info['value_loss']:.3f}, pg_loss={log_info['ppo_loss']:.3f}, "
