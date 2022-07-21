@@ -6,7 +6,7 @@ import optax
 from flax import linen as nn
 from flax.training import train_state
 import numpy as np
-import distrax
+
 import env_utils
 
 class ActorCritic(nn.Module):
@@ -27,11 +27,10 @@ class ActorCritic(nn.Module):
         x = nn.relu(x)
 
         logits = nn.Dense(features=self.act_dim, name="logits", dtype=jnp.float32)(x)
-        action_distribution = distrax.Categorical(logits=logits)
+        policy_log_probabilities = nn.log_softmax(logits)
         value = nn.Dense(features=1, name="value", dtype=jnp.float32)(x)
-        # policy_log_probabilities = nn.log_softmax(logits)
-        # return policy_log_probabilities, value.squeeze(-1)
-        return action_distribution, value.squeeze(-1)
+
+        return policy_log_probabilities, value.squeeze(-1)
 
 
 class RemoteActor:
@@ -93,33 +92,25 @@ class PPOAgent:
         ]
 
     @functools.partial(jax.jit, static_argnames=("self"))    
-    def _sample_action(self, params, key, observations):
-        action_distributions, values = self.learner.apply({"params": params}, observations)
-        sampled_actions, log_probs = action_distributions.sample_and_log_prob(seed=key)
-        return sampled_actions, values, log_probs
+    def _sample_action(self, params, observations):
+        log_probs, values = self.learner.apply({"params": params}, observations)
+        return log_probs, values
 
-    def sample_action(self, observations):
-        self.rng, key = jax.random.split(self.rng, 2)
-        sampled_actions, values, log_probs = self._sample_action(
-            self.learner_state.params, key, observations)
-        sampled_actions, values, log_probs = jax.device_get((sampled_actions, values, log_probs))
-        return sampled_actions, values, log_probs
+    def sample_action(self, observation):
+        log_probs, _ = self._sample_action(self.learner_state.params, observation)
+        probs = np.exp(np.asarray(log_probs))
+        action = np.random.choice(probs.shape[1], p=probs)
+        return action
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self, learner_state, batch, clip_param: float):
         def loss_fn(params, observations, actions, old_log_probs, targets, advantages):
-            action_distributions, values = self.learner.apply({"params": params}, observations)
-            log_probs = action_distributions.log_prob(actions) 
-
-            entropy = action_distributions.entropy().mean()
+            log_probs, values = self.learner.apply({"params": params}, observations)
+            probs = jnp.exp(log_probs)
             value_loss = jnp.mean(jnp.square(targets - values), axis=0)
-
-            # log_probs, values = self.learner.apply({"params": params}, observations)
-            # probs = jnp.exp(log_probs)
-            # entropy = jnp.sum(-probs*log_probs, axis=1).mean()
-            # log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
-
-            ratios = jnp.exp(log_probs - old_log_probs)
+            entropy = jnp.sum(-probs*log_probs, axis=1).mean()
+            log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
+            ratios = jnp.exp(log_probs_act_taken - old_log_probs)
             pg_loss = ratios * advantages
             clipped_loss = advantages * jax.lax.clamp(1.-clip_param, ratios, 1.+clip_param)
             ppo_loss = -jnp.mean(jnp.minimum(pg_loss, clipped_loss), axis=0)
