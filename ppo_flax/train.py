@@ -1,11 +1,9 @@
-from typing import Callable, Any, Tuple
+from typing import Tuple
 import os
-import functools
 import ml_collections
 import numpy as np
 import jax
 import time
-import flax
 import env_utils
 from tqdm import trange
 from models import PPOAgent
@@ -25,11 +23,8 @@ def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
         while not done:
             log_probs, _ = agent._sample_action(agent.learner_state.params, obs[None, ...])
             log_probs = jax.device_get(log_probs)
-            # probs = np.exp(np.asarray(log_probs, dtype=np.float32))
-            probs = np.exp(log_probs)
-            probabilities = probs[0]/probs[0].sum()
-            action = np.random.choice(probs.shape[1], p=probabilities)
-
+            probs = np.exp(np.asarray(log_probs)).squeeze()  # (1, 6) => (6,)
+            action = np.random.choice(len(probs), p=probs)
             next_obs, reward, done, _ = env.step(action)
             avg_reward += reward
             obs = next_obs
@@ -122,7 +117,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             permutation = np.random.permutation(config.num_agents *
                                                 config.actor_steps)
             trajectories = tuple(x[permutation] for x in trajectories)
-
             batch_trajectories = jax.tree_map(
                 lambda x: x.reshape(
                     (iterations, config.batch_size, *x.shape[1:])),
