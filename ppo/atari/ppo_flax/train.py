@@ -101,7 +101,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
     # initialize PPOAgent
     agent = PPOAgent(config, act_dim, lr)
-    logs = [{"step":0, "reward":eval_policy(agent, eval_env)[0]}]
+    logs = [{"frame":0, "reward":eval_policy(agent, eval_env)[0]}]
 
     # start training
     for step in trange(loop_steps, desc="[Loop steps]"):
@@ -137,11 +137,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             logs.append(log_info)
             logger.info(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
                         f"total_time={(time.time()-start_time)/60:.2f}min\n"
-                        f"\tvalue_loss={log_info['value_loss']:.3f}, pg_loss={log_info['ppo_loss']:.3f}, "
+                        f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                         f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
             print(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
                   f"total_time={(time.time()-start_time)/60:.2f}min\n"
-                  f"\tvalue_loss={log_info['value_loss']:.3f}, pg_loss={log_info['ppo_loss']:.3f}, "
+                  f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                   f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
 
     log_df = pd.DataFrame(logs)
