@@ -1,8 +1,13 @@
-from flax import linen as nn
 import multiprocessing as mp
+import functools
+import jax
 import jax.numpy as jnp
-import env_utils
+import optax
+from flax import linen as nn
+from flax.training import train_state
+import numpy as np
 
+import env_utils
 
 class ActorCritic(nn.Module):
     act_dim: int
@@ -28,7 +33,7 @@ class ActorCritic(nn.Module):
         return policy_log_probabilities, value.squeeze(-1)
 
 
-class RemoteSimulator:
+class RemoteActor:
     """Remote actor in a separate process."""
 
     def __init__(self, env_name: str, rank: int):
@@ -65,3 +70,69 @@ class RemoteSimulator:
                 if done:
                     break
                 obs = next_obs
+
+
+class PPOAgent:
+    """PPOAgent adapted from Flax PPO example."""
+    def __init__(self, config, act_dim: int, lr: float):
+        self.vf_coeff = config.vf_coeff
+        self.entropy_coeff = config.entropy_coeff
+
+        # initialize learner
+        self.rng = jax.random.PRNGKey(config.seed)
+        dummy_obs = jnp.ones([1, 84, 84, 4])
+        self.learner = ActorCritic(act_dim)
+        learner_params = self.learner.init(self.rng, dummy_obs)["params"]
+        self.learner_state = train_state.TrainState.create(
+            apply_fn=ActorCritic.apply,
+            params=learner_params,
+            tx=optax.adam(lr))
+        self.actors = [
+            RemoteActor(config.env_name, i) for i in range(config.num_agents)
+        ]
+
+    @functools.partial(jax.jit, static_argnames=("self"))    
+    def _sample_action(self, params, observations):
+        log_probs, values = self.learner.apply({"params": params}, observations)
+        return log_probs, values
+
+    def sample_action(self, observation):
+        log_probs, _ = self._sample_action(self.learner_state.params, observation)
+        probs = np.exp(np.asarray(log_probs))
+        action = np.random.choice(probs.shape[1], p=probs)
+        return action
+
+    @functools.partial(jax.jit, static_argnames=("self"))
+    def train_step(self, learner_state, batch, clip_param: float):
+        def loss_fn(params, observations, actions, old_log_probs, targets, advantages):
+            log_probs, values = self.learner.apply({"params": params}, observations)
+            probs = jnp.exp(log_probs)
+            value_loss = jnp.mean(jnp.square(targets - values), axis=0)
+            entropy = jnp.sum(-probs*log_probs, axis=1).mean()
+            log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
+            ratios = jnp.exp(log_probs_act_taken - old_log_probs)
+            pg_loss = ratios * advantages
+            clipped_loss = advantages * jax.lax.clamp(1.-clip_param, ratios, 1.+clip_param)
+            ppo_loss = -jnp.mean(jnp.minimum(pg_loss, clipped_loss), axis=0)
+            total_loss = ppo_loss + self.vf_coeff*value_loss - self.entropy_coeff*entropy
+            log_info = {"ppo_loss": ppo_loss,
+                        "value_loss": value_loss,
+                        "entropy": entropy,
+                        "total_loss": total_loss}
+            return total_loss, log_info
+        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+        observations, actions, old_log_probs, targets, advantages = batch
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)        
+        (_, log_info), grads = grad_fn(
+            learner_state.params,
+            observations,
+            actions,
+            old_log_probs,
+            targets,
+            advantages)
+        new_learner_state = learner_state.apply_gradients(grads=grads)
+        return new_learner_state, log_info
+
+    def update(self, batch, clip_param):
+        self.learner_state, log_info = self.train_step(self.learner_state, batch, clip_param)
+        return log_info

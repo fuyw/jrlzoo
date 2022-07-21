@@ -2,12 +2,24 @@ from typing import List, Tuple
 import collections
 import logging
 import functools
+import optax
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 
 ExpTuple = collections.namedtuple('ExpTuple', ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
+
+
+def get_lr_scheduler(config, loop_steps, iterations_per_step):
+    # set lr scheduler
+    if config.decaying_lr_and_clip_param:
+        lr = optax.linear_schedule(init_value=config.lr,
+                                   end_value=0.,
+                                   transition_steps=loop_steps*config.num_epochs*iterations_per_step)
+    else:
+        lr = config.lr
+    return lr
 
 
 def get_logger(fname):
