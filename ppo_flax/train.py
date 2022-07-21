@@ -21,10 +21,10 @@ def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
-            log_probs, _ = agent._sample_action(agent.learner_state.params, obs[None, ...])
-            log_probs = jax.device_get(log_probs)
-            probs = np.exp(np.asarray(log_probs)).squeeze()  # (1, 6) => (6,)
-            action = np.random.choice(len(probs), p=probs)
+            action, _, _ = agent.sample_action(obs[None, ...])
+            # log_probs = jax.device_get(log_probs)
+            # probs = np.exp(np.asarray(log_probs)).squeeze()  # (1, 6) => (6,)
+            # action = np.random.choice(len(probs), p=probs)
             next_obs, reward, done, _ = env.step(action)
             avg_reward += reward
             obs = next_obs
@@ -55,20 +55,16 @@ def get_experience(agent, steps_per_actor: int):
         observations = np.concatenate(observations, axis=0)
 
         # (2) sample actions locally, and send sampled actions to remote actors
-        log_probs, values = agent._sample_action(
-            agent.learner_state.params, observations)
-        log_probs, values = jax.device_get((log_probs, values))
-        probs = np.exp(np.array(log_probs))
+        actions, values, log_probs = agent.sample_action(observations)
         for i, actor in enumerate(agent.actors):
-            action = np.random.choice(probs.shape[1], p=probs[i])
-            actor.conn.send(action)
+            actor.conn.send(actions[i])
 
         # (3) receive next states, rewards from remote actors
         experiences = []
         for i, actor in enumerate(agent.actors):
             observation, action, reward, done = actor.conn.recv()
             value = values[i]
-            log_prob = log_probs[i][action]
+            log_prob = log_probs[i]
             sample = ExpTuple(observation, action, reward, value, log_prob, done)
             experiences.append(sample)      # List of ExpTuple
         all_experiences.append(experiences)  # List of List of ExpTuple
