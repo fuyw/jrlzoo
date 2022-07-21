@@ -2,6 +2,7 @@ from typing import Tuple
 import os
 import ml_collections
 import numpy as np
+import pandas as pd
 import jax
 import time
 import env_utils
@@ -81,7 +82,7 @@ def get_experience(agent, steps_per_actor: int):
 def train_and_evaluate(config: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-    exp_name = f"ppo_s{config.seed}_{timestamp}"
+    exp_name = f"ppo_s{config.seed}_a{config.num_agents}_{timestamp}"
     print(f"# Running experiment for: {exp_name}_{config.env_name} #")
     logger = get_logger(f"logs/{config.env_name}/{exp_name}.log")
     logger.info(f"Exp configurations:\n{config}")
@@ -93,13 +94,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     # determine training steps
     loop_steps = config.total_frames // (config.num_agents * config.actor_steps)
     iterations_per_step = (config.num_agents * config.actor_steps // config.batch_size)
+    log_steps = loop_steps // config.log_num
 
     # initialize lr scheduler
     lr = get_lr_scheduler(config, loop_steps, iterations_per_step)
 
     # initialize PPOAgent
     agent = PPOAgent(config, act_dim, lr)
- 
+    logs = [{"step":0, "reward":eval_policy(agent, eval_env)[0]}]
+
     # start training
     for step in trange(loop_steps, desc="[Loop steps]"):
         alpha = 1. - step / loop_steps if config.decaying_lr_and_clip_param else 1.
@@ -126,13 +129,20 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 log_info = agent.update(batch, clip_param)
 
         # evaluate
-        if (step+1) % 100 == 0:
+        if (step+1) % log_steps == 0:
+            frame_num = (step+1) * config.num_agents * config.actor_steps // 1_000
             eval_reward, eval_time = eval_policy(agent, eval_env) 
-            logger.info(f"\n#Step {step+1}: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
+            log_info["frame"] = frame_num
+            log_info["reward"] = eval_reward
+            logs.append(log_info)
+            logger.info(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
                         f"total_time={(time.time()-start_time)/60:.2f}min\n"
                         f"\tvalue_loss={log_info['value_loss']:.3f}, pg_loss={log_info['ppo_loss']:.3f}, "
-                        f"entropy_loss={log_info['entropy']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
-            print(f"\n#Step {step+1}: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
+                        f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
+            print(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
                   f"total_time={(time.time()-start_time)/60:.2f}min\n"
                   f"\tvalue_loss={log_info['value_loss']:.3f}, pg_loss={log_info['ppo_loss']:.3f}, "
-                  f"entropy_loss={log_info['entropy']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
+                  f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
+
+    log_df = pd.DataFrame(logs)
+    log_df.to_csv(f"{config.log_dir}/{config.env_name}/{exp_name}.csv")

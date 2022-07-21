@@ -107,17 +107,20 @@ class PPOAgent:
         def loss_fn(params, observations, actions, old_log_probs, targets, advantages):
             log_probs, values = self.learner.apply({"params": params}, observations)
             probs = jnp.exp(log_probs)
-            value_loss = jnp.mean(jnp.square(targets - values), axis=0)
             entropy = jnp.sum(-probs*log_probs, axis=1).mean()
             log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
             ratios = jnp.exp(log_probs_act_taken - old_log_probs)
             pg_loss = ratios * advantages
             clipped_loss = advantages * jax.lax.clamp(1.-clip_param, ratios, 1.+clip_param)
+
             ppo_loss = -jnp.mean(jnp.minimum(pg_loss, clipped_loss), axis=0)
-            total_loss = ppo_loss + self.vf_coeff*value_loss - self.entropy_coeff*entropy
+            value_loss = jnp.mean(jnp.square(targets - values), axis=0) * self.vf_coeff
+            entropy_loss = - entropy * self.entropy_coeff
+            total_loss = ppo_loss + value_loss + entropy_loss
+
             log_info = {"ppo_loss": ppo_loss,
                         "value_loss": value_loss,
-                        "entropy": entropy,
+                        "entropy_loss": entropy_loss,
                         "total_loss": total_loss}
             return total_loss, log_info
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
