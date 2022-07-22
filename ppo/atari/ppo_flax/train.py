@@ -19,6 +19,7 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
     t1 = time.time()
     avg_reward = 0.
+    avg_step = 0
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
@@ -28,9 +29,11 @@ def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
             action = np.random.choice(len(probs), p=probs)
             next_obs, reward, done, _ = env.step(action)
             avg_reward += reward
+            avg_step += 1
             obs = next_obs
     avg_reward /= eval_episodes
-    return avg_reward, time.time() - t1
+    avg_step /= eval_episodes
+    return avg_reward, avg_step, time.time() - t1
 
 
 def get_experience(agent, steps_per_actor: int):
@@ -53,13 +56,12 @@ def get_experience(agent, steps_per_actor: int):
         observations = np.concatenate(observations, axis=0)  # (5, 84, 84, 4)
 
         # (2) sample actions locally, and send sampled actions to remote actors
-        log_probs, values = agent._sample_action(
-            agent.learner_state.params, observations)
+        log_probs, values = agent._sample_action(agent.learner_state.params, observations)
         log_probs, values = jax.device_get((log_probs, values))
         probs = np.exp(np.array(log_probs))
+        actions = [np.random.choice(probs.shape[1], p=prob) for prob in probs]
         for i, actor in enumerate(agent.actors):
-            action = np.random.choice(probs.shape[1], p=probs[i])
-            actor.conn.send(action)
+            actor.conn.send(actions[i])
 
         # (3) receive next states, rewards from remote actors
         experiences = []
@@ -87,6 +89,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     # initialize eval env
     eval_env = env_utils.create_env(config.env_name, clip_rewards=False)
     act_dim = eval_env.preproc.action_space.n
+
+    # set random seed
+    np.random.seed(config.seed)
+    eval_env.seed(config.seed)
 
     # determine training steps
     loop_steps = config.total_frames // (config.num_agents * config.actor_steps)
@@ -126,16 +132,17 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         # evaluate
         if (step+1) % log_steps == 0:
             frame_num = (step+1) * config.num_agents * config.actor_steps // 1_000
-            eval_reward, eval_time = eval_policy(agent, eval_env) 
+            eval_reward, eval_step, eval_time = eval_policy(agent, eval_env) 
+            eval_fps = eval_step / eval_time
             elapsed_time = (time.time()-start_time)/60
-            log_info.update({"frame": frame_num, "reward": eval_reward, "time": elapsed_time})
+            log_info.update({"frame": frame_num, "reward": eval_reward, "time": elapsed_time, "eval_fps": eval_fps})
             logs.append(log_info)
-            logger.info(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
-                        f"total_time={elapsed_time:.2f}min\n"
+            logger.info(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_fps={eval_fps:.2f}, "
+                        f"eval_time={eval_time:.2f}s, total_time={elapsed_time:.2f}min\n"
                         f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                         f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
-            print(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
-                  f"total_time={elapsed_time:.2f}min\n"
+            print(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_fps={eval_fps:.2f}, "
+                  f"eval_time={eval_time:.2f}s, total_time={elapsed_time:.2f}min\n"
                   f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                   f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
 

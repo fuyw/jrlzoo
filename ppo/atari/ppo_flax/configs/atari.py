@@ -24,7 +24,7 @@ def get_config():
     config.num_epochs = 3
 
     # Number of agents playing in parallel
-    config.num_agents = 4
+    config.num_agents = 10
 
     # Number of steps each agent performs in one policy rollout
     config.actor_steps = 100

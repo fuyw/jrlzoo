@@ -41,6 +41,9 @@ class FrameStack:
         self.frames.append(ob)
         return self._get_array(), reward, done, info
 
+    def seed(self, seed: int):
+        self.preproc.environment.seed(seed)
+
     def _get_array(self):
         assert len(self.frames) == self.num_frames
         return np.concatenate(self.frames, axis=-1)
@@ -51,20 +54,9 @@ def create_env(game: str, clip_rewards: bool, seed: int = None):
     env = gym.make(game)
     if seed is not None:
         env.seed(seed)
+        env.action_space.seed(seed)
     if clip_rewards:
         env = ClipRewardEnv(env)  # bin rewards to {-1., 0., 1.}
     preproc = atari_utils.AtariPreprocessing(env)
     stack = FrameStack(preproc, num_frames=4)
     return stack
-
-
-def get_num_actions(env_name: str):
-    """Get the number of possible actions of a given Atari game.
-
-    This determines the number of outputs in the actor part of the
-    actor-critic model.
-    """
-    env = gym.make(env_name)
-    return env.action_space.n
-
-
