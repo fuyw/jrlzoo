@@ -8,7 +8,7 @@ import time
 import env_utils
 from tqdm import trange
 from models import PPOAgent
-from utils import ExpTuple, get_logger, process_experience, get_lr_scheduler
+from utils import ExpTuple, PPOBuffer, get_logger, get_lr_scheduler
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
@@ -34,9 +34,6 @@ def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
 
 
 def get_experience(agent, steps_per_actor: int):
-    # TODO: inference in the subprocess
-    # TODO: use sequential actors
-    # TODO: use vec_env
     """Collect experience using remote actors.
     (1) receive states from remote actors.
     (2) sample action locally, and send sampled actions to remote actors.
@@ -53,7 +50,7 @@ def get_experience(agent, steps_per_actor: int):
         for actor in agent.actors:
             observation = actor.conn.recv()
             observations.append(observation)
-        observations = np.concatenate(observations, axis=0)
+        observations = np.concatenate(observations, axis=0)  # (5, 84, 84, 4)
 
         # (2) sample actions locally, and send sampled actions to remote actors
         log_probs, values = agent._sample_action(
@@ -101,6 +98,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
     # initialize PPOAgent
     agent = PPOAgent(config, act_dim, lr)
+    buffer = PPOBuffer(config.actor_steps, config.num_agents, config.gamma, config.lmbda)
     logs = [{"frame":0, "reward":eval_policy(agent, eval_env)[0]}]
 
     # start training
@@ -109,11 +107,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         clip_param = config.clip_param * alpha
 
         all_experiences = get_experience(agent, steps_per_actor=config.actor_steps)
-        trajectories = process_experience(experience=all_experiences,
-                                          actor_steps=config.actor_steps,
-                                          num_agents=config.num_agents,
-                                          gamma=config.gamma,
-                                          lmbda=config.lmbda)
+        buffer.add_experiences(all_experiences)
+        trajectories = buffer.process_experience()
         iterations = trajectories[0].shape[0] // config.batch_size
 
         for _ in range(config.num_epochs):

@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 
 
-ExpTuple = collections.namedtuple('ExpTuple', ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
+ExpTuple = collections.namedtuple("ExpTuple", ["observation", "action", "reward", "value", "log_prob", "done"])
 
 
 def get_lr_scheduler(config, loop_steps, iterations_per_step):
@@ -61,41 +61,49 @@ def gae_advantages(rewards: np.ndarray,
     return jnp.array(advantages)
 
 
-def process_experience(experience: List[List[ExpTuple]],
-                       actor_steps: int,
-                       num_agents: int,
-                       gamma: float,
-                       lmbda: float,
-                       obs_shape: Tuple[int]=(84, 84, 4)):
-    """Process experiences for Atari agents: continuous observations & discrete actions."""
-    observations    = np.zeros((actor_steps, num_agents, *obs_shape), dtype=np.float32)
-    actions   = np.zeros((actor_steps, num_agents), dtype=np.int32)
-    rewards   = np.zeros((actor_steps, num_agents), dtype=np.float32)
-    values    = np.zeros((actor_steps+1, num_agents), dtype=np.float32)
-    log_probs = np.zeros((actor_steps, num_agents), dtype=np.float32)
-    dones     = np.zeros((actor_steps, num_agents), dtype=np.float32)
-    assert len(experience) == actor_steps + 1
-    for t in range(len(experience) - 1):
-        for agent_id, exp_agent in enumerate(experience[t]):
-            observations[t, agent_id, ...] = exp_agent.state
-            actions[t, agent_id] = exp_agent.action
-            rewards[t, agent_id] = exp_agent.reward
-            values[t, agent_id] = exp_agent.value
-            log_probs[t, agent_id] = exp_agent.log_prob
-            # Dones need to be 0 for terminal observations.
-            dones[t, agent_id] = float(not exp_agent.done)
+class PPOBuffer:
+    def __init__(self, size, num_agents, gamma, lmbda, obs_shape=(84, 84, 4)):
+        self.observations = np.zeros((size, num_agents, *obs_shape), dtype=np.float32)
+        self.actions   = np.zeros((size, num_agents), dtype=np.int32)
+        self.rewards   = np.zeros((size, num_agents), dtype=np.float32)
+        self.values    = np.zeros((size+1, num_agents), dtype=np.float32)
+        self.log_probs = np.zeros((size, num_agents), dtype=np.float32)
+        self.dones     = np.zeros((size, num_agents), dtype=np.float32)
 
-    # experience[-1] for next_values
-    for a in range(num_agents):
-        values[-1, a] = experience[-1][a].value
+        self.ptr = 0
+        self.size = size
+        self.gamma = gamma
+        self.lmbda = lmbda
+        self.num_agents = num_agents
+        self.trajectory_len = num_agents * size
 
-    # compute GAE advantage
-    advantages = gae_advantages(rewards, dones, values, gamma, lmbda)
-    returns = advantages + values[:-1, :]
+    def add(self, experience: List[ExpTuple]):
+        for actor_idx, actor_exp in enumerate(experience):
+            self.observations[self.ptr, actor_idx, ...] = actor_exp.observation
+            self.actions[self.ptr, actor_idx] = actor_exp.action
+            self.rewards[self.ptr, actor_idx] = actor_exp.reward
+            self.values[self.ptr, actor_idx] = actor_exp.value
+            self.log_probs[self.ptr, actor_idx] = actor_exp.log_prob
+            self.dones[self.ptr, actor_idx] = float(not actor_exp.done)
+        self.ptr += 1
 
-    # concatenate results
-    trajectories = (observations, actions, log_probs, returns, advantages)
-    trajectory_len = num_agents * actor_steps
-    trajectories = tuple(map(
-        lambda x: np.reshape(x, (trajectory_len,) +x.shape[2:]), trajectories))
-    return trajectories
+    def add_experiences(self, experiences: List[List[ExpTuple]]):
+        assert len(experiences) == self.size + 1
+        for experience in experiences[:-1]:
+            self.add(experience)
+        # experience[-1] for next_values
+        for a in range(self.num_agents):
+            self.values[-1, a] = experiences[-1][a].value
+        self.ptr = 0
+
+    def process_experience(self):
+        # compute GAE advantage
+        advantages = gae_advantages(self.rewards, self.dones, self.values,
+                                    self.gamma, self.lmbda)
+        returns = advantages + self.values[:-1, :]
+
+        # concatenate results
+        trajectories = (self.observations, self.actions, self.log_probs, returns, advantages)
+        trajectories = tuple(map(
+            lambda x: np.reshape(x, (self.trajectory_len,) +x.shape[2:]), trajectories))
+        return trajectories
