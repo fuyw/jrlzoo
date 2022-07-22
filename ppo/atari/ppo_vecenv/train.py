@@ -127,7 +127,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                                     values[i], log_probs[i][actions[i]], dones[i])
                            for i in range(config.num_agents)]
             all_experiences.append(experiences)
-        observations = next_observations
+            observations = next_observations
 
         # all_experiences = get_experience(agent, steps_per_actor=config.actor_steps)
         trajectories = process_experience(experience=all_experiences,
