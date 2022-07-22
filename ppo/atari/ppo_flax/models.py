@@ -63,7 +63,7 @@ class RemoteActor:
 
                 # (3) interact with the environment
                 next_obs, reward, done, _ = env.step(action)
-                experience = (obs, action, reward, done)
+                experience = (reward, done)
 
                 # (4) send next observation to the learner
                 conn.send(experience)

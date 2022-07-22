@@ -66,10 +66,13 @@ def get_experience(agent, steps_per_actor: int):
         # (3) receive next states, rewards from remote actors
         experiences = []
         for i, actor in enumerate(agent.actors):
-            observation, action, reward, done = actor.conn.recv()
-            value = values[i]
-            log_prob = log_probs[i][action]
-            sample = ExpTuple(observation, action, reward, value, log_prob, done)
+            reward, done = actor.conn.recv()
+            sample = ExpTuple(observation=observations[i],  
+                              action=actions[i],
+                              reward=reward,
+                              value=values[i],
+                              log_prob=log_probs[i][actions[i]],
+                              done=done)
             experiences.append(sample)      # List of ExpTuple
         all_experiences.append(experiences)  # List of List of ExpTuple
     return all_experiences

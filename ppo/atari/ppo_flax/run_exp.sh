@@ -1,5 +1,6 @@
 #!/bin/bash
 # Script to reproduce results
+sleep 1h
 envs=(
     "PongNoFrameskip-v4"
     "BreakoutNoFrameskip-v4"
