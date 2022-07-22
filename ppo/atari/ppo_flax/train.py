@@ -132,15 +132,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         if (step+1) % log_steps == 0:
             frame_num = (step+1) * config.num_agents * config.actor_steps // 1_000
             eval_reward, eval_time = eval_policy(agent, eval_env) 
-            log_info["frame"] = frame_num
-            log_info["reward"] = eval_reward
+            elapsed_time = (time.time()-start_time)/60
+            log_info.update({"frame": frame_num, "reward": eval_reward, "time": elapsed_time})
             logs.append(log_info)
             logger.info(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
-                        f"total_time={(time.time()-start_time)/60:.2f}min\n"
+                        f"total_time={elapsed_time:.2f}min\n"
                         f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                         f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
             print(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
-                  f"total_time={(time.time()-start_time)/60:.2f}min\n"
+                  f"total_time={elapsed_time:.2f}min\n"
                   f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                   f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
 

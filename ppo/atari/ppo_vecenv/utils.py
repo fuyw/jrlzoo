@@ -68,12 +68,12 @@ def process_experience(experience: List[List[ExpTuple]],
                        lmbda: float,
                        obs_shape: Tuple[int]=(84, 84, 4)):
     """Process experiences for Atari agents: continuous observations & discrete actions."""
-    observations    = np.zeros((actor_steps, num_agents, *obs_shape), dtype=np.float32)
-    actions   = np.zeros((actor_steps, num_agents), dtype=np.int32)
-    rewards   = np.zeros((actor_steps, num_agents), dtype=np.float32)
-    values    = np.zeros((actor_steps+1, num_agents), dtype=np.float32)
+    observations = np.zeros((actor_steps, num_agents, *obs_shape), dtype=np.float32)
+    actions = np.zeros((actor_steps, num_agents), dtype=np.int32)
+    rewards = np.zeros((actor_steps, num_agents), dtype=np.float32)
+    values = np.zeros((actor_steps+1, num_agents), dtype=np.float32)
     log_probs = np.zeros((actor_steps, num_agents), dtype=np.float32)
-    dones     = np.zeros((actor_steps, num_agents), dtype=np.float32)
+    dones = np.zeros((actor_steps, num_agents), dtype=np.float32)
     assert len(experience) == actor_steps + 1
     for t in range(len(experience) - 1):
         for agent_id, exp_agent in enumerate(experience[t]):

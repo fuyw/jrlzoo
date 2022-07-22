@@ -32,48 +32,8 @@ class ActorCritic(nn.Module):
 
         return policy_log_probabilities, value.squeeze(-1)
 
-
-class RemoteActor:
-    """Remote actor in a separate process."""
-
-    def __init__(self, env_name: str, rank: int):
-        """Start the remote process and create Pipe() to communicate with it."""
-        parent_conn, child_conn = mp.Pipe()
-        self.proc = mp.Process(target=self.rcv_action_send_exp,
-                               args=(child_conn, env_name, rank))
-        self.proc.daemon = True
-        self.conn = parent_conn
-        self.proc.start()
-
-    def rcv_action_send_exp(self, conn, env_name: str, rank: int = 0):
-        """Run remote actor.
-
-        Receive action from the main learner, perform one step of simulation and
-        send back collected experience.
-        """
-        env = env_utils.create_env(env_name, clip_rewards=True, seed=rank+100)
-        while True:
-            obs, done = env.reset(), False
-            while not done:
-                # (1) send observation to the learner
-                conn.send(obs[None, ...])
-
-                # (2) receive sampled action from the learner
-                action = conn.recv()
-
-                # (3) interact with the environment
-                next_obs, reward, done, _ = env.step(action)
-                experience = (obs, action, reward, done)
-
-                # (4) send next observation to the learner
-                conn.send(experience)
-                if done:
-                    break
-                obs = next_obs
-
-
 class PPOAgent:
-    """PPOAgent adapted from Flax PPO example."""
+    """PPOAgent using vectorized environment."""
     def __init__(self, config, act_dim: int, lr: float):
         self.vf_coeff = config.vf_coeff
         self.entropy_coeff = config.entropy_coeff
@@ -87,9 +47,6 @@ class PPOAgent:
             apply_fn=ActorCritic.apply,
             params=learner_params,
             tx=optax.adam(lr))
-        self.actors = [
-            RemoteActor(config.env_name, i) for i in range(config.num_agents)
-        ]
 
     @functools.partial(jax.jit, static_argnames=("self"))    
     def _sample_action(self, params, observations):

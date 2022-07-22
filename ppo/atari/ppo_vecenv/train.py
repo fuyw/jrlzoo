@@ -51,9 +51,9 @@ def get_experience(agent, steps_per_actor: int):
         # (1) receive remote actor states
         observations = []
         for actor in agent.actors:
-            observation = actor.conn.recv()
+            observation = actor.conn.recv()  # (1, 84, 84, 4)
             observations.append(observation)
-        observations = np.concatenate(observations, axis=0)
+        observations = np.concatenate(observations, axis=0)  # (5, 84, 84, 4)
 
         # (2) sample actions locally, and send sampled actions to remote actors
         log_probs, values = agent._sample_action(
@@ -88,6 +88,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     logger.info(f"Exp configurations:\n{config}")
 
     # initialize eval env
+    vec_env = env_utils.create_vec_env(config.env_name,
+                                       num_envs=config.num_agents,
+                                       clip_rewards=True,
+                                       seeds=range(config.num_agents))
     eval_env = env_utils.create_env(config.env_name, clip_rewards=False)
     act_dim = eval_env.preproc.action_space.n
 
@@ -103,12 +107,29 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     agent = PPOAgent(config, act_dim, lr)
     logs = [{"frame":0, "reward":eval_policy(agent, eval_env)[0]}]
 
+    # reset environments
+    observations = vec_env.reset()  # (agent_num, 84, 84, 4)
+
     # start training
     for step in trange(loop_steps, desc="[Loop steps]"):
         alpha = 1. - step / loop_steps if config.decaying_lr_and_clip_param else 1.
         clip_param = config.clip_param * alpha
 
-        all_experiences = get_experience(agent, steps_per_actor=config.actor_steps)
+        # rollout each actor `actor_steps` to collect trajectories
+        all_experiences = []
+        for _ in range(config.actor_steps+1):
+            log_probs, values = agent._sample_action(agent.learner_state.params, observations)
+            log_probs, values = jax.device_get((log_probs, values))
+            probs = np.exp(np.array(log_probs))  # (agent_num, action_dim)
+            actions = np.array([np.random.choice(probs.shape[1], p=prob) for prob in probs])
+            next_observations, rewards, dones, _ = vec_env.step(actions)
+            experiences = [ExpTuple(observations[i], actions[i], rewards[i],
+                                    values[i], log_probs[i][actions[i]], dones[i])
+                           for i in range(config.num_agents)]
+            all_experiences.append(experiences)
+        observations = next_observations
+
+        # all_experiences = get_experience(agent, steps_per_actor=config.actor_steps)
         trajectories = process_experience(experience=all_experiences,
                                           actor_steps=config.actor_steps,
                                           num_agents=config.num_agents,
@@ -132,15 +153,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         if (step+1) % log_steps == 0:
             frame_num = (step+1) * config.num_agents * config.actor_steps // 1_000
             eval_reward, eval_time = eval_policy(agent, eval_env) 
-            log_info["frame"] = frame_num
-            log_info["reward"] = eval_reward
+            elapsed_time = (time.time()-start_time)/60
+            log_info.update({"frame": frame_num, "reward": eval_reward, "time": elapsed_time})
             logs.append(log_info)
             logger.info(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
-                        f"total_time={(time.time()-start_time)/60:.2f}min\n"
+                        f"total_time={elapsed_time:.2f}min\n"
                         f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                         f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
             print(f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, "
-                  f"total_time={(time.time()-start_time)/60:.2f}min\n"
+                  f"total_time={elapsed_time:.2f}min\n"
                   f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                   f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n")
 
