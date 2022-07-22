@@ -4,30 +4,26 @@ import ml_collections
 def get_config():
     config = ml_collections.ConfigDict()
 
-    # Atari game name
+    # Basic settings
     config.env_name = "PongNoFrameskip-v4"
+    config.log_dir = "logs"
+    config.batch_size = 256
+    config.seed = 0
 
     # Total number of frames
     config.total_frames = int(1e7)
     config.log_num = 100
 
-    # Log dirs
-    config.log_dir = "logs"
+    # Parallel actor settings
+    config.actor_num = 10
+    config.rollout_len = 125
 
     # Training parameters
-    config.lr = 3e-4
-    config.seed = 0
-    config.batch_size = 200
+    config.lr = 2.5e-4
     config.gamma = 0.99
 
     # Number of training epochs per each unroll of the policy
     config.num_epochs = 3
-
-    # Number of agents playing in parallel
-    config.num_agents = 10
-
-    # Number of steps each agent performs in one policy rollout
-    config.actor_steps = 100
 
     # GAE lambda
     config.lmbda = 0.95

@@ -4,10 +4,13 @@ import jax
 import jax.numpy as jnp
 import optax
 from flax import linen as nn
+from flax.core import FrozenDict
 from flax.training import train_state
 import numpy as np
+import ml_collections
 
 import env_utils
+from utils import Batch
 
 class ActorCritic(nn.Module):
     act_dim: int
@@ -74,7 +77,7 @@ class RemoteActor:
 
 class PPOAgent:
     """PPOAgent adapted from Flax PPO example."""
-    def __init__(self, config, act_dim: int, lr: float):
+    def __init__(self, config: ml_collections.ConfigDict, act_dim: int, lr: float):
         self.vf_coeff = config.vf_coeff
         self.entropy_coeff = config.entropy_coeff
 
@@ -88,22 +91,22 @@ class PPOAgent:
             params=learner_params,
             tx=optax.adam(lr))
         self.actors = [
-            RemoteActor(config.env_name, i) for i in range(config.num_agents)
+            RemoteActor(config.env_name, i) for i in range(config.actor_num)
         ]
 
-    @functools.partial(jax.jit, static_argnames=("self"))    
-    def _sample_action(self, params, observations):
+    @functools.partial(jax.jit, static_argnames=("self"))
+    def _sample_action(self, params: FrozenDict, observations: jnp.ndarray):
         log_probs, values = self.learner.apply({"params": params}, observations)
         return log_probs, values
 
-    def sample_action(self, observation):
+    def sample_action(self, observation: jnp.ndarray):
         log_probs, _ = self._sample_action(self.learner_state.params, observation)
         probs = np.exp(np.asarray(log_probs))
         action = np.random.choice(probs.shape[1], p=probs)
         return action
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def train_step(self, learner_state, batch, clip_param: float):
+    def train_step(self, learner_state: train_state.TrainState, batch: Batch, clip_param: float):
         def loss_fn(params, observations, actions, old_log_probs, targets, advantages):
             log_probs, values = self.learner.apply({"params": params}, observations)
             probs = jnp.exp(log_probs)
@@ -124,18 +127,17 @@ class PPOAgent:
                         "total_loss": total_loss}
             return total_loss, log_info
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-        observations, actions, old_log_probs, targets, advantages = batch
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)        
+        normalized_advantages = (batch.advantages - batch.advantages.mean()) / (batch.advantages.std() + 1e-8)        
         (_, log_info), grads = grad_fn(
             learner_state.params,
-            observations,
-            actions,
-            old_log_probs,
-            targets,
-            advantages)
+            batch.observations,
+            batch.actions,
+            batch.log_probs,
+            batch.targets,
+            normalized_advantages)
         new_learner_state = learner_state.apply_gradients(grads=grads)
         return new_learner_state, log_info
 
-    def update(self, batch, clip_param):
+    def update(self, batch: Batch, clip_param: float):
         self.learner_state, log_info = self.train_step(self.learner_state, batch, clip_param)
         return log_info

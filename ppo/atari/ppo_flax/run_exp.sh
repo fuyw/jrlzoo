@@ -1,6 +1,5 @@
 #!/bin/bash
 # Script to reproduce results
-sleep 1h
 envs=(
     "PongNoFrameskip-v4"
     "BreakoutNoFrameskip-v4"
@@ -15,7 +14,7 @@ do
             --config=configs/atari.py \
             --config.env_name=$env \
             --config.seed=$seed \
-            --config.num_agents=$num
+            --config.actor_num=$num
         done
     done
 done

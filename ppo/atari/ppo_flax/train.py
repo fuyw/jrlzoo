@@ -8,7 +8,7 @@ import time
 import env_utils
 from tqdm import trange
 from models import PPOAgent
-from utils import ExpTuple, PPOBuffer, get_logger, get_lr_scheduler
+from utils import Batch, ExpTuple, PPOBuffer, get_logger, get_lr_scheduler
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
@@ -73,7 +73,7 @@ def get_experience(agent, steps_per_actor: int):
                               value=values[i],
                               log_prob=log_probs[i][actions[i]],
                               done=done)
-            experiences.append(sample)      # List of ExpTuple
+            experiences.append(sample)       # List of ExpTuple for each actor
         all_experiences.append(experiences)  # List of List of ExpTuple
     return all_experiences
 
@@ -84,7 +84,7 @@ def get_experience(agent, steps_per_actor: int):
 def train_and_evaluate(config: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-    exp_name = f"ppo_s{config.seed}_a{config.num_agents}_{timestamp}"
+    exp_name = f"ppo_s{config.seed}_a{config.actor_num}_{timestamp}"
     print(f"# Running experiment for: {exp_name}_{config.env_name} #")
     logger = get_logger(f"logs/{config.env_name}/{exp_name}.log")
     logger.info(f"Exp configurations:\n{config}")
@@ -98,8 +98,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     eval_env.seed(config.seed)
 
     # determine training steps
-    loop_steps = config.total_frames // (config.num_agents * config.actor_steps)
-    iterations_per_step = (config.num_agents * config.actor_steps // config.batch_size)
+    trajectory_len = config.actor_num * config.rollout_len
+    batch_size = config.batch_size
+    batch_num = trajectory_len // batch_size
+    iterations_per_step = trajectory_len // batch_size
+    loop_steps = config.total_frames // trajectory_len
+    assert config.total_frames % trajectory_len % config.log_num == 0
     log_steps = loop_steps // config.log_num
 
     # initialize lr scheduler
@@ -107,7 +111,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
     # initialize PPOAgent
     agent = PPOAgent(config, act_dim, lr)
-    buffer = PPOBuffer(config.actor_steps, config.num_agents, config.gamma, config.lmbda)
+    buffer = PPOBuffer(config.rollout_len, config.actor_num, config.gamma, config.lmbda)
     logs = [{"frame":0, "reward":eval_policy(agent, eval_env)[0]}]
 
     # start training
@@ -115,26 +119,25 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         alpha = 1. - step / loop_steps if config.decaying_lr_and_clip_param else 1.
         clip_param = config.clip_param * alpha
 
-        all_experiences = get_experience(agent, steps_per_actor=config.actor_steps)
+        all_experiences = get_experience(agent, steps_per_actor=config.rollout_len)
         buffer.add_experiences(all_experiences)
+        # trajectories = (observations, actions, log_probs, targets, advantages)
         trajectories = buffer.process_experience()
-        iterations = trajectories[0].shape[0] // config.batch_size
 
         for _ in range(config.num_epochs):
-            permutation = np.random.permutation(config.num_agents *
-                                                config.actor_steps)
-            trajectories = tuple(x[permutation] for x in trajectories)
-
-            batch_trajectories = jax.tree_map(
-                lambda x: x.reshape(
-                    (iterations, config.batch_size, *x.shape[1:])),
-                trajectories)
-            for batch in zip(*batch_trajectories):
+            permutation = np.random.permutation(trajectory_len)
+            for i in range(batch_num):
+                batch_idx = permutation[i*batch_size:(i+1)*batch_size]
+                batch = Batch(observations=trajectories[0][batch_idx],
+                              actions=trajectories[1][batch_idx],
+                              log_probs=trajectories[2][batch_idx],
+                              targets=trajectories[3][batch_idx],
+                              advantages=trajectories[4][batch_idx])
                 log_info = agent.update(batch, clip_param)
 
         # evaluate
         if (step+1) % log_steps == 0:
-            frame_num = (step+1) * config.num_agents * config.actor_steps // 1_000
+            frame_num = (step+1) * trajectory_len // 1_000
             eval_reward, eval_step, eval_time = eval_policy(agent, eval_env) 
             eval_fps = eval_step / eval_time
             elapsed_time = (time.time()-start_time)/60
