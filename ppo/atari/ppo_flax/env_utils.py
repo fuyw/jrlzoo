@@ -10,6 +10,7 @@ class ClipRewardEnv(gym.RewardWrapper):
 
     github.com/openai/baselines/blob/master/baselines/common/atari_wrappers.py
     """
+
     def __init__(self, env):
         gym.RewardWrapper.__init__(self, env)
 
@@ -23,8 +24,8 @@ class FrameStack:
 
     Wraps an AtariPreprocessing object.
     """
-    def __init__(self,
-                 preproc: atari_utils.AtariPreprocessing,
+
+    def __init__(self, preproc: atari_utils.AtariPreprocessing,
                  num_frames: int):
         self.preproc = preproc
         self.num_frames = num_frames

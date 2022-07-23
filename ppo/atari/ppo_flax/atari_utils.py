@@ -19,6 +19,7 @@ class AtariPreprocessing:
     It also provides random starting no-ops, which are used in the Rainbow, Apex
     and R2D2 papers.
     """
+
     def __init__(self,
                  environment,
                  frame_skip=4,
@@ -207,4 +208,3 @@ class AtariPreprocessing:
                                        interpolation=cv2.INTER_LINEAR)
         int_image = np.asarray(transformed_image, dtype=np.uint8)
         return np.expand_dims(int_image, axis=2)
-

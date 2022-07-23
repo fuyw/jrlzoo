@@ -12,24 +12,39 @@ import ml_collections
 import env_utils
 from utils import Batch
 
+
 class ActorCritic(nn.Module):
     act_dim: int
 
     @nn.compact
     def __call__(self, x):
         x = x.astype(jnp.float32) / 255.
-        x = nn.Conv(features=32, kernel_size=(8, 8), strides=(4, 4), name="conv1", dtype=jnp.float32)(x)
+        x = nn.Conv(features=32,
+                    kernel_size=(8, 8),
+                    strides=(4, 4),
+                    name="conv1",
+                    dtype=jnp.float32)(x)
         x = nn.relu(x)
-        x = nn.Conv(features=64, kernel_size=(4, 4), strides=(2, 2), name="conv2", dtype=jnp.float32)(x)
+        x = nn.Conv(features=64,
+                    kernel_size=(4, 4),
+                    strides=(2, 2),
+                    name="conv2",
+                    dtype=jnp.float32)(x)
         x = nn.relu(x)
-        x = nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1), name="conv3", dtype=jnp.float32)(x)
+        x = nn.Conv(features=64,
+                    kernel_size=(3, 3),
+                    strides=(1, 1),
+                    name="conv3",
+                    dtype=jnp.float32)(x)
         x = nn.relu(x)
         x = x.reshape((x.shape[0], -1))  # flatten
 
         x = nn.Dense(features=512, name="hidden", dtype=jnp.float32)(x)
         x = nn.relu(x)
 
-        logits = nn.Dense(features=self.act_dim, name="logits", dtype=jnp.float32)(x)
+        logits = nn.Dense(features=self.act_dim,
+                          name="logits",
+                          dtype=jnp.float32)(x)
         policy_log_probabilities = nn.log_softmax(logits)
         value = nn.Dense(features=1, name="value", dtype=jnp.float32)(x)
 
@@ -54,7 +69,9 @@ class RemoteActor:
         Receive action from the main learner, perform one step of simulation and
         send back collected experience.
         """
-        env = env_utils.create_env(env_name, clip_rewards=True, seed=rank+100)
+        env = env_utils.create_env(env_name,
+                                   clip_rewards=True,
+                                   seed=rank + 100)
         while True:
             obs, done = env.reset(), False
             while not done:
@@ -77,7 +94,9 @@ class RemoteActor:
 
 class PPOAgent:
     """PPOAgent adapted from Flax PPO example."""
-    def __init__(self, config: ml_collections.ConfigDict, act_dim: int, lr: float):
+
+    def __init__(self, config: ml_collections.ConfigDict, act_dim: int,
+                 lr: float):
         self.vf_coeff = config.vf_coeff
         self.entropy_coeff = config.entropy_coeff
 
@@ -96,48 +115,71 @@ class PPOAgent:
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def _sample_action(self, params: FrozenDict, observations: jnp.ndarray):
-        log_probs, values = self.learner.apply({"params": params}, observations)
+        log_probs, values = self.learner.apply({"params": params},
+                                               observations)
         return log_probs, values
 
     def sample_action(self, observation: jnp.ndarray):
-        log_probs, _ = self._sample_action(self.learner_state.params, observation)
+        log_probs, _ = self._sample_action(self.learner_state.params,
+                                           observation)
         probs = np.exp(np.asarray(log_probs))
         action = np.random.choice(probs.shape[1], p=probs)
         return action
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def train_step(self, learner_state: train_state.TrainState, batch: Batch, clip_param: float):
-        def loss_fn(params, observations, actions, old_log_probs, targets, advantages):
-            log_probs, values = self.learner.apply({"params": params}, observations)
+    def train_step(self, learner_state: train_state.TrainState, batch: Batch,
+                   clip_param: float):
+
+        def loss_fn(params, observations, actions, old_log_probs, targets,
+                    advantages):
+            log_probs, values = self.learner.apply({"params": params},
+                                                   observations)
             probs = jnp.exp(log_probs)
-            entropy = jnp.sum(-probs*log_probs, axis=1).mean()
-            log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
+            entropy = jnp.sum(-probs * log_probs, axis=1).mean()
+            log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs,
+                                                                actions)
             ratios = jnp.exp(log_probs_act_taken - old_log_probs)
             pg_loss = ratios * advantages
-            clipped_loss = advantages * jax.lax.clamp(1.-clip_param, ratios, 1.+clip_param)
+            clipped_loss = advantages * jax.lax.clamp(1. - clip_param, ratios,
+                                                      1. + clip_param)
 
             ppo_loss = -jnp.mean(jnp.minimum(pg_loss, clipped_loss), axis=0)
-            value_loss = jnp.mean(jnp.square(targets - values), axis=0) * self.vf_coeff
-            entropy_loss = - entropy * self.entropy_coeff
+            value_loss = jnp.mean(jnp.square(targets - values),
+                                  axis=0) * self.vf_coeff
+            entropy_loss = -entropy * self.entropy_coeff
             total_loss = ppo_loss + value_loss + entropy_loss
 
-            log_info = {"ppo_loss": ppo_loss,
-                        "value_loss": value_loss,
-                        "entropy_loss": entropy_loss,
-                        "total_loss": total_loss}
+            log_info = {
+                "ppo_loss": ppo_loss,
+                "value_loss": value_loss,
+                "entropy_loss": entropy_loss,
+                "total_loss": total_loss,
+                "avg_target": targets.mean(),
+                "max_target": targets.max(),
+                "min_target": targets.min(),
+                "avg_value": values.mean(),
+                "max_value": values.max(),
+                "min_value": values.min(),
+                "avg_ratio": ratios.mean(),
+                "max_ratio": ratios.max(),
+                "min_ratio": ratios.min(),
+                "avg_logp": log_probs.mean(),
+                "max_logp": log_probs.max(),
+                "min_logp": log_probs.min(),
+            }
             return total_loss, log_info
+
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-        normalized_advantages = (batch.advantages - batch.advantages.mean()) / (batch.advantages.std() + 1e-8)        
-        (_, log_info), grads = grad_fn(
-            learner_state.params,
-            batch.observations,
-            batch.actions,
-            batch.log_probs,
-            batch.targets,
-            normalized_advantages)
+        normalized_advantages = (batch.advantages - batch.advantages.mean()
+                                 ) / (batch.advantages.std() + 1e-8)
+        (_, log_info), grads = grad_fn(learner_state.params,
+                                       batch.observations, batch.actions,
+                                       batch.log_probs, batch.targets,
+                                       normalized_advantages)
         new_learner_state = learner_state.apply_gradients(grads=grads)
         return new_learner_state, log_info
 
     def update(self, batch: Batch, clip_param: float):
-        self.learner_state, log_info = self.train_step(self.learner_state, batch, clip_param)
+        self.learner_state, log_info = self.train_step(self.learner_state,
+                                                       batch, clip_param)
         return log_info

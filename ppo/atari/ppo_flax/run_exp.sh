@@ -1,7 +1,7 @@
 #!/bin/bash
 # Script to reproduce results
 envs=(
-    "PongNoFrameskip-v4"
+    # "PongNoFrameskip-v4"
     "BreakoutNoFrameskip-v4"
 )
 for seed in 0

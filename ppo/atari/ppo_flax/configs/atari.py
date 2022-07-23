@@ -38,5 +38,5 @@ def get_config():
     config.entropy_coeff = 0.01
 
     # Linearly decay lr and clip parameter to zero
-    config.decaying_lr_and_clip_param = True
+    config.decaying_lr_and_clip_param = False
     return config

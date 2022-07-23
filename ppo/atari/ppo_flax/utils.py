@@ -7,16 +7,20 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+ExpTuple = collections.namedtuple(
+    "ExpTuple",
+    ["observation", "action", "reward", "value", "log_prob", "done"])
+Batch = collections.namedtuple(
+    "Batch", ["observations", "actions", "log_probs", "targets", "advantages"])
 
-ExpTuple = collections.namedtuple("ExpTuple", ["observation", "action", "reward", "value", "log_prob", "done"])
-Batch = collections.namedtuple("Batch", ["observations", "actions", "log_probs", "targets", "advantages"])
 
 def get_lr_scheduler(config, loop_steps, iterations_per_step):
     # set lr scheduler
     if config.decaying_lr_and_clip_param:
         lr = optax.linear_schedule(init_value=config.lr,
                                    end_value=0.,
-                                   transition_steps=loop_steps*config.num_epochs*iterations_per_step)
+                                   transition_steps=loop_steps *
+                                   config.num_epochs * iterations_per_step)
     else:
         lr = config.lr
     return lr
@@ -35,11 +39,8 @@ def get_logger(fname):
 
 @jax.jit
 @functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
-def gae_advantages(rewards: np.ndarray,
-                   terminal_masks: np.ndarray,
-                   values: np.ndarray,
-                   gamma: float,
-                   lmbda: float):
+def gae_advantages(rewards: np.ndarray, terminal_masks: np.ndarray,
+                   values: np.ndarray, gamma: float, lmbda: float):
     """Use GAE to compute advantages.
 
     As defined by Eq. (11-12) in PPO paper. Implementation uses key observations:
@@ -52,7 +53,7 @@ def gae_advantages(rewards: np.ndarray,
     gae = 0.
     for t in reversed(range(len(rewards))):
         # Masks used to set next state value to 0 for terminal observations.
-        value_diff = gamma * values[t+1] * terminal_masks[t] - values[t]
+        value_diff = gamma * values[t + 1] * terminal_masks[t] - values[t]
         delta = rewards[t] + value_diff
 
         # Masks[t] used to ensure that values before and after a terminal state
@@ -64,13 +65,20 @@ def gae_advantages(rewards: np.ndarray,
 
 
 class PPOBuffer:
-    def __init__(self, rollout_len, actor_num, gamma, lmbda, obs_shape=(84, 84, 4)):
-        self.observations = np.zeros((rollout_len, actor_num, *obs_shape), dtype=np.float32)
-        self.actions   = np.zeros((rollout_len, actor_num), dtype=np.int32)
-        self.rewards   = np.zeros((rollout_len, actor_num), dtype=np.float32)
-        self.values    = np.zeros((rollout_len+1, actor_num), dtype=np.float32)
+
+    def __init__(self,
+                 rollout_len,
+                 actor_num,
+                 gamma,
+                 lmbda,
+                 obs_shape=(84, 84, 4)):
+        self.observations = np.zeros((rollout_len, actor_num, *obs_shape),
+                                     dtype=np.float32)
+        self.actions = np.zeros((rollout_len, actor_num), dtype=np.int32)
+        self.rewards = np.zeros((rollout_len, actor_num), dtype=np.float32)
+        self.values = np.zeros((rollout_len + 1, actor_num), dtype=np.float32)
         self.log_probs = np.zeros((rollout_len, actor_num), dtype=np.float32)
-        self.dones     = np.zeros((rollout_len, actor_num), dtype=np.float32)
+        self.dones = np.zeros((rollout_len, actor_num), dtype=np.float32)
 
         self.ptr = 0
         self.rollout_len = rollout_len
@@ -100,15 +108,14 @@ class PPOBuffer:
 
     def process_experience(self):
         # compute GAE advantage
-        advantages = gae_advantages(self.rewards,
-                                    self.dones,
-                                    self.values,
-                                    self.gamma,
-                                    self.lmbda)
+        advantages = gae_advantages(self.rewards, self.dones, self.values,
+                                    self.gamma, self.lmbda)
         targets = advantages + self.values[:-1, :]
 
         # concatenate results
-        trajectories = (self.observations, self.actions, self.log_probs, targets, advantages)
-        trajectories = tuple(map(
-            lambda x: np.reshape(x, (self.trajectory_len,) +x.shape[2:]), trajectories))
+        trajectories = (self.observations, self.actions, self.log_probs,
+                        targets, advantages)
+        trajectories = tuple(
+            map(lambda x: np.reshape(x, (self.trajectory_len, ) + x.shape[2:]),
+                trajectories))
         return trajectories
