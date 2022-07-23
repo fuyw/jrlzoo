@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import jax
 import time
-import envpool
 import env_utils
 from tqdm import trange
 from models import PPOAgent
@@ -17,51 +16,11 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 #####################
 # Utility Functions #
 #####################
-def eval_policy(agent: PPOAgent,
-                eval_envs: envpool.atari.AtariGymEnvPool,
-                eval_episodes: int = 10) -> Tuple[float]:
-    """Evaluate with envpool vectorized environments."""
-    t1 = time.time()
-    n_envs = len(eval_envs.all_env_ids)
-
-    # record episode reward and length
-    current_rewards = np.zeros(n_envs)
-    current_lengths = np.zeros(n_envs, dtype="int")
-    episode_rewards = []
-    episode_lengths = []
-    episode_counts = np.zeros(n_envs, dtype="int")
-
-    # evaluate `target` episodes for each environment
-    episode_count_targets = np.array([(eval_episodes + i) // n_envs
-                                      for i in range(n_envs)],
-                                     dtype="int")
-
-    # start evaluation
-    observations = eval_envs.reset()
-    while (episode_counts < episode_count_targets).any():
-        # (10, 4, 84, 84) ==> (10, 84, 84, 4)
-        actions = agent.sample_actions(np.moveaxis(observations, 1, -1))
-        observations, rewards, dones, _ = eval_envs.step(actions)
-        current_rewards += rewards
-        current_lengths += 1
-        for i in range(n_envs):
-            if episode_counts[i] < episode_count_targets[i]:
-                if dones[i]:
-                    episode_rewards.append(current_rewards[i])
-                    episode_lengths.append(current_lengths[i])
-                    episode_counts[i] += 1
-                    current_rewards[i] = 0
-                    current_lengths[i] = 0
-    avg_reward = np.mean(episode_rewards)
-    avg_step = np.mean(episode_lengths)
-    return avg_reward, avg_step, time.time() - t1
-
-
-def eval_policy2(agent, env, eval_episodes: int = 10) -> Tuple[float]:
+def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
     """For-loop sequential evaluation."""
     t1 = time.time()
     avg_reward = 0.
-    avg_step = 0
+    eval_step = 0
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
@@ -72,11 +31,10 @@ def eval_policy2(agent, env, eval_episodes: int = 10) -> Tuple[float]:
             action = np.random.choice(probs.shape[1], p=probs[0])
             next_obs, reward, done, _ = env.step(action)
             avg_reward += reward
-            avg_step += 1
+            eval_step += 1
             obs = next_obs
     avg_reward /= eval_episodes
-    avg_step /= eval_episodes
-    return avg_reward, avg_step, time.time() - t1
+    return avg_reward, eval_step, time.time() - t1
 
 
 def get_experience(agent, steps_per_actor: int) -> List[List[ExpTuple]]:
@@ -138,17 +96,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     np.random.seed(config.seed)
 
     # initialize eval environment
-    eval_env2 = env_utils.create_env(config.env_name,
-                                     clip_rewards=False,
-                                     seed=config.seed)
-    eval_env = envpool.make(
-        task_id=f"{config.env_name.split('NoFrameskip')[0]}-v5",
-        env_type="gym",
-        num_envs=10,
-        episodic_life=False,
-        reward_clip=False,
-    )
-    act_dim = eval_env.action_space.n
+    eval_env = env_utils.create_env(config.env_name,
+                                    clip_rewards=False,
+                                    seed=config.seed)
+    act_dim = eval_env.preproc.action_space.n
 
     # determine training steps
     trajectory_len = config.actor_num * config.rollout_len
@@ -171,6 +122,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
     # start training
     for step in trange(loop_steps, desc="[Loop steps]"):
+        step_time = time.time()
         all_experiences = get_experience(agent,
                                          steps_per_actor=config.rollout_len)
         buffer.add_experiences(all_experiences)
@@ -192,22 +144,21 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         # evaluate
         if (step + 1) % log_steps == 0:
             frame_num = (step + 1) * trajectory_len // 1_000
+            step_fps = trajectory_len / (time.time() - step_time)
             eval_reward, eval_step, eval_time = eval_policy(agent, eval_env)
-            eval_reward2, eval_step2, eval_time2 = eval_policy2(
-                agent, eval_env2)
             eval_fps = eval_step / eval_time
-            eval_fps2 = eval_step2 / eval_time2
             elapsed_time = (time.time() - start_time) / 60
             log_info.update({
                 "frame": frame_num,
                 "reward": eval_reward,
                 "time": elapsed_time,
+                "step_fps": step_fps,
                 "eval_fps": eval_fps,
             })
             logs.append(log_info)
             logger.info(
-                f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_step={eval_step:.2f}, eval_fps={eval_fps:.2f}, "
-                f"eval_time={eval_time:.2f}s, total_time={elapsed_time:.2f}min\n"
+                f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, eval_fps={eval_fps:.2f}\n" 
+                f"\ttotal_time={elapsed_time:.2f}min, step_fps={step_fps:.2f}\n"
                 f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                 f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n"
                 f"\tavg_target={log_info['avg_target']:.3f}, max_target={log_info['max_target']:.3f}, min_target={log_info['min_target']:.3f}\n"
@@ -216,9 +167,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
             )
             print(
-                f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_step={eval_step:.2f}, eval_fps={eval_fps:.2f}, "
-                f"eval_time={eval_time:.2f}s, total_time={elapsed_time:.2f}min\n"
-                f"\teval_reward2={eval_reward2:.2f}, eval_step2={eval_step2:.2f}, eval_fps2={eval_fps2:.2f}, eval_time2={eval_time2:.2f}\n"
+                f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, eval_fps={eval_fps:.2f}\n" 
+                f"\ttotal_time={elapsed_time:.2f}min, step_fps={step_fps:.2f}\n"
                 f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                 f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n"
                 f"\tavg_target={log_info['avg_target']:.3f}, max_target={log_info['max_target']:.3f}, min_target={log_info['min_target']:.3f}\n"

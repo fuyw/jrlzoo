@@ -199,3 +199,10 @@ class PPOAgent:
                                     prefix="ppo_",
                                     keep=20,
                                     overwrite=True)
+
+    def load(self, fname, step):
+        self.learner_state = checkpoints.restore_checkpoint(
+            ckpt_dir=fname,
+            target=self.learner_state,
+            step=step,
+            prefix="ppo_")
