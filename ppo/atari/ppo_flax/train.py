@@ -120,25 +120,23 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
     # start training
     for step in trange(loop_steps, desc="[Loop steps]"):
-        alpha = 1. - step / loop_steps if config.decaying_lr_and_clip_param else 1.
-        clip_param = config.clip_param * alpha
-
         all_experiences = get_experience(agent,
                                          steps_per_actor=config.rollout_len)
         buffer.add_experiences(all_experiences)
-        # trajectories = (observations, actions, log_probs, targets, advantages)
-        trajectories = buffer.process_experience()
+        trajectory_batch = buffer.process_experience()
 
+        # train sampled trajectories for K epochs
         for _ in range(config.num_epochs):
             permutation = np.random.permutation(trajectory_len)
             for i in range(batch_num):
                 batch_idx = permutation[i * batch_size:(i + 1) * batch_size]
-                batch = Batch(observations=trajectories[0][batch_idx],
-                              actions=trajectories[1][batch_idx],
-                              log_probs=trajectories[2][batch_idx],
-                              targets=trajectories[3][batch_idx],
-                              advantages=trajectories[4][batch_idx])
-                log_info = agent.update(batch, clip_param)
+                batch = Batch(observations=trajectory_batch.observations[batch_idx],
+                              actions=trajectory_batch.actions[batch_idx],
+                              log_probs=trajectory_batch.log_probs[batch_idx],
+                              values=trajectory_batch.values[batch_idx],
+                              targets=trajectory_batch.targets[batch_idx],
+                              advantages=trajectory_batch.advantages[batch_idx])
+                log_info = agent.update(batch)
 
         # evaluate
         if (step + 1) % log_steps == 0:

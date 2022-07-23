@@ -11,7 +11,7 @@ ExpTuple = collections.namedtuple(
     "ExpTuple",
     ["observation", "action", "reward", "value", "log_prob", "done"])
 Batch = collections.namedtuple(
-    "Batch", ["observations", "actions", "log_probs", "targets", "advantages"])
+    "Batch", ["observations", "actions", "log_probs", "values", "targets", "advantages"])
 
 
 def get_lr_scheduler(config, loop_steps, iterations_per_step):
@@ -86,6 +86,7 @@ class PPOBuffer:
         self.lmbda = lmbda
         self.actor_num = actor_num
         self.trajectory_len = actor_num * rollout_len
+        self.obs_shape = obs_shape
 
     def add(self, experience: List[ExpTuple]):
         for actor_idx, actor_exp in enumerate(experience):
@@ -113,9 +114,12 @@ class PPOBuffer:
         targets = advantages + self.values[:-1, :]
 
         # concatenate results
-        trajectories = (self.observations, self.actions, self.log_probs,
-                        targets, advantages)
-        trajectories = tuple(
-            map(lambda x: np.reshape(x, (self.trajectory_len, ) + x.shape[2:]),
-                trajectories))
-        return trajectories
+        trajectory_batch = Batch(
+            observations=self.observations.reshape((self.trajectory_len, *self.obs_shape)),
+            actions=self.actions.reshape(-1),
+            log_probs=self.log_probs.reshape(-1),
+            values=self.values[:-1, :].reshape(-1),
+            targets=targets.reshape(-1),
+            advantages=advantages.reshape(-1)
+        )
+        return trajectory_batch

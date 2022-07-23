@@ -99,6 +99,7 @@ class PPOAgent:
                  lr: float):
         self.vf_coeff = config.vf_coeff
         self.entropy_coeff = config.entropy_coeff
+        self.clip_param = config.clip_param
 
         # initialize learner
         self.rng = jax.random.PRNGKey(config.seed)
@@ -127,26 +128,33 @@ class PPOAgent:
         return action
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def train_step(self, learner_state: train_state.TrainState, batch: Batch,
-                   clip_param: float):
+    def train_step(self, learner_state: train_state.TrainState, batch: Batch):
 
-        def loss_fn(params, observations, actions, old_log_probs, targets,
-                    advantages):
-            log_probs, values = self.learner.apply({"params": params},
-                                                   observations)
+        def loss_fn(params, observations, actions, old_log_probs, old_values,
+                    targets, advantages):
+            log_probs, values = self.learner.apply({"params": params}, observations)
+
+            # clipped PPO loss
+            log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
+            ratios = jnp.exp(log_probs_act_taken - old_log_probs)
+            clipped_ratios = jnp.clip(ratios, 1.-self.clip_param, 1.+self.clip_param)
+            actor_loss1 = ratios * advantages
+            actor_loss2 = clipped_ratios * advantages
+            ppo_loss = -jnp.minimum(actor_loss1, actor_loss2).mean()
+
+            # clipped value loss
+            clipped_values = jnp.clip(values-old_values, -self.clip_param,
+                                      self.clip_param) + old_values
+            value_loss1 = jnp.square(targets - values)
+            value_loss2 = jnp.square(targets - clipped_values)
+            value_loss = 0.5 * jnp.maximum(value_loss1, value_loss2).mean() * self.vf_coeff
+
+            # entropy loss
             probs = jnp.exp(log_probs)
             entropy = jnp.sum(-probs * log_probs, axis=1).mean()
-            log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs,
-                                                                actions)
-            ratios = jnp.exp(log_probs_act_taken - old_log_probs)
-            pg_loss = ratios * advantages
-            clipped_loss = advantages * jax.lax.clamp(1. - clip_param, ratios,
-                                                      1. + clip_param)
-
-            ppo_loss = -jnp.mean(jnp.minimum(pg_loss, clipped_loss), axis=0)
-            value_loss = jnp.mean(jnp.square(targets - values),
-                                  axis=0) * self.vf_coeff
             entropy_loss = -entropy * self.entropy_coeff
+
+            # total loss
             total_loss = ppo_loss + value_loss + entropy_loss
 
             log_info = {
@@ -173,13 +181,15 @@ class PPOAgent:
         normalized_advantages = (batch.advantages - batch.advantages.mean()
                                  ) / (batch.advantages.std() + 1e-8)
         (_, log_info), grads = grad_fn(learner_state.params,
-                                       batch.observations, batch.actions,
-                                       batch.log_probs, batch.targets,
+                                       batch.observations,
+                                       batch.actions,
+                                       batch.log_probs,
+                                       batch.values,
+                                       batch.targets,
                                        normalized_advantages)
         new_learner_state = learner_state.apply_gradients(grads=grads)
         return new_learner_state, log_info
 
-    def update(self, batch: Batch, clip_param: float):
-        self.learner_state, log_info = self.train_step(self.learner_state,
-                                                       batch, clip_param)
+    def update(self, batch: Batch):
+        self.learner_state, log_info = self.train_step(self.learner_state, batch)
         return log_info
