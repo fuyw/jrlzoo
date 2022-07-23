@@ -6,7 +6,7 @@ envs=(
 )
 for seed in 0
 do
-    for num in 10
+    for num in 8
     do
         for env in ${envs[*]}
         do

@@ -11,7 +11,7 @@ ExpTuple = collections.namedtuple(
     "ExpTuple",
     ["observation", "action", "reward", "value", "log_prob", "done"])
 Batch = collections.namedtuple(
-    "Batch", ["observations", "actions", "log_probs", "values", "targets", "advantages"])
+    "Batch", ["observations", "actions", "log_probs", "targets", "advantages"])
 
 
 def get_lr_scheduler(config, loop_steps, iterations_per_step):
@@ -118,7 +118,6 @@ class PPOBuffer:
             observations=self.observations.reshape((self.trajectory_len, *self.obs_shape)),
             actions=self.actions.reshape(-1),
             log_probs=self.log_probs.reshape(-1),
-            values=self.values[:-1, :].reshape(-1),
             targets=targets.reshape(-1),
             advantages=advantages.reshape(-1)
         )

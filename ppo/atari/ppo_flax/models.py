@@ -115,23 +115,22 @@ class PPOAgent:
         ]
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def _sample_action(self, params: FrozenDict, observations: jnp.ndarray):
+    def _sample_actions(self, params: FrozenDict, observations: jnp.ndarray):
         log_probs, values = self.learner.apply({"params": params},
                                                observations)
         return log_probs, values
 
-    def sample_action(self, observation: jnp.ndarray):
-        log_probs, _ = self._sample_action(self.learner_state.params,
-                                           observation)
+    def sample_actions(self, observations: jnp.ndarray):
+        log_probs, _ = self._sample_actions(self.learner_state.params,
+                                            observations)
         probs = np.exp(np.asarray(log_probs))
-        action = np.random.choice(probs.shape[1], p=probs)
-        return action
+        actions = np.array([np.random.choice(len(prob), p=prob) for prob in probs])
+        return actions
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self, learner_state: train_state.TrainState, batch: Batch):
 
-        def loss_fn(params, observations, actions, old_log_probs, old_values,
-                    targets, advantages):
+        def loss_fn(params, observations, actions, old_log_probs, targets, advantages):
             log_probs, values = self.learner.apply({"params": params}, observations)
 
             # clipped PPO loss
@@ -142,12 +141,8 @@ class PPOAgent:
             actor_loss2 = clipped_ratios * advantages
             ppo_loss = -jnp.minimum(actor_loss1, actor_loss2).mean()
 
-            # clipped value loss
-            clipped_values = jnp.clip(values-old_values, -self.clip_param,
-                                      self.clip_param) + old_values
-            value_loss1 = jnp.square(targets - values)
-            value_loss2 = jnp.square(targets - clipped_values)
-            value_loss = 0.5 * jnp.maximum(value_loss1, value_loss2).mean() * self.vf_coeff
+            # value loss
+            value_loss = jnp.square(targets - values).mean() * self.vf_coeff
 
             # entropy loss
             probs = jnp.exp(log_probs)
@@ -184,7 +179,6 @@ class PPOAgent:
                                        batch.observations,
                                        batch.actions,
                                        batch.log_probs,
-                                       batch.values,
                                        batch.targets,
                                        normalized_advantages)
         new_learner_state = learner_state.apply_gradients(grads=grads)
