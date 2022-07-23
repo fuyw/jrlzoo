@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import optax
 from flax import linen as nn
 from flax.core import FrozenDict
-from flax.training import train_state
+from flax.training import train_state, checkpoints
 import numpy as np
 import ml_collections
 
@@ -124,19 +124,24 @@ class PPOAgent:
         log_probs, _ = self._sample_actions(self.learner_state.params,
                                             observations)
         probs = np.exp(np.asarray(log_probs))
-        actions = np.array([np.random.choice(len(prob), p=prob) for prob in probs])
+        actions = np.array(
+            [np.random.choice(len(prob), p=prob) for prob in probs])
         return actions
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self, learner_state: train_state.TrainState, batch: Batch):
 
-        def loss_fn(params, observations, actions, old_log_probs, targets, advantages):
-            log_probs, values = self.learner.apply({"params": params}, observations)
+        def loss_fn(params, observations, actions, old_log_probs, targets,
+                    advantages):
+            log_probs, values = self.learner.apply({"params": params},
+                                                   observations)
 
             # clipped PPO loss
-            log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
+            log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs,
+                                                                actions)
             ratios = jnp.exp(log_probs_act_taken - old_log_probs)
-            clipped_ratios = jnp.clip(ratios, 1.-self.clip_param, 1.+self.clip_param)
+            clipped_ratios = jnp.clip(ratios, 1. - self.clip_param,
+                                      1. + self.clip_param)
             actor_loss1 = ratios * advantages
             actor_loss2 = clipped_ratios * advantages
             ppo_loss = -jnp.minimum(actor_loss1, actor_loss2).mean()
@@ -176,14 +181,21 @@ class PPOAgent:
         normalized_advantages = (batch.advantages - batch.advantages.mean()
                                  ) / (batch.advantages.std() + 1e-8)
         (_, log_info), grads = grad_fn(learner_state.params,
-                                       batch.observations,
-                                       batch.actions,
-                                       batch.log_probs,
-                                       batch.targets,
+                                       batch.observations, batch.actions,
+                                       batch.log_probs, batch.targets,
                                        normalized_advantages)
         new_learner_state = learner_state.apply_gradients(grads=grads)
         return new_learner_state, log_info
 
     def update(self, batch: Batch):
-        self.learner_state, log_info = self.train_step(self.learner_state, batch)
+        self.learner_state, log_info = self.train_step(self.learner_state,
+                                                       batch)
         return log_info
+
+    def save(self, fname: str, cnt: int):
+        checkpoints.save_checkpoint(fname,
+                                    self.learner_state,
+                                    cnt,
+                                    prefix="ppo_",
+                                    keep=20,
+                                    overwrite=True)

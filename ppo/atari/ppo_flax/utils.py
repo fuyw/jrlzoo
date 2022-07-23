@@ -114,11 +114,10 @@ class PPOBuffer:
         targets = advantages + self.values[:-1, :]
 
         # concatenate results
-        trajectory_batch = Batch(
-            observations=self.observations.reshape((self.trajectory_len, *self.obs_shape)),
-            actions=self.actions.reshape(-1),
-            log_probs=self.log_probs.reshape(-1),
-            targets=targets.reshape(-1),
-            advantages=advantages.reshape(-1)
-        )
+        trajectory_batch = Batch(observations=self.observations.reshape(
+            (self.trajectory_len, *self.obs_shape)),
+                                 actions=self.actions.reshape(-1),
+                                 log_probs=self.log_probs.reshape(-1),
+                                 targets=targets.reshape(-1),
+                                 advantages=advantages.reshape(-1))
         return trajectory_batch

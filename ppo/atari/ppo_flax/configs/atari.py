@@ -6,6 +6,7 @@ def get_config():
 
     # Basic settings
     config.env_name = "PongNoFrameskip-v4"
+    config.model_dir = "saved_models"
     config.log_dir = "logs"
     config.batch_size = 256
     config.seed = 0

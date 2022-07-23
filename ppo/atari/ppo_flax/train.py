@@ -18,19 +18,25 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 # Utility Functions #
 #####################
 def eval_policy(agent: PPOAgent,
-                eval_envs: envpool.atari.AtariGymEnvPool, 
+                eval_envs: envpool.atari.AtariGymEnvPool,
                 eval_episodes: int = 10) -> Tuple[float]:
     """Evaluate with envpool vectorized environments."""
     t1 = time.time()
     n_envs = len(eval_envs.all_env_ids)
+
+    # record episode reward and length
+    current_rewards = np.zeros(n_envs)
+    current_lengths = np.zeros(n_envs, dtype="int")
     episode_rewards = []
     episode_lengths = []
     episode_counts = np.zeros(n_envs, dtype="int")
-    episode_count_targets = np.array([
-        (eval_episodes + i) // n_envs for i in range(n_envs)], dtype="int")
-    current_rewards = np.zeros(n_envs)
-    current_lengths = np.zeros(n_envs, dtype="int")
 
+    # evaluate `target` episodes for each environment
+    episode_count_targets = np.array([(eval_episodes + i) // n_envs
+                                      for i in range(n_envs)],
+                                     dtype="int")
+
+    # start evaluation
     observations = eval_envs.reset()
     while (episode_counts < episode_count_targets).any():
         # (10, 4, 84, 84) ==> (10, 84, 84, 4)
@@ -48,6 +54,28 @@ def eval_policy(agent: PPOAgent,
                     current_lengths[i] = 0
     avg_reward = np.mean(episode_rewards)
     avg_step = np.mean(episode_lengths)
+    return avg_reward, avg_step, time.time() - t1
+
+
+def eval_policy2(agent, env, eval_episodes: int = 10) -> Tuple[float]:
+    """For-loop sequential evaluation."""
+    t1 = time.time()
+    avg_reward = 0.
+    avg_step = 0
+    for _ in range(eval_episodes):
+        obs, done = env.reset(), False
+        while not done:
+            log_probs, _ = agent._sample_actions(agent.learner_state.params,
+                                                 obs[None, ...])
+            log_probs = jax.device_get(log_probs)
+            probs = np.exp(log_probs)  # (1, act_dim)
+            action = np.random.choice(probs.shape[1], p=probs[0])
+            next_obs, reward, done, _ = env.step(action)
+            avg_reward += reward
+            avg_step += 1
+            obs = next_obs
+    avg_reward /= eval_episodes
+    avg_step /= eval_episodes
     return avg_reward, avg_step, time.time() - t1
 
 
@@ -101,6 +129,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
     exp_name = f"ppo_s{config.seed}_a{config.actor_num}_{timestamp}"
+    ckpt_dir = f"{config.model_dir}/{config.env_name}/{exp_name}"
     print(f"# Running experiment for: {exp_name}_{config.env_name} #")
     logger = get_logger(f"logs/{config.env_name}/{exp_name}.log")
     logger.info(f"Exp configurations:\n{config}")
@@ -109,9 +138,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     np.random.seed(config.seed)
 
     # initialize eval environment
-    # eval_env = env_utils.create_env(config.env_name,
-    #                                 clip_rewards=False,
-    #                                 seed=config.seed)
+    eval_env2 = env_utils.create_env(config.env_name,
+                                     clip_rewards=False,
+                                     seed=config.seed)
     eval_env = envpool.make(
         task_id=f"{config.env_name.split('NoFrameskip')[0]}-v5",
         env_type="gym",
@@ -129,6 +158,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     loop_steps = config.total_frames // trajectory_len
     assert config.total_frames % trajectory_len % config.log_num == 0
     log_steps = loop_steps // config.log_num
+    ckpt_steps = loop_steps // 10
 
     # initialize lr scheduler
     lr = get_lr_scheduler(config, loop_steps, iterations_per_step)
@@ -151,18 +181,22 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             permutation = np.random.permutation(trajectory_len)
             for i in range(batch_num):
                 batch_idx = permutation[i * batch_size:(i + 1) * batch_size]
-                batch = Batch(observations=trajectory_batch.observations[batch_idx],
-                              actions=trajectory_batch.actions[batch_idx],
-                              log_probs=trajectory_batch.log_probs[batch_idx], 
-                              targets=trajectory_batch.targets[batch_idx],
-                              advantages=trajectory_batch.advantages[batch_idx])
+                batch = Batch(
+                    observations=trajectory_batch.observations[batch_idx],
+                    actions=trajectory_batch.actions[batch_idx],
+                    log_probs=trajectory_batch.log_probs[batch_idx],
+                    targets=trajectory_batch.targets[batch_idx],
+                    advantages=trajectory_batch.advantages[batch_idx])
                 log_info = agent.update(batch)
 
         # evaluate
         if (step + 1) % log_steps == 0:
             frame_num = (step + 1) * trajectory_len // 1_000
             eval_reward, eval_step, eval_time = eval_policy(agent, eval_env)
+            eval_reward2, eval_step2, eval_time2 = eval_policy2(
+                agent, eval_env2)
             eval_fps = eval_step / eval_time
+            eval_fps2 = eval_step2 / eval_time2
             elapsed_time = (time.time() - start_time) / 60
             log_info.update({
                 "frame": frame_num,
@@ -172,7 +206,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             })
             logs.append(log_info)
             logger.info(
-                f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_fps={eval_fps:.2f}, "
+                f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_step={eval_step:.2f}, eval_fps={eval_fps:.2f}, "
                 f"eval_time={eval_time:.2f}s, total_time={elapsed_time:.2f}min\n"
                 f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                 f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n"
@@ -182,8 +216,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
             )
             print(
-                f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_fps={eval_fps:.2f}, "
+                f"\n#Frame {frame_num}K: eval_reward={eval_reward:.2f}, eval_step={eval_step:.2f}, eval_fps={eval_fps:.2f}, "
                 f"eval_time={eval_time:.2f}s, total_time={elapsed_time:.2f}min\n"
+                f"\teval_reward2={eval_reward2:.2f}, eval_step2={eval_step2:.2f}, eval_fps2={eval_fps2:.2f}, eval_time2={eval_time2:.2f}\n"
                 f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                 f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n"
                 f"\tavg_target={log_info['avg_target']:.3f}, max_target={log_info['max_target']:.3f}, min_target={log_info['min_target']:.3f}\n"
@@ -191,6 +226,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_logp={log_info['avg_logp']:.3f}, max_logp={log_info['max_logp']:.3f}, min_logp={log_info['min_logp']:.3f}\n"
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
             )
+
+        # Save checkpoints
+        if (step + 1) % ckpt_steps == 0:
+            agent.save(f"{ckpt_dir}", (step + 1) // ckpt_steps)
 
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{config.log_dir}/{config.env_name}/{exp_name}.csv")
