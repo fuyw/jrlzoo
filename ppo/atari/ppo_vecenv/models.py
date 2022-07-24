@@ -1,4 +1,3 @@
-import multiprocessing as mp
 import functools
 import jax
 import jax.numpy as jnp
@@ -31,6 +30,7 @@ class ActorCritic(nn.Module):
         value = nn.Dense(features=1, name="value", dtype=jnp.float32)(x)
 
         return policy_log_probabilities, value.squeeze(-1)
+
 
 class PPOAgent:
     """PPOAgent using vectorized environment."""

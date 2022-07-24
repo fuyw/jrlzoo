@@ -10,9 +10,11 @@ import numpy as np
 ExpTuple = collections.namedtuple(
     "ExpTuple",
     ["observation", "action", "reward", "value", "log_prob", "done"])
+AsyncExpTuple = collections.namedtuple(
+    "ExpTuple",
+    ["observation", "action", "reward", "value", "log_prob", "done", "env_id"])
 Batch = collections.namedtuple(
     "Batch", ["observations", "actions", "log_probs", "targets", "advantages"])
-
 
 def get_lr_scheduler(config, loop_steps, iterations_per_step):
     # set lr scheduler
@@ -89,13 +91,13 @@ class PPOBuffer:
         self.obs_shape = obs_shape
 
     def add(self, experience: List[ExpTuple]):
-        for actor_idx, actor_exp in enumerate(experience):
-            self.observations[self.ptr, actor_idx, ...] = actor_exp.observation
-            self.actions[self.ptr, actor_idx] = actor_exp.action
-            self.rewards[self.ptr, actor_idx] = actor_exp.reward
-            self.values[self.ptr, actor_idx] = actor_exp.value
-            self.log_probs[self.ptr, actor_idx] = actor_exp.log_prob
-            self.dones[self.ptr, actor_idx] = float(not actor_exp.done)
+        for actor_id, actor_exp in enumerate(experience):
+            self.observations[self.ptr, actor_id, ...] = actor_exp.observation
+            self.actions[self.ptr, actor_id] = actor_exp.action
+            self.rewards[self.ptr, actor_id] = actor_exp.reward
+            self.values[self.ptr, actor_id] = actor_exp.value
+            self.log_probs[self.ptr, actor_id] = actor_exp.log_prob
+            self.dones[self.ptr, actor_id] = float(not actor_exp.done)
         self.ptr += 1
 
     def add_experiences(self, experiences: List[List[ExpTuple]]):
@@ -114,10 +116,67 @@ class PPOBuffer:
         targets = advantages + self.values[:-1, :]
 
         # concatenate results
+        trajectory_batch = Batch(observations=self.observations.reshape(
+            (self.trajectory_len, *self.obs_shape)),
+                                 actions=self.actions.reshape(-1),
+                                 log_probs=self.log_probs.reshape(-1),
+                                 targets=targets.reshape(-1),
+                                 advantages=advantages.reshape(-1))
+        return trajectory_batch
+
+
+class AsyncPPOBuffer:
+
+    def __init__(self,
+                 rollout_len,
+                 actor_num,
+                 gamma,
+                 lmbda,
+                 obs_shape=(84, 84, 4)):
+        self.observations = np.zeros((rollout_len+1, actor_num, *obs_shape),
+                                     dtype=np.float32)
+        self.actions = np.zeros((rollout_len+1, actor_num), dtype=np.int32)
+        self.rewards = np.zeros((rollout_len+1, actor_num), dtype=np.float32)
+        self.values = np.zeros((rollout_len+1, actor_num), dtype=np.float32)
+        self.log_probs = np.zeros((rollout_len+1, actor_num), dtype=np.float32)
+        self.dones = np.zeros((rollout_len+1, actor_num), dtype=np.float32)
+
+        self.ptr = 0
+        self.rollout_len = rollout_len
+        self.gamma = gamma
+        self.lmbda = lmbda
+        self.actor_num = actor_num
+        self.trajectory_len = actor_num * rollout_len
+        self.obs_shape = obs_shape
+
+    def add_async(self, experience: List[AsyncExpTuple]):
+        for actor_exp in experience:
+            actor_id = actor_exp.env_id
+            self.observations[self.ptr, actor_id, ...] = actor_exp.observation
+            self.actions[self.ptr, actor_id] = actor_exp.action
+            self.rewards[self.ptr, actor_id] = actor_exp.reward
+            self.values[self.ptr, actor_id] = actor_exp.value
+            self.log_probs[self.ptr, actor_id] = actor_exp.log_prob
+            self.dones[self.ptr, actor_id] = float(not actor_exp.done)
+        self.ptr += 1
+
+    def add_experiences(self, experiences: List[List[ExpTuple]]):
+        assert len(experiences) == (self.rollout_len + 1)*2, f"Get {len(experiences)} experiences"
+        for experience in experiences:
+            self.add_async(experience)
+        self.ptr = 0
+
+    def process_experience(self):
+        # compute GAE advantage
+        advantages = gae_advantages(self.rewards[1:], self.dones[1:], self.values,
+                                    self.gamma, self.lmbda)
+        targets = advantages + self.values[:-1, :]
+
+        # concatenate results
         trajectory_batch = Batch(
-            observations=self.observations.reshape((self.trajectory_len, *self.obs_shape)),
-            actions=self.actions.reshape(-1),
-            log_probs=self.log_probs.reshape(-1),
+            observations=self.observations[:-1].reshape((self.trajectory_len, *self.obs_shape)),
+            actions=self.actions[:-1].reshape(-1),
+            log_probs=self.log_probs[:-1].reshape(-1),
             targets=targets.reshape(-1),
             advantages=advantages.reshape(-1)
         )

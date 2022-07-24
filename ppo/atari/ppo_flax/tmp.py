@@ -79,15 +79,6 @@ FLAGS(sys.argv)
 config = FLAGS.config
 
 
-env1 = envpool.make_gym("Pong-v5", num_envs=10, episodic_life=False, reward_clip=False)
-env2 = env_utils.create_env("PongNoFrameskip-v4", clip_rewards=False)
-act_dim = env2.preproc.action_space.n
-ckpt_dir = "/usr/local/data/yuweifu/jrlzoo/ppo/atari/ppo_flax/saved_models/PongNoFrameskip-v4/ppo_s0_a10_20220723_182052"
-
-agent = PPOAgent(config, act_dim, config.lr)
-agent.load(ckpt_dir, 2)
-
-
-# r1, L1, t1 = eval_policy1(agent, env1)
-# r2, L2, t2 = eval_policy2(agent, env2)
-o2 = env2.reset(); print(o2.max()), print(o2.min())
+env = envpool.make_gym("Pong-v5", num_envs=10, batch_size=5, episodic_life=False, reward_clip=False)
+env.async_reset()
+obs, rew, done, info = env.recv()

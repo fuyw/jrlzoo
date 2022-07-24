@@ -8,7 +8,8 @@ import time
 import envpool
 from tqdm import trange
 from models import PPOAgent
-from utils import Batch, ExpTuple, PPOBuffer, get_logger, get_lr_scheduler
+from utils import (Batch, AsyncExpTuple, ExpTuple, PPOBuffer,
+                   AsyncPPOBuffer, get_logger, get_lr_scheduler)
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
@@ -68,6 +69,20 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     logger = get_logger(f"logs/{config.env_name}/{exp_name}.log")
     logger.info(f"Exp configurations:\n{config}")
 
+    # set random seed (deterministic on cpu)
+    np.random.seed(config.seed)
+
+    # determine training steps
+    trajectory_len = config.actor_num * config.rollout_len
+    batch_size = config.batch_size
+    batch_num = trajectory_len // batch_size
+    iterations_per_step = trajectory_len // batch_size
+    loop_steps = config.total_frames // trajectory_len
+    assert config.total_frames % trajectory_len % config.log_num == 0
+    assert config.actor_num % config.wait_num == 0
+    log_steps = loop_steps // config.log_num
+    ckpt_steps = loop_steps // 10
+
     # Initialize envpool envs
     is_async = config.wait_num < config.actor_num
     train_envs = envpool.make(
@@ -85,54 +100,68 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         episodic_life=False,
         reward_clip=False,
     )
-    if is_async:
-        train_envs.async_reset()   # send the initial reset signal to all envs
     act_dim = train_envs.action_space.n
-
-    # set random seed (deterministic on cpu)
-    np.random.seed(config.seed)
-
-    # determine training steps
-    trajectory_len = config.actor_num * config.rollout_len
-    batch_size = config.batch_size
-    batch_num = trajectory_len // batch_size
-    iterations_per_step = trajectory_len // batch_size
-    loop_steps = config.total_frames // trajectory_len
-    assert config.total_frames % trajectory_len % config.log_num == 0
-    log_steps = loop_steps // config.log_num
-    ckpt_steps = loop_steps // 10
+    if is_async:
+        train_envs.async_reset()
+        buffer = AsyncPPOBuffer(config.rollout_len, config.actor_num, config.gamma, config.lmbda)
+    else:
+        buffer = PPOBuffer(config.rollout_len, config.actor_num, config.gamma, config.lmbda)
 
     # initialize lr scheduler
     lr = get_lr_scheduler(config, loop_steps, iterations_per_step)
 
     # initialize PPOAgent
     agent = PPOAgent(config, act_dim, lr)
-    buffer = PPOBuffer(config.rollout_len, config.actor_num, config.gamma, config.lmbda)
     logs = [{"frame": 0, "reward": eval_policy(agent, eval_envs)[0]}]
 
     # reset environments
-    if not is_async:
-        observations = train_envs.reset()
+    if is_async:
+        train_envs.async_reset()
     else:
-        observations, _, _, _ = train_envs.recv()
+        observations = train_envs.reset()
 
     # start training
     for step in trange(loop_steps, desc="[Loop steps]"):
         step_time = time.time()
-        # collect trajectories
         all_experiences = []
-        for _ in range(config.rollout_len+1):
-            observations = np.moveaxis(observations, 1, -1)  # (10, 4, 84, 84) ==> (10, 84, 84, 4)
-            log_probs, values = agent._sample_action(agent.learner_state.params, observations)
-            log_probs, values = jax.device_get((log_probs, values))
-            probs = np.exp(log_probs)
-            actions = np.array([np.random.choice(probs.shape[1], p=prob) for prob in probs])
-            next_observations, rewards, dones, _ = train_envs.step(actions)
-            experiences = [ExpTuple(observations[i], actions[i], rewards[i],
-                                    values[i], log_probs[i][actions[i]], dones[i])
-                           for i in range(config.actor_num)]
-            all_experiences.append(experiences)
-            observations = next_observations
+
+        # Asynchronous PPO
+        if is_async:
+            # transition pair mismatch
+            for _ in range((config.rollout_len+1) * config.actor_num // config.wait_num):
+                next_observations, rewards, dones, infos = train_envs.recv()
+                next_observations = np.moveaxis(next_observations, 1, -1)  # (5, 4, 84, 84)
+                env_id = infos["env_id"]
+                log_probs, values = agent._sample_action(agent.learner_state.params, next_observations)
+                log_probs, values = jax.device_get((log_probs, values))
+                probs = np.exp(log_probs)
+                next_actions = np.array([np.random.choice(probs.shape[1], p=prob) for prob in probs])
+                train_envs.send(next_actions, env_id)
+                experiences = [AsyncExpTuple(next_observations[i],
+                                             next_actions[i],
+                                             rewards[i],
+                                             values[i],
+                                             log_probs[i][next_actions[i]],
+                                             dones[i],
+                                             env_id[i])
+                                for i in range(len(env_id))]
+                print(f"add {len(env_id)} experiences")
+                all_experiences.append(experiences)
+
+        # Synchronous PPO
+        else:
+            for _ in range(config.rollout_len+1):
+                observations = np.moveaxis(observations, 1, -1)  # (10, 4, 84, 84) ==> (10, 84, 84, 4)
+                log_probs, values = agent._sample_action(agent.learner_state.params, observations)
+                log_probs, values = jax.device_get((log_probs, values))
+                probs = np.exp(log_probs)
+                actions = np.array([np.random.choice(probs.shape[1], p=prob) for prob in probs])
+                next_observations, rewards, dones, _ = train_envs.step(actions)
+                experiences = [ExpTuple(observations[i], actions[i], rewards[i],
+                                        values[i], log_probs[i][actions[i]], dones[i])
+                            for i in range(config.actor_num)]
+                all_experiences.append(experiences)
+                observations = next_observations
 
         # add to trajectory buffer
         buffer.add_experiences(all_experiences)
@@ -144,10 +173,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             for i in range(batch_num):
                 batch_idx = permutation[i * batch_size:(i + 1) * batch_size]
                 batch = Batch(observations=trajectory_batch.observations[batch_idx],
-                              actions=trajectory_batch.actions[batch_idx],
-                              log_probs=trajectory_batch.log_probs[batch_idx], 
-                              targets=trajectory_batch.targets[batch_idx],
-                              advantages=trajectory_batch.advantages[batch_idx])
+                            actions=trajectory_batch.actions[batch_idx],
+                            log_probs=trajectory_batch.log_probs[batch_idx], 
+                            targets=trajectory_batch.targets[batch_idx],
+                            advantages=trajectory_batch.advantages[batch_idx])
                 log_info = agent.update(batch)
 
         # evaluate

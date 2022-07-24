@@ -33,49 +33,6 @@ def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
     return avg_reward, time.time() - t1
 
 
-def get_experience(agent, steps_per_actor: int):
-    # TODO: inference in the subprocess
-    # TODO: use sequential actors
-    # TODO: use vec_env
-    """Collect experience using remote actors.
-    (1) receive states from remote actors.
-    (2) sample action locally, and send sampled actions to remote actors.
-    (3) receive next states, rewards from remote actors.
-
-    Runs `steps_per_actor` time steps of the game for each of the `agent.actors`.
-    """
-    all_experiences = []
-
-    # Range up to steps_per_actor + 1 to get one more value needed for GAE.
-    for _ in range(steps_per_actor + 1):
-        # (1) receive remote actor states
-        observations = []
-        for actor in agent.actors:
-            observation = actor.conn.recv()  # (1, 84, 84, 4)
-            observations.append(observation)
-        observations = np.concatenate(observations, axis=0)  # (5, 84, 84, 4)
-
-        # (2) sample actions locally, and send sampled actions to remote actors
-        log_probs, values = agent._sample_action(
-            agent.learner_state.params, observations)
-        log_probs, values = jax.device_get((log_probs, values))
-        probs = np.exp(np.array(log_probs))
-        for i, actor in enumerate(agent.actors):
-            action = np.random.choice(probs.shape[1], p=probs[i])
-            actor.conn.send(action)
-
-        # (3) receive next states, rewards from remote actors
-        experiences = []
-        for i, actor in enumerate(agent.actors):
-            observation, action, reward, done = actor.conn.recv()
-            value = values[i]
-            log_prob = log_probs[i][action]
-            sample = ExpTuple(observation, action, reward, value, log_prob, done)
-            experiences.append(sample)      # List of ExpTuple
-        all_experiences.append(experiences)  # List of List of ExpTuple
-    return all_experiences
-
-
 #################
 # Main Function #
 #################
@@ -120,7 +77,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         for _ in range(config.actor_steps+1):
             log_probs, values = agent._sample_action(agent.learner_state.params, observations)
             log_probs, values = jax.device_get((log_probs, values))
-            probs = np.exp(np.array(log_probs))  # (agent_num, action_dim)
+            probs = np.exp(log_probs)  # (agent_num, action_dim)
             actions = np.array([np.random.choice(probs.shape[1], p=prob) for prob in probs])
             next_observations, rewards, dones, _ = vec_env.step(actions)
             experiences = [ExpTuple(observations[i], actions[i], rewards[i],
@@ -129,7 +86,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             all_experiences.append(experiences)
             observations = next_observations
 
-        # all_experiences = get_experience(agent, steps_per_actor=config.actor_steps)
         trajectories = process_experience(experience=all_experiences,
                                           actor_steps=config.actor_steps,
                                           num_agents=config.num_agents,
