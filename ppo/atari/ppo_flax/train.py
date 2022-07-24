@@ -10,7 +10,7 @@ from tqdm import trange
 from models import PPOAgent
 from utils import Batch, ExpTuple, PPOBuffer, get_logger, get_lr_scheduler
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".5"
 
 
 #####################
