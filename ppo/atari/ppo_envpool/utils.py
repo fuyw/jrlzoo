@@ -41,7 +41,7 @@ def get_logger(fname):
 
 @jax.jit
 @functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
-def gae_advantages(rewards: np.ndarray, terminal_masks: np.ndarray,
+def gae_advantages(rewards: np.ndarray, discounts: np.ndarray,
                    values: np.ndarray, gamma: float, lmbda: float):
     """Use GAE to compute advantages.
 
@@ -55,12 +55,12 @@ def gae_advantages(rewards: np.ndarray, terminal_masks: np.ndarray,
     gae = 0.
     for t in reversed(range(len(rewards))):
         # Masks used to set next state value to 0 for terminal observations.
-        value_diff = gamma * values[t + 1] * terminal_masks[t] - values[t]
+        value_diff = gamma * values[t + 1] * discounts[t] - values[t]
         delta = rewards[t] + value_diff
 
         # Masks[t] used to ensure that values before and after a terminal state
         # are independent of each other.
-        gae = delta + gamma * lmbda * terminal_masks[t] * gae
+        gae = delta + gamma * lmbda * discounts[t] * gae
         advantages.append(gae)
     advantages = advantages[::-1]
     return jnp.array(advantages)
@@ -80,7 +80,7 @@ class PPOBuffer:
         self.rewards = np.zeros((rollout_len, actor_num), dtype=np.float32)
         self.values = np.zeros((rollout_len + 1, actor_num), dtype=np.float32)
         self.log_probs = np.zeros((rollout_len, actor_num), dtype=np.float32)
-        self.dones = np.zeros((rollout_len, actor_num), dtype=np.float32)
+        self.discounts = np.zeros((rollout_len, actor_num), dtype=np.float32)
 
         self.ptr = 0
         self.rollout_len = rollout_len
@@ -97,7 +97,7 @@ class PPOBuffer:
             self.rewards[self.ptr, actor_id] = actor_exp.reward
             self.values[self.ptr, actor_id] = actor_exp.value
             self.log_probs[self.ptr, actor_id] = actor_exp.log_prob
-            self.dones[self.ptr, actor_id] = float(not actor_exp.done)
+            self.discounts[self.ptr, actor_id] = float(not actor_exp.done)
         self.ptr += 1
 
     def add_experiences(self, experiences: List[List[ExpTuple]]):
@@ -111,7 +111,7 @@ class PPOBuffer:
 
     def process_experience(self):
         # compute GAE advantage
-        advantages = gae_advantages(self.rewards, self.dones, self.values,
+        advantages = gae_advantages(self.rewards, self.discounts, self.values,
                                     self.gamma, self.lmbda)
         targets = advantages + self.values[:-1, :]
 
@@ -139,7 +139,7 @@ class AsyncPPOBuffer:
         self.rewards = np.zeros((rollout_len+1, actor_num), dtype=np.float32)
         self.values = np.zeros((rollout_len+1, actor_num), dtype=np.float32)
         self.log_probs = np.zeros((rollout_len+1, actor_num), dtype=np.float32)
-        self.dones = np.zeros((rollout_len+1, actor_num), dtype=np.float32)
+        self.discounts = np.zeros((rollout_len+1, actor_num), dtype=np.float32)
 
         self.ptr = 0
         self.rollout_len = rollout_len
@@ -157,7 +157,7 @@ class AsyncPPOBuffer:
             self.rewards[self.ptr, actor_id] = actor_exp.reward
             self.values[self.ptr, actor_id] = actor_exp.value
             self.log_probs[self.ptr, actor_id] = actor_exp.log_prob
-            self.dones[self.ptr, actor_id] = float(not actor_exp.done)
+            self.discounts[self.ptr, actor_id] = float(not actor_exp.done)
         self.ptr += 1
 
     def add_experiences(self, experiences: List[List[ExpTuple]]):
@@ -168,7 +168,7 @@ class AsyncPPOBuffer:
 
     def process_experience(self):
         # compute GAE advantage
-        advantages = gae_advantages(self.rewards[1:], self.dones[1:], self.values,
+        advantages = gae_advantages(self.rewards[1:], self.discounts[1:], self.values,
                                     self.gamma, self.lmbda)
         targets = advantages + self.values[:-1, :]
 

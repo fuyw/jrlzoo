@@ -1,11 +1,13 @@
 #!/bin/bash
 # Script to reproduce results
+sleep 0.5h
 envs=(
     "Breakout"
+    "Pong"
 )
 for seed in 0
 do
-    for num in 8 10 16
+    for num in 5
     do
         for env in ${envs[*]}
         do
