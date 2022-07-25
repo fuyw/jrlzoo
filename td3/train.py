@@ -28,21 +28,25 @@ def eval_policy(agent: TD3Agent, env: gym.Env, eval_episodes: int = 10) -> Tuple
     return avg_reward, time.time() - t1
 
 
-def train_and_evaluate(configs: ml_collections.ConfigDict): 
+def train_and_evaluate(config: ml_collections.ConfigDict): 
     start_time = time.time()
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
-    exp_name = f'td3_s{configs.seed}_{timestamp}'
-    exp_info = f'# Running experiment for: {exp_name}_{configs.env_name} #'
-    ckpt_dir = f"{configs.model_dir}/{configs.env_name.lower()}/{exp_name}"
+    exp_name = f'td3_s{config.seed}_{timestamp}'
+    exp_info = f'# Running experiment for: {exp_name}_{config.env_name} #'
+    ckpt_dir = f"{config.model_dir}/{config.env_name.lower()}/{exp_name}"
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
-    logger = get_logger(f'logs/{configs.env_name.lower()}/{exp_name}.log')
-    logger.info(f"Exp configurations:\n{configs}")
+    logger = get_logger(f'logs/{config.env_name.lower()}/{exp_name}.log')
+    logger.info(f"Exp configurations:\n{config}")
 
-    # initialize the d4rl environment 
-    # env = gym.make(configs.env_name)
-    env = make_env(configs.env_name, configs.seed)
-    eval_env = make_env(configs.env_name, configs.seed + 42)
+    # initialize the gym/d4rl environment 
+    env = gym.make(config.env_name)
+    eval_env = gym.make(config.env_name)
+
+    # initialize dm_control environment
+    # env = make_env(config.env_name, config.seed)
+    # eval_env = make_env(config.env_name, config.seed + 42)
+
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     max_action = env.action_space.high[0]
@@ -50,30 +54,30 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
     agent = TD3Agent(obs_dim=obs_dim,
                      act_dim=act_dim,
                      max_action=max_action,
-                     tau=configs.tau,
-                     gamma=configs.gamma,
-                     noise_clip=configs.noise_clip,
-                     policy_noise=configs.policy_noise,
-                     policy_freq=configs.policy_freq,
-                     lr=configs.lr,
-                     seed=configs.seed,
-                     hidden_dims=configs.hidden_dims,
-                     initializer=configs.initializer)
+                     tau=config.tau,
+                     gamma=config.gamma,
+                     noise_clip=config.noise_clip,
+                     policy_noise=config.policy_noise,
+                     policy_freq=config.policy_freq,
+                     lr=config.lr,
+                     seed=config.seed,
+                     hidden_dims=config.hidden_dims,
+                     initializer=config.initializer)
 
     # replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
-    logs = [{"step":0, "reward":eval_policy(agent, eval_env, configs.eval_episodes)[0]}]
+    logs = [{"step":0, "reward":eval_policy(agent, eval_env, config.eval_episodes)[0]}]
 
     obs, done = env.reset(), False
     episode_timesteps = 0
-    for t in trange(1, configs.max_timesteps+1):
+    for t in trange(1, config.max_timesteps+1):
         episode_timesteps += 1
-        if t <= configs.start_timesteps:
+        if t <= config.start_timesteps:
             action = env.action_space.sample()
         else:
             action = (agent.sample_action(
                 agent.actor_state.params, obs) + np.random.normal(
-                    0, max_action * configs.expl_noise,
+                    0, max_action * config.expl_noise,
                     size=act_dim)).clip(-max_action, max_action)
 
         next_obs, reward, done, info = env.step(action)
@@ -83,17 +87,17 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
         replay_buffer.add(obs, action, next_obs, reward, done_bool)
         obs = next_obs
 
-        if t > configs.start_timesteps:
-            batch = replay_buffer.sample(configs.batch_size)
+        if t > config.start_timesteps:
+            batch = replay_buffer.sample(config.batch_size)
             log_info = agent.update(batch)
 
         if done:
             obs, done = env.reset(), False
             episode_timesteps = 0
 
-        if t % configs.eval_freq == 0:
-            eval_reward, eval_time = eval_policy(agent, eval_env, configs.eval_episodes)
-            if t > configs.start_timesteps:
+        if t % config.eval_freq == 0:
+            eval_reward, eval_time = eval_policy(agent, eval_env, config.eval_episodes)
+            if t > config.start_timesteps:
                 log_info.update({
                     "step": t,
                     "reward": eval_reward,
@@ -115,8 +119,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                     f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}\n")
 
         # Save checkpoints
-        if t % configs.ckpt_freq == 0:
-            agent.save(f"{ckpt_dir}", t // configs.ckpt_freq)
+        if t % config.ckpt_freq == 0:
+            agent.save(f"{ckpt_dir}", t // config.ckpt_freq)
 
     log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"{configs.log_dir}/{configs.env_name.lower()}/{exp_name}.csv")
+    log_df.to_csv(f"{config.log_dir}/{config.env_name.lower()}/{exp_name}.csv")
