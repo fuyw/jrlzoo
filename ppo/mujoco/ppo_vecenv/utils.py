@@ -1,11 +1,12 @@
-from typing import List
 import collections
-import logging
 import functools
-import optax
+import logging
+from typing import List
+
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
 
 ExpTuple = collections.namedtuple(
     "ExpTuple",

@@ -5,20 +5,19 @@ def get_config():
     config = ml_collections.ConfigDict()
 
     # Basic settings
-    config.env_name = "HalfCheetah"
+    config.env_name = "HalfCheetah-v2"
     config.model_dir = "saved_models"
     config.log_dir = "logs"
     config.batch_size = 256
     config.seed = 0
 
     # Total number of frames
-    config.total_frames = int(1e7)
+    config.total_steps = int(1e7)
     config.log_num = 100
 
     # Envpool settings
     config.actor_num = 10
     config.rollout_len = 125
-    config.wait_num = 10
 
     # Training parameters
     config.lr = 2.5e-4
