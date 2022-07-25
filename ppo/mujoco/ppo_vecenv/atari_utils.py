@@ -3,6 +3,7 @@ import numpy as np
 
 
 class RecordEpisodeStatistics(gym.Wrapper):
+
     def __init__(self, env):
         super().__init__(env)
         self.num_envs = len(env.all_env_ids)

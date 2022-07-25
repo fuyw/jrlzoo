@@ -55,7 +55,8 @@ class Critic(nn.Module):
         self.net = MLP(self.hidden_dims,
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
-        self.out_layer = nn.Dense(1, kernel_init=init_fn(self.initializer, 1.0))
+        self.out_layer = nn.Dense(1,
+                                  kernel_init=init_fn(self.initializer, 1.0))
 
     def __call__(self, observations: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observations)
@@ -75,7 +76,7 @@ class Actor(nn.Module):
         self.mu_layer = nn.Dense(self.act_dim,
                                  kernel_init=init_fn(
                                      self.initializer,
-                                     5/3))  # only affect orthogonal init
+                                     5 / 3))  # only affect orthogonal init
         self.std_layer = nn.Dense(self.act_dim,
                                   kernel_init=init_fn(self.initializer, 1.0))
 
@@ -86,10 +87,12 @@ class Actor(nn.Module):
         log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
         std = jnp.exp(log_std)
         action_distributions = distrax.Normal(mu, std)
-        sampled_actions, log_probs = action_distributions.sample_and_log_prob(seed=rng)
+        sampled_actions, log_probs = action_distributions.sample_and_log_prob(
+            seed=rng)
         return mu, sampled_actions, log_probs.sum(axis=-1)
 
-    def get_logp(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+    def get_logp(self, observations: jnp.ndarray,
+                 actions: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observations)
         mu = self.mu_layer(x)
         log_std = self.std_layer(x)
@@ -107,17 +110,20 @@ class ActorCritic(nn.Module):
     initializer: str = "orthogonal"
 
     def setup(self):
-        self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer),
+        self.net = MLP(self.hidden_dims,
+                       init_fn=init_fn(self.initializer),
                        activate_final=True)
         self.actor = Actor(self.act_dim, hidden_dims=self.hidden_dims)
         self.critic = Critic(self.hidden_dims, self.initializer)
 
     def __call__(self, key: Any, observations: jnp.ndarray):
-        mean_actions, sampled_actions, log_probs = self.actor(key, observations)
+        mean_actions, sampled_actions, log_probs = self.actor(
+            key, observations)
         values = self.critic(observations)
         return mean_actions, sampled_actions, log_probs, values
 
-    def get_logp(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+    def get_logp(self, observations: jnp.ndarray,
+                 actions: jnp.ndarray) -> jnp.ndarray:
         log_probs, entropy = self.actor.get_logp(observations, actions)
         values = self.critic(observations)
         return log_probs, values, entropy
@@ -126,7 +132,8 @@ class ActorCritic(nn.Module):
 class PPOAgent:
     """PPOAgent adapted from Flax PPO example."""
 
-    def __init__(self, config: ml_collections.ConfigDict, obs_dim: int, act_dim: int, lr: float):
+    def __init__(self, config: ml_collections.ConfigDict, obs_dim: int,
+                 act_dim: int, lr: float):
         self.vf_coeff = config.vf_coeff
         self.entropy_coeff = config.entropy_coeff
         self.clip_param = config.clip_param
@@ -134,15 +141,17 @@ class PPOAgent:
         # initialize learner
         self.rng = jax.random.PRNGKey(config.seed)
         dummy_obs = jnp.ones([1, obs_dim])
-        self.learner = ActorCritic(act_dim=act_dim, hidden_dims=config.hidden_dims,
+        self.learner = ActorCritic(act_dim=act_dim,
+                                   hidden_dims=config.hidden_dims,
                                    initializer=config.initializer)
-        learner_params = self.learner.init(self.rng, self.rng, dummy_obs)["params"]
+        learner_params = self.learner.init(self.rng, self.rng,
+                                           dummy_obs)["params"]
         self.learner_state = train_state.TrainState.create(
             apply_fn=ActorCritic.apply,
             params=learner_params,
             tx=optax.adam(lr))
 
-    @functools.partial(jax.jit, static_argnames=("self"))
+    @functools.partial(jax.jit, static_argnames=("self", "eval_mode"))
     def _sample_action(self,
                        params: FrozenDict,
                        key: Any,
@@ -150,26 +159,34 @@ class PPOAgent:
                        eval_mode: bool = False):
         mean_actions, sampled_actions, log_probs, values = self.learner.apply(
             {"params": params}, key, observations)
-        return jnp.where(eval_mode, mean_actions, sampled_actions), log_probs, values
+        return jnp.where(eval_mode, mean_actions,
+                         sampled_actions), log_probs, values
 
-    def sample_actions(self, observations: jnp.ndarray, eval_mode: bool = False):
+    def sample_actions(self,
+                       observations: jnp.ndarray,
+                       eval_mode: bool = False):
         self.rng, key = jax.random.split(self.rng, 2)
         sampled_actions, log_probs, values = self._sample_action(
             self.learner_state.params, key, observations, eval_mode)
-        sampled_actions, log_probs, values = jax.device_get((
-            sampled_actions, log_probs, values))
+        sampled_actions, log_probs, values = jax.device_get(
+            (sampled_actions, log_probs, values))
         return sampled_actions.clip(-1., 1.), log_probs, values
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self, learner_state: train_state.TrainState, batch: Batch):
 
-        def loss_fn(params, observations, actions, old_log_probs, targets, advantages):
+        def loss_fn(params, observations, actions, old_log_probs, targets,
+                    advantages):
             log_probs, values, entropy = self.learner.apply(
-                {"params": params}, observations, actions, method=ActorCritic.get_logp)
+                {"params": params},
+                observations,
+                actions,
+                method=ActorCritic.get_logp)
 
             # clipped PPO loss
             ratios = jnp.exp(log_probs - old_log_probs)
-            clipped_ratios = jnp.clip(ratios, 1. - self.clip_param, 1. + self.clip_param)
+            clipped_ratios = jnp.clip(ratios, 1. - self.clip_param,
+                                      1. + self.clip_param)
             actor_loss1 = ratios * advantages
             actor_loss2 = clipped_ratios * advantages
             ppo_loss = -jnp.minimum(actor_loss1, actor_loss2).mean()

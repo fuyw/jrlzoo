@@ -1,8 +1,7 @@
 import os
 import time
-from typing import List, Tuple
+from typing import Tuple
 
-import envpool
 import gym
 import ml_collections
 import numpy as np
@@ -27,8 +26,7 @@ def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
-            action, _, _ = agent.sample_actions(obs[None, ...],
-                                                eval_mode=True)
+            action, _, _ = agent.sample_actions(obs[None, ...], eval_mode=True)
             next_obs, reward, done, _ = env.step(action.squeeze())
             avg_reward += reward
             eval_step += 1
@@ -70,8 +68,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     eval_env = gym.make(config.env_name)
     act_dim = eval_env.action_space.shape[0]
     obs_dim = eval_env.observation_space.shape[0]
-    buffer = PPOBuffer(obs_dim, act_dim, config.rollout_len,
-                       config.actor_num, config.gamma, config.lmbda)
+    buffer = PPOBuffer(obs_dim, act_dim, config.rollout_len, config.actor_num,
+                       config.gamma, config.lmbda)
 
     # initialize lr scheduler
     lr = get_lr_scheduler(config, loop_steps, iterations_per_step)
@@ -88,12 +86,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         step_time = time.time()
         all_experiences = []
 
-        for _ in range(config.rollout_len+1):
+        for _ in range(config.rollout_len + 1):
             actions, log_probs, values = agent.sample_actions(observations)
             next_observations, rewards, dones, _ = train_envs.step(actions)
-            experiences = [ExpTuple(observations[i], actions[i], rewards[i],
-                                    values[i], log_probs[i], dones[i])
-                        for i in range(config.actor_num)]
+            experiences = [
+                ExpTuple(observations[i], actions[i], rewards[i], values[i],
+                         log_probs[i], dones[i])
+                for i in range(config.actor_num)
+            ]
             all_experiences.append(experiences)
             observations = next_observations
 
@@ -106,17 +106,19 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             permutation = np.random.permutation(trajectory_len)
             for i in range(batch_num):
                 batch_idx = permutation[i * batch_size:(i + 1) * batch_size]
-                batch = Batch(observations=trajectory_batch.observations[batch_idx],
-                              actions=trajectory_batch.actions[batch_idx],
-                              log_probs=trajectory_batch.log_probs[batch_idx], 
-                              targets=trajectory_batch.targets[batch_idx],
-                              advantages=trajectory_batch.advantages[batch_idx])
+                batch = Batch(
+                    observations=trajectory_batch.observations[batch_idx],
+                    actions=trajectory_batch.actions[batch_idx],
+                    log_probs=trajectory_batch.log_probs[batch_idx],
+                    targets=trajectory_batch.targets[batch_idx],
+                    advantages=trajectory_batch.advantages[batch_idx])
                 log_info = agent.update(batch)
 
         # evaluate
         if (step + 1) % log_steps == 0:
             step_num = (step + 1) * trajectory_len // 1_000
-            step_fps = trajectory_len / (time.time() - step_time)  # exclude evaluation time
+            step_fps = trajectory_len / (time.time() - step_time
+                                         )  # exclude evaluation time
             eval_reward, eval_step, eval_time = eval_policy(agent, eval_env)
             eval_fps = eval_step / eval_time
             elapsed_time = (time.time() - start_time) / 60
@@ -129,7 +131,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             })
             logs.append(log_info)
             logger.info(
-                f"\n#Step {step_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, eval_fps={eval_fps:.2f}\n" 
+                f"\n#Step {step_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, eval_fps={eval_fps:.2f}\n"
                 f"\ttotal_time={elapsed_time:.2f}min, step_fps={step_fps:.2f}\n"
                 f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                 f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n"
@@ -139,7 +141,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
             )
             print(
-                f"\n#Step {step_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, eval_fps={eval_fps:.2f}\n" 
+                f"\n#Step {step_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, eval_fps={eval_fps:.2f}\n"
                 f"\ttotal_time={elapsed_time:.2f}min, step_fps={step_fps:.2f}\n"
                 f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                 f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n"
