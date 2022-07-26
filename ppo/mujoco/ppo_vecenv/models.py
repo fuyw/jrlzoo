@@ -168,8 +168,7 @@ class PPOAgent:
 
             # clipped PPO loss
             ratios = jnp.exp(log_probs - old_log_probs)
-            clipped_ratios = jnp.clip(ratios, 1. - self.clip_param,
-                                      1. + self.clip_param)
+            clipped_ratios = jnp.clip(ratios, 1.-self.clip_param, 1.+self.clip_param)
             pg_loss1 = ratios * advantages
             pg_loss2 = clipped_ratios * advantages
             ppo_loss = -jnp.minimum(pg_loss1, pg_loss2).mean()
@@ -182,6 +181,14 @@ class PPOAgent:
 
             # total loss
             total_loss = ppo_loss + value_loss + entropy_loss
+ 
+            # calculate approx_kl http://joschu.net/blog/kl-approx.html
+            # Unbiased but high variance
+            # approx_kl = (old_log_probs - log_probs)
+
+            # Unbiased and low variance
+            approx_kl = (ratios - 1) - (log_probs - old_log_probs)
+            clipped = (jnp.abs(ratios - 1.) > self.clip_param)
 
             log_info = {
                 "ppo_loss": ppo_loss,
@@ -206,12 +213,9 @@ class PPOAgent:
                 "avg_old_logp": old_log_probs.mean(),
                 "max_old_logp": old_log_probs.max(),
                 "min_old_logp": old_log_probs.min(),
-                "a0": actions[:, 0].mean(),
-                "a1": actions[:, 1].mean(),
-                "a2": actions[:, 2].mean(),
-                "a3": actions[:, 3].mean(),
-                "a4": actions[:, 4].mean(),
-                "a5": actions[:, 5].mean(),
+                "actions": abs(actions).mean(axis=0),
+                "approx_kl": approx_kl.mean(),
+                "clipped_frac": clipped.mean(),
             }
             return total_loss, log_info
 

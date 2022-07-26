@@ -69,10 +69,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     buffer = PPOBuffer(obs_dim, act_dim, config.rollout_len, config.actor_num,
                        config.gamma, config.lmbda)
 
-    print(f"Total_steps = {config.total_steps/1e6:.0f}M steps, "
-          f"actor_num = {config.actor_num}, "
-          f"trajectory_len = {trajectory_len}, "
-          f"act_dim = {act_dim}, obs_dim = {obs_dim}.")
+    print(f"Total_steps={config.total_steps/1e6:.0f}M steps, actor_num={config.actor_num}, "
+          f"trajectory_len={trajectory_len}, act_dim={act_dim}, obs_dim={obs_dim}.")
 
     # initialize lr scheduler
     lr = get_lr_scheduler(config, loop_steps, iterations_per_step)
@@ -108,6 +106,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         # train sampled trajectories for K epochs
         for _ in range(config.num_epochs):
             permutation = np.random.permutation(trajectory_len)
+            approx_kl = 0.
             for i in range(batch_num):
                 batch_idx = permutation[i * batch_size:(i + 1) * batch_size]
                 batch = Batch(
@@ -117,15 +116,22 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                     targets=trajectory_batch.targets[batch_idx],
                     advantages=trajectory_batch.advantages[batch_idx])
                 log_info = agent.update(batch)
+                approx_kl += log_info["approx_kl"].item()
+
+            # early stopping
+            approx_kl /= batch_num
+            if approx_kl > 1.5 * config.target_kl:
+                print("Early stopping at step{step} due to reaching max kl.")
+                break
 
         # evaluate
         if (step + 1) % log_steps == 0:
             step_num = (step + 1) * trajectory_len // 1_000
-            step_fps = trajectory_len / (time.time() - step_time
-                                         )  # exclude evaluation time
+            step_fps = trajectory_len / (time.time() - step_time)
             eval_reward, eval_step, eval_time = eval_policy(agent, eval_env)
             eval_fps = eval_step / eval_time
             elapsed_time = (time.time() - start_time) / 60
+            actions_str = ", ".join([f"{a:.2f}" for a in log_info['actions']])
             log_info.update({
                 "step": step_num,
                 "reward": eval_reward,
@@ -144,6 +150,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_logp={log_info['avg_logp']:.3f}, max_logp={log_info['max_logp']:.3f}, min_logp={log_info['min_logp']:.3f}\n"
                 f"\tavg_old_logp={log_info['avg_old_logp']:.3f}, max_old_logp={log_info['max_old_logp']:.3f}, min_old_logp={log_info['min_old_logp']:.3f}\n"
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
+                f"\tapprox_kl={approx_kl:.3f}, clipped_frac={log_info['clipped_frac']:.3f}\n"
+                f"\tsampeld_actions=({actions_str})\n"
             )
             print(
                 f"\n#Step {step_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, eval_fps={eval_fps:.2f}\n"
@@ -156,9 +164,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_old_logp={log_info['avg_old_logp']:.3f}, max_old_logp={log_info['max_old_logp']:.3f}, min_old_logp={log_info['min_old_logp']:.3f}\n"
                 f"\tavg_delta_logp={log_info['avg_delta_logp']:.3f}, max_delta_logp={log_info['max_delta_logp']:.3f}, min_delta_logp={log_info['min_delta_logp']:.3f}\n"
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
-                f"\t(a0, a1, a2, a3, a4, a5) = ({log_info['a0']:.2f}, {log_info['a1']:.2f}, "
-                f"{log_info['a2']:.2f}, {log_info['a3']:.2f}, {log_info['a4']:.2f}, "
-                f"{log_info['a5']:.2f})\n"
+                f"\tapprox_kl={approx_kl:.3f}, clipped_frac={log_info['clipped_frac']:.3f}\n"
+                f"\tsampeld_actions=({actions_str})\n"
             )
 
         # Save checkpoints

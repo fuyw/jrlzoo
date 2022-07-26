@@ -26,7 +26,7 @@ def get_config():
     config.initializer = "orthogonal"
 
     # Number of training epochs per each unroll of the policy
-    config.num_epochs = 3
+    config.num_epochs = 4
 
     # GAE lambda
     config.lmbda = 0.95
@@ -39,6 +39,9 @@ def get_config():
 
     # Entropy loss weight
     config.entropy_coeff = 0.01
+
+    # Target KL for early stopping
+    config.target_kl = 0.01
 
     # Linearly decay lr and clip parameter to zero
     config.decaying_lr_and_clip_param = False
