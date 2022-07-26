@@ -1,5 +1,4 @@
 import gym
-import numpy as np
 
 
 def create_env(env_name: str, seed: int):
