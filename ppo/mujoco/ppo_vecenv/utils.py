@@ -66,12 +66,9 @@ def gae_advantages(rewards: np.ndarray, discounts: np.ndarray,
 
 
 class PPOBuffer:
-
     def __init__(self, obs_dim, act_dim, rollout_len, actor_num, gamma, lmbda):
-        self.observations = np.zeros((rollout_len, actor_num, obs_dim),
-                                     dtype=np.float32)
-        self.actions = np.zeros((rollout_len, actor_num, act_dim),
-                                dtype=np.int32)
+        self.observations = np.zeros((rollout_len, actor_num, obs_dim), dtype=np.float32)
+        self.actions = np.zeros((rollout_len, actor_num, act_dim), dtype=np.float32)
         self.rewards = np.zeros((rollout_len, actor_num), dtype=np.float32)
         self.values = np.zeros((rollout_len + 1, actor_num), dtype=np.float32)
         self.log_probs = np.zeros((rollout_len, actor_num), dtype=np.float32)
@@ -112,11 +109,11 @@ class PPOBuffer:
         targets = advantages + self.values[:-1, :]
 
         # concatenate results
-        trajectory_batch = Batch(observations=self.observations.reshape(
-            (self.trajectory_len, self.obs_dim)),
-                                 actions=self.actions.reshape(
-                                     self.trajectory_len, self.act_dim),
-                                 log_probs=self.log_probs.reshape(-1),
-                                 targets=targets.reshape(-1),
-                                 advantages=advantages.reshape(-1))
+        trajectory_batch = Batch(
+            observations=self.observations.reshape((self.trajectory_len, self.obs_dim)),
+            actions=self.actions.reshape(self.trajectory_len, self.act_dim),
+            log_probs=self.log_probs.reshape(self.trajectory_len,),
+            targets=targets.reshape(self.trajectory_len,),
+            advantages=advantages.reshape(self.trajectory_len,),
+        )
         return trajectory_batch

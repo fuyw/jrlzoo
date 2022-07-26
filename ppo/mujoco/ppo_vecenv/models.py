@@ -27,14 +27,8 @@ def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
     return nn.initializers.lecun_normal()
 
 
-def atanh(x: jnp.ndarray):
-    one_plus_x = jnp.clip(1 + x, a_min=1e-6)
-    one_minus_x = jnp.clip(1 - x, a_min=1e-6)
-    return 0.5 * jnp.log(one_plus_x / one_minus_x)
-
-
 class MLP(nn.Module):
-    hidden_dims: Tuple[int] = (256, 256)
+    hidden_dims: Tuple[int] = (64, 64)
     init_fn: Callable = nn.initializers.glorot_uniform()
     activate_final: bool = True
 
@@ -74,59 +68,31 @@ class Actor(nn.Module):
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
         self.mu_layer = nn.Dense(self.act_dim,
-                                 kernel_init=init_fn(
-                                     self.initializer,
-                                     5 / 3))  # only affect orthogonal init
-        self.std_layer = nn.Dense(self.act_dim,
-                                  kernel_init=init_fn(self.initializer, 1.0))
+                                 kernel_init=init_fn(self.initializer, 5/3))  # only affect orthogonal init
+        self.log_std = self.param('log_std', nn.initializers.zeros, (self.act_dim,))
 
     def __call__(self, rng: Any, observations: jnp.ndarray):
         x = self.net(observations)
         mu = self.mu_layer(x)
-        log_std = self.std_layer(x)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        mu = nn.tanh(mu)
+        log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
         std = jnp.exp(log_std)
-        action_distributions = distrax.Normal(mu, std)
+        action_distributions = distrax.MultivariateNormalDiag(mu, std)
         sampled_actions, log_probs = action_distributions.sample_and_log_prob(
             seed=rng)
-        return mu, sampled_actions, log_probs.sum(axis=-1)
+        return mu, sampled_actions, log_probs
 
     def get_logp(self, observations: jnp.ndarray,
                  actions: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observations)
         mu = self.mu_layer(x)
-        log_std = self.std_layer(x)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        mu = nn.tanh(mu)
+        log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
         std = jnp.exp(log_std)
-        action_distributions = distrax.Normal(mu, std)
-        log_probs = action_distributions.log_prob(actions).sum(axis=-1)
-        entropy = action_distributions.entropy().sum(axis=-1)
+        action_distributions = distrax.MultivariateNormalDiag(mu, std)
+        log_probs = action_distributions.log_prob(actions)
+        entropy = action_distributions.entropy()
         return log_probs, entropy
-
-
-class ActorCritic(nn.Module):
-    act_dim: int
-    hidden_dims: Tuple[int] = (64, 64)
-    initializer: str = "orthogonal"
-
-    def setup(self):
-        self.net = MLP(self.hidden_dims,
-                       init_fn=init_fn(self.initializer),
-                       activate_final=True)
-        self.actor = Actor(self.act_dim, hidden_dims=self.hidden_dims)
-        self.critic = Critic(self.hidden_dims, self.initializer)
-
-    def __call__(self, key: Any, observations: jnp.ndarray):
-        mean_actions, sampled_actions, log_probs = self.actor(
-            key, observations)
-        values = self.critic(observations)
-        return mean_actions, sampled_actions, log_probs, values
-
-    def get_logp(self, observations: jnp.ndarray,
-                 actions: jnp.ndarray) -> jnp.ndarray:
-        log_probs, entropy = self.actor.get_logp(observations, actions)
-        values = self.critic(observations)
-        return log_probs, values, entropy
 
 
 class PPOAgent:
@@ -140,16 +106,18 @@ class PPOAgent:
 
         # initialize learner
         self.rng = jax.random.PRNGKey(config.seed)
+        self.rng, actor_key, critic_key = jax.random.split(self.rng, 3)
         dummy_obs = jnp.ones([1, obs_dim])
-        self.learner = ActorCritic(act_dim=act_dim,
-                                   hidden_dims=config.hidden_dims,
-                                   initializer=config.initializer)
-        learner_params = self.learner.init(self.rng, self.rng,
-                                           dummy_obs)["params"]
-        self.learner_state = train_state.TrainState.create(
-            apply_fn=ActorCritic.apply,
-            params=learner_params,
-            tx=optax.adam(lr))
+
+        self.actor = Actor(act_dim, config.hidden_dims, config.initializer)
+        actor_params = self.actor.init(actor_key, actor_key, dummy_obs)["params"]
+        self.actor_state = train_state.TrainState.create(
+            apply_fn=Actor.apply, params=actor_params, tx=optax.adam(config.lr))
+
+        self.critic = Critic(config.hidden_dims, config.initializer)
+        critic_params = self.critic.init(critic_key, dummy_obs)["params"]
+        self.critic_state = train_state.TrainState.create(
+            apply_fn=Critic.apply, params=critic_params, tx=optax.adam(config.lr))
 
     @functools.partial(jax.jit, static_argnames=("self", "eval_mode"))
     def _sample_action(self,
@@ -157,39 +125,54 @@ class PPOAgent:
                        key: Any,
                        observations: jnp.ndarray,
                        eval_mode: bool = False):
-        mean_actions, sampled_actions, log_probs, values = self.learner.apply(
+        mean_actions, sampled_actions, log_probs = self.actor.apply(
             {"params": params}, key, observations)
-        return jnp.where(eval_mode, mean_actions,
-                         sampled_actions), log_probs, values
+        return jnp.where(eval_mode, mean_actions, sampled_actions), log_probs
 
     def sample_actions(self,
                        observations: jnp.ndarray,
                        eval_mode: bool = False):
         self.rng, key = jax.random.split(self.rng, 2)
-        sampled_actions, log_probs, values = self._sample_action(
-            self.learner_state.params, key, observations, eval_mode)
-        sampled_actions, log_probs, values = jax.device_get(
-            (sampled_actions, log_probs, values))
-        return sampled_actions.clip(-1., 1.), log_probs, values
+        sampled_actions, log_probs = self._sample_action(
+            self.actor_state.params, key, observations, eval_mode)
+        sampled_actions, log_probs = jax.device_get((sampled_actions, log_probs))
+        return sampled_actions, log_probs
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def train_step(self, learner_state: train_state.TrainState, batch: Batch):
+    def _get_values(self, params, observations):
+        values = self.critic.apply({"params": params}, observations)
+        return values
 
-        def loss_fn(params, observations, actions, old_log_probs, targets,
+    def get_values(self, observations: jnp.ndarray):
+        values = self._get_values(self.critic_state.params, observations)
+        return jax.device_get(values)
+
+    @functools.partial(jax.jit, static_argnames=("self"))
+    def train_step(self,
+                   actor_state: train_state.TrainState,
+                   critic_state: train_state.TrainState,
+                   batch: Batch):
+
+        def loss_fn(actor_params,
+                    critic_params,
+                    observations,
+                    actions,
+                    old_log_probs,
+                    targets,
                     advantages):
-            log_probs, values, entropy = self.learner.apply(
-                {"params": params},
-                observations,
-                actions,
-                method=ActorCritic.get_logp)
+            log_probs, entropy = self.actor.apply({"params": actor_params},
+                                                  observations,
+                                                  actions,
+                                                  method=Actor.get_logp) 
+            values = self.critic.apply({"params": critic_params}, observations)
 
             # clipped PPO loss
             ratios = jnp.exp(log_probs - old_log_probs)
             clipped_ratios = jnp.clip(ratios, 1. - self.clip_param,
                                       1. + self.clip_param)
-            actor_loss1 = ratios * advantages
-            actor_loss2 = clipped_ratios * advantages
-            ppo_loss = -jnp.minimum(actor_loss1, actor_loss2).mean()
+            pg_loss1 = ratios * advantages
+            pg_loss2 = clipped_ratios * advantages
+            ppo_loss = -jnp.minimum(pg_loss1, pg_loss2).mean()
 
             # value loss
             value_loss = jnp.square(targets - values).mean() * self.vf_coeff
@@ -217,38 +200,63 @@ class PPOAgent:
                 "avg_logp": log_probs.mean(),
                 "max_logp": log_probs.max(),
                 "min_logp": log_probs.min(),
+                "avg_delta_logp": (log_probs - old_log_probs).mean(),
+                "max_delta_logp": (log_probs - old_log_probs).max(),
+                "min_delta_logp": (log_probs - old_log_probs).min(),
                 "avg_old_logp": old_log_probs.mean(),
                 "max_old_logp": old_log_probs.max(),
                 "min_old_logp": old_log_probs.min(),
+                "a0": actions[:, 0].mean(),
+                "a1": actions[:, 1].mean(),
+                "a2": actions[:, 2].mean(),
+                "a3": actions[:, 3].mean(),
+                "a4": actions[:, 4].mean(),
+                "a5": actions[:, 5].mean(),
             }
             return total_loss, log_info
 
-        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+        grad_fn = jax.value_and_grad(loss_fn, argnums=(0, 1), has_aux=True)
         normalized_advantages = (batch.advantages - batch.advantages.mean()
                                  ) / (batch.advantages.std() + 1e-8)
-        (_, log_info), grads = grad_fn(learner_state.params,
-                                       batch.observations, batch.actions,
-                                       batch.log_probs, batch.targets,
+        (_, log_info), grads = grad_fn(actor_state.params,
+                                       critic_state.params,
+                                       batch.observations,
+                                       batch.actions,
+                                       batch.log_probs,
+                                       batch.targets,
                                        normalized_advantages)
-        new_learner_state = learner_state.apply_gradients(grads=grads)
-        return new_learner_state, log_info
+        actor_grads, critic_grads = grads
+        new_actor_state = actor_state.apply_gradients(grads=actor_grads)
+        new_critic_state = critic_state.apply_gradients(grads=critic_grads)
+        return new_actor_state, new_critic_state, log_info
 
     def update(self, batch: Batch):
-        self.learner_state, log_info = self.train_step(self.learner_state,
-                                                       batch)
+        self.actor_state, self.critic_state, log_info = self.train_step(
+            self.actor_state, self.critic_state, batch)
         return log_info
 
     def save(self, fname: str, cnt: int):
         checkpoints.save_checkpoint(fname,
-                                    self.learner_state,
+                                    self.actor_state,
                                     cnt,
-                                    prefix="ppo_",
+                                    prefix="ppo_actor_",
+                                    keep=20,
+                                    overwrite=True)
+        checkpoints.save_checkpoint(fname,
+                                    self.critic_state,
+                                    cnt,
+                                    prefix="ppo_critic_",
                                     keep=20,
                                     overwrite=True)
 
     def load(self, fname, step):
-        self.learner_state = checkpoints.restore_checkpoint(
+        self.actor_state = checkpoints.restore_checkpoint(
             ckpt_dir=fname,
-            target=self.learner_state,
+            target=self.actor_state,
             step=step,
-            prefix="ppo_")
+            prefix="ppo_actor_")
+        self.critic_state = checkpoints.restore_checkpoint(
+            ckpt_dir=fname,
+            target=self.critic_state,
+            step=step,
+            prefix="ppo_critic_")

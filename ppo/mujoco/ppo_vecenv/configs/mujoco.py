@@ -20,19 +20,19 @@ def get_config():
     config.rollout_len = 125
 
     # Training parameters
-    config.lr = 2.5e-4
+    config.lr = 3e-4
     config.gamma = 0.99
     config.hidden_dims = (64, 64)
     config.initializer = "orthogonal"
 
     # Number of training epochs per each unroll of the policy
-    config.num_epochs = 4
+    config.num_epochs = 3
 
     # GAE lambda
     config.lmbda = 0.95
 
     # PPO clip raio
-    config.clip_param = 0.1
+    config.clip_param = 0.2
 
     # Value function loss weight
     config.vf_coeff = 0.5

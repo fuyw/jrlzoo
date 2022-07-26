@@ -1,4 +1,5 @@
 import os
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".5"
 import time
 from typing import Tuple
 
@@ -12,8 +13,6 @@ import env_utils
 from models import PPOAgent
 from utils import Batch, ExpTuple, PPOBuffer, get_logger, get_lr_scheduler
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
-
 
 #####################
 # Utility Functions #
@@ -26,8 +25,8 @@ def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
-            action, _, _ = agent.sample_actions(obs[None, ...], eval_mode=True)
-            next_obs, reward, done, _ = env.step(action.squeeze())
+            action, _ = agent.sample_actions(obs[None, ...], eval_mode=True)
+            next_obs, reward, done, _ = env.step(action.squeeze().clip(-0.99999, 0.99999))
             avg_reward += reward
             eval_step += 1
             obs = next_obs
@@ -62,14 +61,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     ckpt_steps = loop_steps // 10
 
     # Initialize envpool envs
-    train_envs = env_utils.create_vec_env(config.env_name,
-                                          num_envs=config.actor_num,
-                                          seeds=range(config.actor_num))
+    train_envs = gym.vector.SyncVectorEnv([
+        env_utils.create_env(config.env_name, seed=i) for i in range(config.actor_num)])
     eval_env = gym.make(config.env_name)
     act_dim = eval_env.action_space.shape[0]
     obs_dim = eval_env.observation_space.shape[0]
     buffer = PPOBuffer(obs_dim, act_dim, config.rollout_len, config.actor_num,
                        config.gamma, config.lmbda)
+
+    print(f"Total_steps = {config.total_steps/1e6:.0f}M steps, "
+          f"actor_num = {config.actor_num}, "
+          f"trajectory_len = {trajectory_len}, "
+          f"act_dim = {act_dim}, obs_dim = {obs_dim}.")
 
     # initialize lr scheduler
     lr = get_lr_scheduler(config, loop_steps, iterations_per_step)
@@ -87,8 +90,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         all_experiences = []
 
         for _ in range(config.rollout_len + 1):
-            actions, log_probs, values = agent.sample_actions(observations)
-            next_observations, rewards, dones, _ = train_envs.step(actions)
+            actions, log_probs = agent.sample_actions(observations)
+            values = agent.get_values(observations)
+            next_observations, rewards, dones, _ = train_envs.step(actions.clip(-0.99999, 0.99999))
             experiences = [
                 ExpTuple(observations[i], actions[i], rewards[i], values[i],
                          log_probs[i], dones[i])
@@ -138,6 +142,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_target={log_info['avg_target']:.3f}, max_target={log_info['max_target']:.3f}, min_target={log_info['min_target']:.3f}\n"
                 f"\tavg_value={log_info['avg_value']:.3f}, max_value={log_info['max_value']:.3f}, min_value={log_info['min_value']:.3f}\n"
                 f"\tavg_logp={log_info['avg_logp']:.3f}, max_logp={log_info['max_logp']:.3f}, min_logp={log_info['min_logp']:.3f}\n"
+                f"\tavg_old_logp={log_info['avg_old_logp']:.3f}, max_old_logp={log_info['max_old_logp']:.3f}, min_old_logp={log_info['min_old_logp']:.3f}\n"
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
             )
             print(
@@ -149,7 +154,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_value={log_info['avg_value']:.3f}, max_value={log_info['max_value']:.3f}, min_value={log_info['min_value']:.3f}\n"
                 f"\tavg_logp={log_info['avg_logp']:.3f}, max_logp={log_info['max_logp']:.3f}, min_logp={log_info['min_logp']:.3f}\n"
                 f"\tavg_old_logp={log_info['avg_old_logp']:.3f}, max_old_logp={log_info['max_old_logp']:.3f}, min_old_logp={log_info['min_old_logp']:.3f}\n"
+                f"\tavg_delta_logp={log_info['avg_delta_logp']:.3f}, max_delta_logp={log_info['max_delta_logp']:.3f}, min_delta_logp={log_info['min_delta_logp']:.3f}\n"
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
+                f"\t(a0, a1, a2, a3, a4, a5) = ({log_info['a0']:.2f}, {log_info['a1']:.2f}, "
+                f"{log_info['a2']:.2f}, {log_info['a3']:.2f}, {log_info['a4']:.2f}, "
+                f"{log_info['a5']:.2f})\n"
             )
 
         # Save checkpoints
