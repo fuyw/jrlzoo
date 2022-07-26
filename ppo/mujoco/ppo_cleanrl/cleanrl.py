@@ -34,85 +34,23 @@ def eval_policy(agent, env, eval_episodes: int = 10):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp-name",
-                        type=str,
-                        default=os.path.basename(__file__).rstrip(".py"),
-                        help="the name of this experiment")
-    parser.add_argument("--seed",
-                        type=int,
-                        default=1,
-                        help="seed of the experiment")
-    parser.add_argument(
-        "--torch-deterministic",
-        type=lambda x: bool(strtobool(x)),
-        default=True,
-        nargs="?",
-        const=True,
-        help="if toggled, `torch.backends.cudnn.deterministic=False`")
-    parser.add_argument("--cuda",
-                        type=lambda x: bool(strtobool(x)),
-                        default=True,
-                        nargs="?",
-                        const=True,
-                        help="if toggled, cuda will be enabled by default")
-    parser.add_argument(
-        "--capture-video",
-        type=lambda x: bool(strtobool(x)),
-        default=False,
-        nargs="?",
-        const=True,
-        help=
-        "weather to capture videos of the agent performances (check out `videos` folder)"
-    )
+    parser.add_argument("--seed", type=int, default=1)
 
     # Algorithm specific arguments
-    parser.add_argument("--env-id",
-                        type=str,
-                        default="HalfCheetah-v2",
-                        help="the id of the environment")
-    parser.add_argument("--total-timesteps",
-                        type=int,
-                        default=1000000,
-                        help="total timesteps of the experiments")
-    parser.add_argument("--learning-rate",
-                        type=float,
-                        default=3e-4,
-                        help="the learning rate of the optimizer")
-    parser.add_argument("--num-envs",
-                        type=int,
-                        default=1,
-                        help="the number of parallel game environments")
-    parser.add_argument(
-        "--num-steps",
-        type=int,
-        default=2048,
-        help="the number of steps to run in each environment per policy rollout"
-    )
-    parser.add_argument(
-        "--anneal-lr",
-        type=lambda x: bool(strtobool(x)),
-        default=True,
-        nargs="?",
-        const=True,
-        help="Toggle learning rate annealing for policy and value networks")
+    parser.add_argument("--env-id", type=str, default="HalfCheetah-v2")
+    parser.add_argument("--total-timesteps", type=int, default=int(1e6))
+    parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--num-envs", type=int, default=4)
+    parser.add_argument("--num-steps", type=int, default=2048)
     parser.add_argument("--gae",
                         type=lambda x: bool(strtobool(x)),
                         default=True,
                         nargs="?",
                         const=True,
                         help="Use GAE for advantage computation")
-    parser.add_argument("--gamma",
-                        type=float,
-                        default=0.99,
-                        help="the discount factor gamma")
-    parser.add_argument("--gae-lambda",
-                        type=float,
-                        default=0.95,
-                        help="the lambda for the general advantage estimation")
-    parser.add_argument("--num-minibatches",
-                        type=int,
-                        default=32,
-                        help="the number of mini-batches")
+    parser.add_argument("--gamma", type=float, default=0.99)
+    parser.add_argument("--gae-lambda", type=float, default=0.95)
+    parser.add_argument("--num-minibatches", type=int, default=32)
     parser.add_argument("--update-epochs",
                         type=int,
                         default=10,
@@ -155,53 +93,37 @@ def parse_args():
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
-    # fmt: on
     return args
 
 
 def make_env(env_id, seed):
-
     def thunk():
         env = gym.make(env_id)
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
         return env
-
     return thunk
-
-
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
-
 
 class Agent(nn.Module):
 
-    def __init__(self, envs):
+    def __init__(self, obs_dim, act_dim):
         super().__init__()
         self.critic = nn.Sequential(
-            layer_init(
-                nn.Linear(
-                    np.array(envs.single_observation_space.shape).prod(), 64)),
+            nn.Linear(obs_dim, 64),
             nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
+            nn.Linear(64, 64),
             nn.Tanh(),
-            layer_init(nn.Linear(64, 1), std=1.0),
+            nn.Linear(64, 1),
         )
         self.actor_mean = nn.Sequential(
-            layer_init(
-                nn.Linear(
-                    np.array(envs.single_observation_space.shape).prod(), 64)),
+            nn.Linear(obs_dim, 64),
             nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
+            nn.Linear(64, 64),
             nn.Tanh(),
-            layer_init(nn.Linear(64, np.prod(envs.single_action_space.shape)),
-                       std=0.01),
+            nn.Linear(64, act_dim),
         )
-        self.actor_logstd = nn.Parameter(
-            torch.zeros(1, np.prod(envs.single_action_space.shape)))
+        self.actor_logstd = nn.Parameter(torch.zeros(1, act_dim))
 
     def get_value(self, x):
         return self.critic(x)
@@ -233,17 +155,14 @@ if __name__ == "__main__":
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = args.torch_deterministic
-
-    device = torch.device(
-        "cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # env setup
     eval_env = gym.make(args.env_id)
     obs_dim = eval_env.observation_space.shape[0]
     act_dim = eval_env.action_space.shape[0]
     envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed+i) for i in range(args.num_envs)])
-    agent = Agent(envs).to(device)
+    agent = Agent(obs_dim, act_dim).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -276,7 +195,7 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, done, info = envs.step(action.cpu().numpy())
+            next_obs, reward, done, info = envs.step(action.cpu().numpy().clip(-0.99999, 0.99999))
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             next_obs, next_done = torch.Tensor(next_obs).to(
                 device), torch.Tensor(done).to(device)
@@ -404,20 +323,13 @@ if __name__ == "__main__":
             f"min_value={newvalue.min().item():.3f}\n"
             f"\tavg_ratio={ratio.mean().item():.3f}, "
             f"max_ratio={ratio.max().item():.3f}, "
-            f"min_ratio={ratio.min().item():.3f}, "
+            f"min_ratio={ratio.min().item():.3f}\n"
+            f"\tsampled_actions = ("
+                f"{abs(b_actions[:, 0]).mean():.3f}, "
+                f"{abs(b_actions[:, 1]).mean():.3f}, "
+                f"{abs(b_actions[:, 2]).mean():.3f}, "
+                f"{abs(b_actions[:, 3]).mean():.3f}, "
+                f"{abs(b_actions[:, 4]).mean():.3f}, "
+                f"{abs(b_actions[:, 5]).mean():.3f})\n"
         )
-
-        # writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        # writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        # writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(),
-        #                   global_step)
-        # writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        # writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-        # writer.add_scalar("losses/explained_variance", explained_var,
-        #                   global_step)
-        # print("SPS:", int(global_step / (time.time() - start_time)))
-        # writer.add_scalar("charts/SPS",
-        #                   int(global_step / (time.time() - start_time)),
-        #                   global_step)
-
     envs.close()
