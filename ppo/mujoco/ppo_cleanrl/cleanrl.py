@@ -159,19 +159,10 @@ def parse_args():
     return args
 
 
-def make_env(env_id, seed, idx, capture_video, run_name, gamma):
+def make_env(env_id, seed):
 
     def thunk():
         env = gym.make(env_id)
-        # env = gym.wrappers.RecordEpisodeStatistics(env)
-        # env = gym.wrappers.ClipAction(env)
-        # env = gym.wrappers.NormalizeObservation(env)
-        # env = gym.wrappers.TransformObservation(
-        #     env, lambda obs: np.clip(obs, -10, 10))
-        # env = gym.wrappers.NormalizeReward(env, gamma=gamma)
-        # env = gym.wrappers.TransformReward(
-        #     env, lambda reward: np.clip(reward, -10, 10))
-
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -237,7 +228,6 @@ class Agent(nn.Module):
 
 if __name__ == "__main__":
     args = parse_args()
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -250,22 +240,15 @@ if __name__ == "__main__":
 
     # env setup
     eval_env = gym.make(args.env_id)
-    envs = gym.vector.SyncVectorEnv([
-        make_env(args.env_id, args.seed + i, i, args.capture_video, run_name,
-                 args.gamma) for i in range(args.num_envs)
-    ])
-    assert isinstance(
-        envs.single_action_space,
-        gym.spaces.Box), "only continuous action space is supported"
-
+    obs_dim = eval_env.observation_space.shape[0]
+    act_dim = eval_env.action_space.shape[0]
+    envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed+i) for i in range(args.num_envs)])
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs) +
-                      envs.single_observation_space.shape).to(device)
-    actions = torch.zeros((args.num_steps, args.num_envs) +
-                          envs.single_action_space.shape).to(device)
+    obs = torch.zeros((args.num_steps, args.num_envs, obs_dim)).to(device)
+    actions = torch.zeros((args.num_steps, args.num_envs, act_dim)).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -279,12 +262,6 @@ if __name__ == "__main__":
     num_updates = args.total_timesteps // args.batch_size
 
     for update in trange(1, num_updates + 1):
-        # Annealing the rate if instructed to do so.
-        # if args.anneal_lr:
-        #     frac = 1.0 - (update - 1.0) / num_updates
-        #     lrnow = frac * args.learning_rate
-        #     optimizer.param_groups[0]["lr"] = lrnow
-
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
             obs[step] = next_obs
