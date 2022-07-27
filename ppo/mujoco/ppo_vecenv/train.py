@@ -121,7 +121,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             # early stopping
             approx_kl /= batch_num
             if approx_kl > 1.5 * config.target_kl:
-                print("Early stopping at step{step} due to reaching max kl.")
                 break
 
         # evaluate
