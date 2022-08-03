@@ -20,12 +20,13 @@ def eval_policy(agent, env, eval_episodes=10):
         obs, done = env.reset(), False  # (4, 84, 84)
         while not done:
             action = agent.sample_action(
-                agent.state.params, np.moveaxis(obs, 0, -1)).item()
+                agent.state.params, np.moveaxis(obs, 0, -1)[None]).item()
             obs, reward, done, _ = env.step(action)
             act_counts[action] += 1
             avg_reward += reward
     avg_reward /= eval_episodes
     act_counts /= act_counts.sum()
+    act_counts = ", ".join([f"{i:.2f}" for i in act_counts])
     return avg_reward, act_counts, time.time() - t1
 
 
@@ -37,6 +38,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     ckpt_dir = f"{config.ckpt_dir}/{config.env_name}/{exp_name}"
     eval_freq = config.total_timesteps // config.eval_num
     ckpt_freq = config.total_timesteps // config.ckpt_num
+    explore_timesteps = config.explore_frac * config.total_timesteps
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
     # initialize logger
@@ -55,12 +57,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     replay_buffer = ReplayBuffer(max_size=config.buffer_size)
 
     # start training
-    res = []
+    res = [{"step": 0, "eval_reward": eval_policy(agent, eval_env)[0]}]
     obs = env.reset()
     for t in trange(1, config.total_timesteps+1):
         # greedy epsilon exploration
-        epsilon = linear_schedule(start_epsilon=0.5, end_epsilon=0.05,
-                                  duration=config.total_timesteps, t=t)
+        epsilon = linear_schedule(start_epsilon=1.,
+                                  end_epsilon=0.05,
+                                  duration=explore_timesteps,
+                                  t=t)
 
         # sample action
         if t <= config.warmup_timesteps:
@@ -71,29 +75,26 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             else:
                 context = replay_buffer.recent_obs()
                 context.append(obs)
-                context = np.stack(context, axis=-1)  # (84, 84, 4)
+                context = np.stack(context, axis=-1)[None]  # (84, 84, 4)
                 action = agent.sample_action(agent.state.params, context).item()
 
         # (84, 84), 0.0, False
         next_obs, reward, done, _ = env.step(action)
         replay_buffer.add(Experience(obs, action, reward, done))
         obs = next_obs
-
-        # reset env
         if done:
             obs = env.reset()
 
         # update the agent
-        if t > config.warmup_timesteps:
+        if (t > config.warmup_timesteps) and (t % config.train_freq == 0):
             batch = replay_buffer.sample_batch(config.batch_size)
             log_info = agent.update(batch)
 
         # evaluate agent
-        if t % eval_freq == 0:
+        if (t > config.warmup_timesteps) and (t % eval_freq == 0):
             eval_reward, act_counts, eval_time = eval_policy(agent, eval_env)
-            act_counts = ", ".join([f"{i:.2f}" for i in act_counts])
             logger.info(
-                f"Step {t}: reward={eval_reward}, total_time={(time.time()-start_time)/60:.2f}min, "
+                f"Step {t//1000}K: reward={eval_reward}, total_time={(time.time()-start_time)/60:.2f}min, "
                 f"eval_time: {eval_time:.0f}s\n"
                 f"\tavg_loss: {log_info['avg_loss']:.3f}, max_loss: {log_info['max_loss']:.3f}, "
                 f"min_loss: {log_info['min_loss']:.3f}\n"
@@ -104,7 +105,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"min_target_Q: {log_info['min_target_Q']:.3f}\n"
                 f"\tavg_batch_rewards: {batch.rewards.mean():.3f}, max_batch_rewards: {batch.rewards.max():.3f}, "
                 f"min_batch_rewards: {batch.rewards.min():.3f}\n"
-                f"\tact_counts: ({act_counts}), epsilon: {epsilon:.3f}\n"
+                f"\tact_counts: ({act_counts})\n"
+                f"\tepsilon: {epsilon:.6f}, lr: {log_info['lr']:.6f}\n"
             )
             log_info.update({"step": t, "eval_reward": eval_reward, "eval_time": eval_time})
             res.append(log_info)
@@ -114,6 +116,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             agent.save(ckpt_dir, t // ckpt_freq)
 
     # save logs
-    replay_buffer.save(f"{config.dataset_dir}/{exp_name}")
+    # replay_buffer.save(f"{config.dataset_dir}/{exp_name}")
     df = pd.DataFrame(res).set_index("step")
     df.to_csv(f"logs/{config.env_name}/{exp_name}.csv")

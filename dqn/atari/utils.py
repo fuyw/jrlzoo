@@ -4,9 +4,8 @@ import logging
 import numpy as np
 from collections import deque, namedtuple
 
-Experience = namedtuple(
-    "Experience",
-    ["observation", "action", "reward", "done"])
+Experience = namedtuple("Experience",
+                        ["observation", "action", "reward", "done"])
 Batch = namedtuple(
     "Batch",
     ["observations", "actions", "rewards", "next_observations", "discounts"])
@@ -14,14 +13,14 @@ Batch = namedtuple(
 
 class ReplayBuffer:
     def __init__(self, max_size, obs_shape=(84, 84), context_len=4):
-        self.max_size = max_size
+        self.max_size = int(max_size)
         self.obs_shape = obs_shape
-        self.context_len = context_len
+        self.context_len = int(context_len)
 
-        self.obs = np.zeros((self.max_size, ) + obs_shape, dtype="uint8")
-        self.action = np.zeros((self.max_size, ), dtype="int32")
-        self.reward = np.zeros((self.max_size, ), dtype="float32")
-        self.done = np.zeros((self.max_size, ), dtype="bool")
+        self.obs = np.zeros((self.max_size, ) + obs_shape, dtype='uint8')  # (N, 84, 84)
+        self.action = np.zeros((self.max_size, ), dtype='int32')           # (N,)
+        self.reward = np.zeros((self.max_size, ), dtype='float32')
+        self.done = np.zeros((self.max_size, ), dtype='bool')
 
         self._curr_size = 0
         self._curr_pos = 0
@@ -44,13 +43,13 @@ class ReplayBuffer:
     def recent_obs(self):
         """ maintain recent obs for training"""
         lst = list(self._context)
-        obs = [np.zeros(self.obs_shape, dtype="uint8")] * \
+        obs = [np.zeros(self.obs_shape, dtype='uint8')] * \
                     (self._context.maxlen - len(lst))
         obs.extend([k.observation for k in lst])
         return obs
 
     def sample(self, idx):
-        """ return obs, action, reward, isOver,
+        """ return obs, action, reward, done,
             note that some frames in obs may be generated from last episode,
             they should be removed from obs
             """
@@ -85,8 +84,8 @@ class ReplayBuffer:
 
     def _assign(self, pos, exp):
         self.obs[pos] = exp.observation
-        self.action[pos] = exp.action
         self.reward[pos] = exp.reward
+        self.action[pos] = exp.action
         self.done[pos] = exp.done
 
     def sample_batch(self, batch_size):
@@ -99,16 +98,17 @@ class ReplayBuffer:
         return self._process_batch(batch_exp)
 
     def _process_batch(self, batch_exp):
-        obs = np.asarray([e[0] for e in batch_exp], dtype="uint8")
-        reward = np.asarray([e[1] for e in batch_exp], dtype="float32")
-        action = np.asarray([e[2] for e in batch_exp], dtype="int8")
-        done = np.asarray([e[3] for e in batch_exp], dtype="bool")
+        obs = np.asarray([e[0] for e in batch_exp], dtype='uint8')
+        reward = np.asarray([e[1] for e in batch_exp], dtype='float32')
+        action = np.asarray([e[2] for e in batch_exp], dtype='int8')
+        done = np.asarray([e[3] for e in batch_exp], dtype='bool')
+
         obs = np.moveaxis(obs, 1, -1)
-        return Batch(obs[:, :, :, :self.context_len],
-                     action,
-                     reward,
-                     obs[:, :, :, 1:],
-                     1.-done)
+        return Batch(observations=obs[:, :, :, :self.context_len],
+                     actions=action,
+                     rewards=reward,
+                     next_observations=obs[:, :, :, 1:],
+                     discounts=1.-done)
 
     def save(self, fname):
         np.savez(fname,
@@ -116,11 +116,23 @@ class ReplayBuffer:
                  actions=self.action,
                  rewards=self.reward,
                  dones=self.done,
-                 ptr=self._curr_size)
+                 curr_size=self._curr_size,
+                 curr_pos=self._curr_pos)
+
+    def load(self, fname):
+        dataset = np.load(fname)
+        self.obs = dataset["observations"]
+        self.action = dataset["actions"]
+        self.reward = dataset["rewards"]
+        self.done = dataset["dones"]
+        self._curr_size = dataset["curr_size"]
+        self._curr_pos = dataset["curr_pos"]
+        self.max_size = len(self.obs)
 
 
 # Exploration linear decay
-def linear_schedule(start_epsilon: float, end_epsilon: float, duration: int, t: int):
+def linear_schedule(start_epsilon: float, end_epsilon: float, duration: int,
+                    t: int):
     slope = (end_epsilon - start_epsilon) / duration
     return max(slope * t + start_epsilon, end_epsilon)
 
@@ -137,8 +149,11 @@ def get_logger(fname):
     return logger
 
 
-def target_update(params: FrozenDict, target_params: FrozenDict, tau: float) -> FrozenDict:
+def target_update(params: FrozenDict, target_params: FrozenDict,
+                  tau: float) -> FrozenDict:
+
     def _update(param: FrozenDict, target_param: FrozenDict):
-        return tau*param + (1-tau)*target_param
+        return tau * param + (1 - tau) * target_param
+
     updated_params = jax.tree_util.tree_map(_update, params, target_params)
     return updated_params
