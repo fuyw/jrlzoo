@@ -12,13 +12,15 @@ Batch = namedtuple(
 
 
 class ReplayBuffer:
+
     def __init__(self, max_size, obs_shape=(84, 84), context_len=4):
         self.max_size = int(max_size)
         self.obs_shape = obs_shape
         self.context_len = int(context_len)
 
-        self.obs = np.zeros((self.max_size, ) + obs_shape, dtype='uint8')  # (N, 84, 84)
-        self.action = np.zeros((self.max_size, ), dtype='int32')           # (N,)
+        self.obs = np.zeros((self.max_size, ) + obs_shape,
+                            dtype='uint8')  # (N, 84, 84)
+        self.action = np.zeros((self.max_size, ), dtype='int32')  # (N,)
         self.reward = np.zeros((self.max_size, ), dtype='float32')
         self.done = np.zeros((self.max_size, ), dtype='bool')
 
@@ -53,8 +55,8 @@ class ReplayBuffer:
             note that some frames in obs may be generated from last episode,
             they should be removed from obs
             """
-        obs = np.zeros(
-            (self.context_len + 1, ) + self.obs_shape, dtype=np.uint8)
+        obs = np.zeros((self.context_len + 1, ) + self.obs_shape,
+                       dtype=np.uint8)
         obs_idx = np.arange(idx, idx + self.context_len + 1) % self._curr_size
 
         # confirm that no frame was generated from last episode
@@ -91,8 +93,8 @@ class ReplayBuffer:
     def sample_batch(self, batch_size):
         """sample a batch from replay memory for training
         """
-        batch_idx = np.random.randint(
-            self._curr_size - self.context_len - 1, size=batch_size)
+        batch_idx = np.random.randint(self._curr_size - self.context_len - 1,
+                                      size=batch_size)
         batch_idx = (self._curr_pos + batch_idx) % self._curr_size
         batch_exp = [self.sample(i) for i in batch_idx]
         return self._process_batch(batch_exp)
@@ -108,7 +110,7 @@ class ReplayBuffer:
                      actions=action,
                      rewards=reward,
                      next_observations=obs[:, :, :, 1:],
-                     discounts=1.-done)
+                     discounts=1. - done)
 
     def save(self, fname):
         np.savez(fname,

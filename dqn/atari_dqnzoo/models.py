@@ -8,30 +8,41 @@ import jax.numpy as jnp
 import optax
 from utils import Batch
 
-
 init_fn = nn.initializers.xavier_uniform()
+
+
 class QNetwork(nn.Module):
     act_dim: int
 
     def setup(self):
-        self.conv1 = nn.Conv(features=32, kernel_size=(8, 8), strides=(4, 4), name="conv1")
-        self.conv2 = nn.Conv(features=64, kernel_size=(4, 4), strides=(2, 2), name="conv2")
-        self.conv3 = nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1), name="conv3")
+        self.conv1 = nn.Conv(features=32,
+                             kernel_size=(8, 8),
+                             strides=(4, 4),
+                             name="conv1")
+        self.conv2 = nn.Conv(features=64,
+                             kernel_size=(4, 4),
+                             strides=(2, 2),
+                             name="conv2")
+        self.conv3 = nn.Conv(features=64,
+                             kernel_size=(3, 3),
+                             strides=(1, 1),
+                             name="conv3")
         self.fc_layer = nn.Dense(features=512, name="fc")
         self.out_layer = nn.Dense(features=self.act_dim, name="out")
 
     def __call__(self, observation):
         x = observation.astype(jnp.float32) / 255.  # (84, 84, 4)
-        x = nn.relu(self.conv1(x))                  # (21, 21, 32)
-        x = nn.relu(self.conv2(x))                  # (11, 11, 64)
-        x = nn.relu(self.conv3(x))                  # (11, 11, 64)
-        x = x.reshape(len(observation), -1)         # (7744,)
-        x = nn.relu(self.fc_layer(x))               # (512,)
-        Qs = self.out_layer(x)                      # (act_dim,)
+        x = nn.relu(self.conv1(x))  # (21, 21, 32)
+        x = nn.relu(self.conv2(x))  # (11, 11, 64)
+        x = nn.relu(self.conv3(x))  # (11, 11, 64)
+        x = x.reshape(len(observation), -1)  # (7744,)
+        x = nn.relu(self.fc_layer(x))  # (512,)
+        Qs = self.out_layer(x)  # (act_dim,)
         return Qs
 
 
 class DQNAgent:
+
     def __init__(self,
                  obs_shape: Tuple[int] = (1, 84, 84, 4),
                  act_dim: int = 6,
@@ -53,10 +64,12 @@ class DQNAgent:
         dummy_obs = jnp.ones(obs_shape)
         params = self.qnet.init(rng, dummy_obs)["params"]
         self.target_params = params
-        self.lr_scheduler = optax.linear_schedule(init_value=lr, end_value=1e-6,
-                                                  transition_steps=total_timesteps)
-        self.state = train_state.TrainState.create(
-            apply_fn=self.qnet.apply, params=params, tx=optax.adam(self.lr_scheduler))
+        self.lr_scheduler = optax.linear_schedule(
+            init_value=lr, end_value=1e-6, transition_steps=total_timesteps)
+        self.state = train_state.TrainState.create(apply_fn=self.qnet.apply,
+                                                   params=params,
+                                                   tx=optax.adam(
+                                                       self.lr_scheduler))
         self.cnt = 0
 
     @functools.partial(jax.jit, static_argnames=("self"))
@@ -66,16 +79,18 @@ class DQNAgent:
         return action
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def train_step(self,
-                   batch: Batch,
-                   state: train_state.TrainState,
+    def train_step(self, batch: Batch, state: train_state.TrainState,
                    target_params: FrozenDict):
-        next_Q = self.qnet.apply({"params": target_params}, batch.next_observations).max(-1)
+        next_Q = self.qnet.apply({
+            "params": target_params
+        }, batch.next_observations).max(-1)
         target_Q = batch.rewards + self.gamma * batch.discounts * next_Q
+
         def loss_fn(params):
             Qs = self.qnet.apply({"params": params}, batch.observations)
-            Q = jax.vmap(lambda q,a: q[a])(Qs, batch.actions.reshape(-1, 1)).squeeze()
-            loss = (Q - target_Q) ** 2
+            Q = jax.vmap(lambda q, a: q[a])(Qs, batch.actions.reshape(
+                -1, 1)).squeeze()
+            loss = (Q - target_Q)**2
             log_info = {
                 "avg_loss": loss.mean(),
                 "max_loss": loss.max(),
@@ -88,6 +103,7 @@ class DQNAgent:
                 "min_target_Q": target_Q.min(),
             }
             return loss.mean(), log_info
+
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
         (_, log_info), grads = grad_fn(state.params)
         new_state = state.apply_gradients(grads=grads)
@@ -95,12 +111,17 @@ class DQNAgent:
 
     def update(self, batch: Batch):
         self.cnt += 1
-        self.state, log_info = self.train_step(batch, self.state, self.target_params)
+        self.state, log_info = self.train_step(batch, self.state,
+                                               self.target_params)
         if self.cnt % self.target_update_freq == 0:
             self.target_params = self.state.params
         log_info["lr"] = self.lr_scheduler(self.state.opt_state[1].count)
         return log_info
 
     def save(self, fname: str, cnt: int):
-        checkpoints.save_checkpoint(fname, self.state, cnt, prefix="dqn_", keep=20,
+        checkpoints.save_checkpoint(fname,
+                                    self.state,
+                                    cnt,
+                                    prefix="dqn_",
+                                    keep=20,
                                     overwrite=True)
