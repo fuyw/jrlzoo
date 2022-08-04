@@ -1,6 +1,8 @@
+import os
+
 from absl import app, flags
 from ml_collections import config_flags
-import os
+
 import train
 
 config_flags.DEFINE_config_file("config", default="configs/atari.py")

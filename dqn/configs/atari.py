@@ -9,15 +9,17 @@ def get_config():
     config.warmup_timesteps = int(5e4)
     config.total_timesteps = int(5e6)
     config.buffer_size = int(1e6)
+    config.update_target_freq = int(1e4)
+    config.explore_frac = 0.1
+    config.train_freq = 4
+    config.batch_size = 32
 
-    # Training parameters
-    config.lr = 3e-4
+    # Model parameters
+    config.lr_start = 3e-4
+    config.lr_end = 1e-5
     config.seed = 42
     config.tau = 0.005
     config.gamma = 0.99
-    config.train_freq = 4
-    config.batch_size = 32
-    config.explore_frac = 0.1
 
     # Logging
     config.ckpt_num = 10
