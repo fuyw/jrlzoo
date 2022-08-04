@@ -28,34 +28,6 @@ class QNetwork(nn.Module):
         return Qs
 
 
-@functools.partial(jax.jit, static_argnums=0)
-def sample(apply_fn, params, observation):
-    """sample action s ~ pi(a|s)"""
-    Qs = apply_fn({"params": params}, observation)
-    action = Qs.argmax(-1)
-    return action
-
-
-@functools.partial(jax.jit, static_argnums=0)
-def update_jit(network_def, state, target_params, batch, gamma):
-    next_Q = network_def.apply({"params": target_params}, batch.next_observations).max(-1)
-    target_Q = batch.rewards + gamma * next_Q * batch.discounts
-    def loss_fn(params):
-        Qs = network_def.apply({"params": params}, batch.observations)
-        Q = jax.vmap(lambda q,a: q[a])(Qs, batch.actions)
-        loss = (Q - target_Q) ** 2
-        log_info = {
-            "avg_Q": Q.mean(),
-            "avg_target_Q": target_Q.mean(),
-            "avg_loss": loss.mean(),
-        }
-        return loss.mean(), log_info
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (_, log_info), grads = grad_fn(state.params)
-    new_state = state.apply_gradients(grads=grads)
-    return new_state, log_info
-
-
 class DQNAgent:
     def __init__(self,
                  act_dim,
@@ -76,21 +48,15 @@ class DQNAgent:
             tx=optax.adam(self.lr_scheduler))
         self.cnt = 0
 
-    def sample(self, observation):
-        action = sample(self.state.apply_fn,
-                        self.state.params,
-                        observation)
-        return action.item()
+    @functools.partial(jax.jit, static_argnums=0)
+    def _sample(self, params, observation):
+        Qs = self.q_network.apply({"params": params}, observation)
+        action = Qs.argmax(-1)
+        return action
 
-    # def update(self, batch):
-    #     # self.cnt += 1
-    #     self.state, log_info = update_jit(self.q_network,
-    #                                       self.state,
-    #                                       self.target_params,
-    #                                       batch,
-    #                                       self.gamma)
-    #     log_info["lr"] = self.lr_scheduler(self.state.opt_state[1].count)
-    #     return log_info
+    def sample(self, observation):
+        action = self._sample(self.state.params, observation)
+        return action.item()
 
     @functools.partial(jax.jit, static_argnums=0)
     def train_step(self, state, target_params, batch):
