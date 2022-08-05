@@ -7,7 +7,7 @@ def get_config():
 
     # General setting
     config.warmup_timesteps = int(5e4)
-    config.total_timesteps = int(5e6)
+    config.total_timesteps = int(1e7)
     config.buffer_size = int(1e6)
     config.update_target_freq = int(1e4)
     config.explore_frac = 0.1

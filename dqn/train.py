@@ -39,7 +39,7 @@ def train_and_evaluate(config):
     # general setting
     start_time = time.time()
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
-    exp_name = f"dqn_s{config.seed}_{timestamp}"
+    exp_name = f"dqn_{config.env_name}_s{config.seed}_{timestamp}"
     exp_info = f'# Running experiment for: {exp_name}_{config.env_name} #'
     eval_freq = config.total_timesteps // config.eval_num
     ckpt_freq = config.total_timesteps // config.ckpt_num
@@ -59,7 +59,7 @@ def train_and_evaluate(config):
                      seed=config.seed,
                      lr_start=config.lr_start,
                      lr_end=config.lr_end,
-                     total_timesteps=config.total_timesteps)
+                     total_timesteps=config.total_timesteps//config.train_freq)
 
     # create the replay buffer
     replay_buffer = ReplayBuffer(max_size=config.buffer_size)
