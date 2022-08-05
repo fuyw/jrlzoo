@@ -7,7 +7,7 @@ from flax.training import train_state
 
 
 init_fn = nn.initializers.xavier_uniform()
-class QNetwork(nn.Module):
+class QNetwork_old(nn.Module):
     act_dim: int
 
     def setup(self):
@@ -25,6 +25,35 @@ class QNetwork(nn.Module):
         x = x.reshape(len(observation), -1)         # (7744,)
         x = nn.relu(self.fc_layer(x))               # (512,)
         Qs = self.out_layer(x)                      # (act_dim,)
+        return Qs
+
+
+class QNetwork(nn.Module):
+    act_dim: int
+
+    def setup(self):
+        self.conv1 = nn.Conv(features=32, kernel_size=(5, 5), strides=(1, 1),
+                             padding=(2, 2), name="conv1")
+        self.conv2 = nn.Conv(features=32, kernel_size=(5, 5), strides=(1, 1),
+                             padding=(2, 2), name="conv2")
+        self.conv3 = nn.Conv(features=64, kernel_size=(4, 4), strides=(1, 1),
+                             padding=(1, 1), name="conv3")
+        self.conv4 = nn.Conv(features=64, kernel_size=(3, 3), strides=(1, 1),
+                             padding=(1, 1), name="conv4")
+        self.fc_layer = nn.Dense(features=512, name="fc")
+        self.out_layer = nn.Dense(features=self.act_dim, name="out")
+
+    def __call__(self, observation):
+        x = observation.astype(jnp.float32) / 255.               # (1, 84, 84, 32)
+        x = nn.relu(self.conv1(x))
+        x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))  # (1, 42, 42, 32)
+        x = nn.relu(self.conv2(x))
+        x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))  # (1, 21, 21, 32)
+        x = nn.relu(self.conv3(x))
+        x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))  # (1, 10, 10, 64)
+        x = x.reshape(len(observation), -1)                      # (6400,)
+        x = nn.relu(self.fc_layer(x))                            # (512,)
+        Qs = self.out_layer(x)                                   # (act_dim,)
         return Qs
 
 

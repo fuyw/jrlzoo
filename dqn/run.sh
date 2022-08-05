@@ -1,11 +1,9 @@
 #!/bin/bash
-sleep 0.5h
-# Script to reproduce results
 atari_envs=(
+    "Breakout"
     "Asterix"
-    "Qbert"
 )
-for i in 1
+for i in 3
 do
     for env in ${atari_envs[*]}
     do
