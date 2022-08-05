@@ -5,6 +5,7 @@ import time
 
 import gym
 import numpy as np
+import pandas as pd
 import wandb
 from tqdm import trange
 
@@ -67,6 +68,7 @@ def train_and_evaluate(config):
     # start training
     obs = env.reset()   # (84, 84)
     fps_t1 = None
+    res = [{"step": 0, "eval_reward": eval_policy(agent, eval_env)[0]}]
     for t in trange(1, 1+config.total_timesteps):
         # select action
         epsilon = linear_schedule(1.0, 0.05, config.explore_frac*config.total_timesteps, t)
@@ -102,8 +104,8 @@ def train_and_evaluate(config):
             if fps_t1 is not None:
                 log_info["fps"] = fps = eval_freq/(fps_t2 - fps_t1)
             eval_reward, act_counts, eval_time = eval_policy(agent, eval_env)
-            log_info.update({"eval_reward": eval_reward, "eval_time": eval_time, 'total_time': (time.time()-start_time)/60})
-            logger.info(f"Step {t//1000}K [{t/config.total_timesteps*100.:.1f}%]: reward = {eval_reward:.1f}\n"
+            log_info.update({"step": t,"eval_reward": eval_reward, "eval_time": eval_time, 'total_time': (time.time()-start_time)/60})
+            logger.info(f"Step {t//1000}K [{t/config.total_timesteps*100.:.1f}%]: reward={eval_reward:.1f}\n"
                         f"\teval_time={eval_time:.1f}s, total_time={log_info['total_time']:.1f}min, fps={fps:.0f}\n"
                         f"\tavg_loss: {log_info['avg_loss']:.2f}, avg_Q: {log_info['avg_Q']:.2f}, avg_target_Q: {log_info['avg_target_Q']:.2f}\n"
                         f"\tavg_batch_rewards: {batch.rewards.mean():.3f}, avg_batch_discounts: {batch.discounts.mean():.3f}\n"
@@ -114,3 +116,6 @@ def train_and_evaluate(config):
         # save checkpoints
         # if t % ckpt_freq == 0:
         #     checkpoints.save_checkpoint("ckpts", state, t//ckpt_freq, prefix="dqn_breakout", keep=20, overwrite=True)
+
+    res_df = pd.DataFrame(res)
+    res_df.to_csv(f"logs/{config.env_name}/{exp_name}.csv")

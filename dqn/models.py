@@ -7,7 +7,8 @@ from flax.training import train_state
 
 
 init_fn = nn.initializers.xavier_uniform()
-class QNetwork_old(nn.Module):
+class QNetwork_Nature(nn.Module):
+    """NatureDQN, faster fps ~800"""
     act_dim: int
 
     def setup(self):
@@ -29,6 +30,7 @@ class QNetwork_old(nn.Module):
 
 
 class QNetwork(nn.Module):
+    """Better performance, lower fps ~600"""
     act_dim: int
 
     def setup(self):
