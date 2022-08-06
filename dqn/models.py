@@ -6,7 +6,6 @@ from flax import linen as nn
 from flax.training import train_state
 
 
-init_fn = nn.initializers.xavier_uniform()
 class QNetwork_Nature(nn.Module):
     """NatureDQN, faster fps ~800"""
     act_dim: int
@@ -29,7 +28,7 @@ class QNetwork_Nature(nn.Module):
         return Qs
 
 
-class QNetwork(nn.Module):
+class QNetwork_CNN4(nn.Module):
     """Better performance, lower fps ~600"""
     act_dim: int
 
@@ -69,7 +68,7 @@ class DQNAgent:
                  total_timesteps: int = int(1e7)):
         self.gamma = gamma
         rng = jax.random.PRNGKey(seed)
-        self.q_network = QNetwork(act_dim)
+        self.q_network = QNetwork_Nature(act_dim)
         params = self.q_network.init(rng, jnp.ones(shape=(1, 84, 84, 4)))["params"]
         self.target_params = params
         self.lr_scheduler = optax.linear_schedule(

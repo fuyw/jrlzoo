@@ -1,5 +1,4 @@
 #!/bin/bash
-sleep 3.5h
 atari_envs=(
     "Pong"
     "Seaquest"
