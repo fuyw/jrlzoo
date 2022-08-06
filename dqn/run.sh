@@ -1,9 +1,11 @@
 #!/bin/bash
 atari_envs=(
+    "Asterix"
+    "BeamRider"
+    "Breakout"
     "Pong"
     "Seaquest"
     "SpaceInvaders"
-    "BeamRider"
 )
 for i in 1
 do

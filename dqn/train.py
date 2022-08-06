@@ -40,7 +40,7 @@ def train_and_evaluate(config):
     # general setting
     start_time = time.time()
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
-    exp_name = f"dqn_{config.env_name}_s{config.seed}_{timestamp}"
+    exp_name = f"DQN_{config.env_name}_s{config.seed}_{timestamp}"
     exp_info = f'# Running experiment for: {exp_name}_{config.env_name} #'
     eval_freq = config.total_timesteps // config.eval_num
     ckpt_freq = config.total_timesteps // config.ckpt_num
