@@ -2,12 +2,12 @@
 
 # Script to reproduce results
 mujoco_envs=(
-    "humanoid-run"
-    "cheetah-run"
-    "quadruped-run"
-    "hopper-hop"
+    #"humanoid-run"
+    #"cheetah-run"
+    #"quadruped-run"
+    #"hopper-hop"
 
-    # "HalfCheetah-v2"
+    "HalfCheetah-v2"
     # "Walker2d-v2"
     # "Ant-v2"
     # "Hopper-v2"
