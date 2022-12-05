@@ -7,7 +7,7 @@ mujoco_envs=(
     #"quadruped-run"
     #"hopper-hop"
 
-    "HalfCheetah-v2"
+    "Humanoid-v3"
     # "Walker2d-v2"
     # "Ant-v2"
     # "Hopper-v2"
