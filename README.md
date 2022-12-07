@@ -21,4 +21,3 @@ An RL codebase in JAX which focuses on efficiency and simplicity. Each baseline 
 
 ## Exploration
 - RND
-- EXORL
