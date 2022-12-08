@@ -1,5 +1,7 @@
 import collections
 import torch
+import gym
+from gym.envs.registration import registry, register
 
 import numpy as np
 
@@ -43,3 +45,31 @@ class ReplayBuffer:
                       discounts=torch.FloatTensor(self.discounts[idx]).to(device),
                       next_observations=torch.FloatTensor(self.next_observations[idx]).to(device))
         return batch
+
+
+
+def register_custom_envs():
+    if "PointmassEasy-v0" not in registry.env_specs:
+        register(
+            id="PointmassEasy-v0",
+            entry_point="envs.pointmass.pointmass:Pointmass",
+            kwargs={"difficulty": 0}
+        )
+    if "PointmassMedium-v0" not in registry.env_specs:
+        register(
+            id="PointmassMedium-v0",
+            entry_point="envs.pointmass.pointmass:Pointmass",
+            kwargs={"difficulty": 1}
+        )
+    if "PointmassHard-v0" not in registry.env_specs:
+        register(
+            id="PointmassHard-v0",
+            entry_point="envs.pointmass.pointmass:Pointmass",
+            kwargs={"difficulty": 2}
+        )
+    if "PointmassVeryHard-v0" not in registry.env_specs:
+        register(
+            id="PointmassVeryHard-v0",
+            entry_point="envs.pointmass.pointmass:Pointmass",
+            kwargs={"difficulty": 3}
+        )
