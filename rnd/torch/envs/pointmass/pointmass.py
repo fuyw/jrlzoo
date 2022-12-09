@@ -1,18 +1,24 @@
-import networkx as nx
-import scipy.sparse.csgraph
-import numpy as np
 import gym
 import pickle
+import scipy.sparse.csgraph
+
+import networkx as nx
+import numpy as np
+
+import matplotlib
+import matplotlib.pyplot as plt
+# matplotlib.use("Agg")
+
 
 WALLS = {
-    'Small':
+    "Small":
     np.array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]),
-    'Cross':
+    "Cross":
     np.array([[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0, 0],
               [0, 0, 0, 1, 0, 0, 0], [0, 1, 1, 1, 1, 1, 0],
               [0, 0, 0, 1, 0, 0, 0], [0, 0, 0, 1, 0, 0, 0],
               [0, 0, 0, 0, 0, 0, 0]]),
-    'FourRooms':
+    "FourRooms":
     np.array([[0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
               [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
               [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -24,21 +30,21 @@ WALLS = {
               [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
               [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
               [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]]),
-    'Spiral5x5':
+    "Spiral5x5":
     np.array([[0, 0, 0, 0, 0], [0, 1, 1, 1, 1], [0, 1, 0, 0, 1],
               [0, 1, 1, 0, 1], [0, 0, 0, 0, 1]]),
-    'Spiral7x7':
+    "Spiral7x7":
     np.array([[1, 1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 0, 0, 0],
               [1, 0, 1, 1, 1, 1, 0], [1, 0, 1, 0, 0, 1, 0],
               [1, 0, 1, 1, 0, 1, 0], [1, 0, 0, 0, 0, 1, 0],
               [1, 1, 1, 1, 1, 1, 0]]),
-    'Spiral9x9':
+    "Spiral9x9":
     np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 1, 1, 1, 1, 1, 1, 1, 1],
               [0, 1, 0, 0, 0, 0, 0, 0, 1], [0, 1, 0, 1, 1, 1, 1, 0, 1],
               [0, 1, 0, 1, 0, 0, 1, 0, 1], [0, 1, 0, 1, 1, 0, 1, 0, 1],
               [0, 1, 0, 0, 0, 0, 1, 0, 1], [0, 1, 1, 1, 1, 1, 1, 0, 1],
               [0, 0, 0, 0, 0, 0, 0, 0, 1]]),
-    'Spiral11x11':
+    "Spiral11x11":
     np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
               [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
               [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
@@ -50,16 +56,16 @@ WALLS = {
               [1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0],
               [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
               [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]]),
-    'Maze5x5':
+    "Maze5x5":
     # np.array([[0, 0, 0],
     #           [1, 1, 0],
     #           [0, 0, 0]]),
     np.array([[0, 0, 0, 0, 0], [1, 1, 1, 1, 0], [1, 1, 1, 1, 0],
               [1, 1, 1, 1, 0], [1, 1, 1, 1, 0]]),
-    'Maze6x6':
+    "Maze6x6":
     np.array([[0, 0, 1, 0, 0, 0], [1, 0, 1, 0, 1, 0], [0, 0, 1, 0, 1, 1],
               [0, 1, 1, 0, 0, 1], [0, 0, 1, 1, 0, 1], [1, 0, 0, 0, 0, 1]]),
-    'Maze11x11':
+    "Maze11x11":
     np.array([[0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0],
               [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
               [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
@@ -71,7 +77,7 @@ WALLS = {
               [0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0],
               [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
               [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]),
-    'Tunnel':
+    "Tunnel":
     np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
               [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0],
               [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0],
@@ -95,10 +101,10 @@ WALLS = {
               [0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 0],
               [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
                0]]),
-    'U':
+    "U":
     np.array([[0, 0, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0], [1, 1, 0], [1, 1, 0],
               [0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 0, 0]]),
-    'Tree':
+    "Tree":
     np.array([
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1],
@@ -114,7 +120,7 @@ WALLS = {
         [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
         [0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0],
     ]),
-    'UMulti':
+    "UMulti":
     np.array([
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
@@ -137,7 +143,7 @@ WALLS = {
         [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     ]),
-    'FlyTrapSmall':
+    "FlyTrapSmall":
     np.array([
         [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1],
@@ -155,7 +161,7 @@ WALLS = {
         [1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
     ]),
-    'FlyTrapBig':
+    "FlyTrapBig":
     np.array([
         [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -181,7 +187,7 @@ WALLS = {
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
     ]),
-    'Galton':
+    "Galton":
     np.array([
         [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -238,6 +244,7 @@ WALLS = {
     ]),
 }
 
+
 ACT_DICT = {
     0: [0., 0.],
     1: [0., -1.],
@@ -250,9 +257,10 @@ ACT_DICT = {
 def resize_walls(walls, factor):
     """Increase the environment by rescaling.
   
-  Args:
-    walls: 0/1 array indicating obstacle locations.
-    factor: (int) factor by which to rescale the environment."""
+    Args:
+        walls: 0/1 array indicating obstacle locations.
+        factor: (int) factor by which to rescale the environment.
+    """
     (height, width) = walls.shape
     row_indices = np.array([i for i in range(height) for _ in range(factor)])
     col_indices = np.array([i for i in range(width) for _ in range(factor)])
@@ -264,63 +272,59 @@ def resize_walls(walls, factor):
 
 class Pointmass(gym.Env):
     """Abstract class for 2D navigation environments."""
-    def __init__(
-        self,
-        difficulty=0,
-        dense_reward=False,
-    ):
+    def __init__(self, difficulty=0, dense_reward=False, action_noise=0.5):
         """Initialize the point environment.
 
         Args:
             walls: (str) name of one of the maps defined above.
             resize_factor: (int) Scale the map by this factor.
-            action_noise: (float) Standard deviation of noise to add to actions. Use 0
-                          to add no noise.
+            action_noise: (float) Standard deviation of noise to add to actions.
+                          Use 0 to add no noise.
         """
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        self.plt = plt
-        self.fig = self.plt.figure()
+        self.fig = plt.figure()
 
         self.action_dim = self.ac_dim = 2
         self.observation_dim = self.obs_dim = 2
-        self.env_name = 'pointmass'
+        self.env_name = "pointmass"
         self.is_gym = True
 
         if difficulty == 0:
-            walls = 'Maze5x5'
+            walls = "Maze5x5"
             resize_factor = 2
             self.fixed_start = np.array([0.5, 0.5]) * resize_factor
             self.fixed_goal = np.array([4.5, 4.5]) * resize_factor
-            self.max_episode_steps = 50
+            self._max_episode_steps = 50
+
         elif difficulty == 1:
-            walls = 'Maze6x6'
+            walls = "Maze6x6"
             resize_factor = 1
             self.fixed_start = np.array([0.5, 0.5]) * resize_factor
             self.fixed_goal = np.array([1.5, 5.5]) * resize_factor
-            self.max_episode_steps = 150
+            self._max_episode_steps = 150
+
         elif difficulty == 2:
-            walls = 'FourRooms'
+            walls = "FourRooms"
             resize_factor = 2
             self.fixed_start = np.array([1.0, 1.0]) * resize_factor
             self.fixed_goal = np.array([10.0, 10.0]) * resize_factor
-            self.max_episode_steps = 100
+            self._max_episode_steps = 100
+
         elif difficulty == 3:
             #NOTE TO STUDENTS: FEEL FREE TO EDIT THESE PARAMS FOR THE EXTRA CREDIT PROBLEM!
-            walls = 'Maze11x11'
+            walls = "Maze11x11"
             resize_factor = 1
             self.fixed_start = np.array([0.5, 0.5]) * resize_factor
             self.fixed_goal = np.array([0.5, 10.5]) * resize_factor
-            self.max_episode_steps = 200
+            self._max_episode_steps = 200
+
         else:
-            print('Invalid difficulty setting')
-            return 1 / 0
+            print("Invalid difficulty setting")
 
         if resize_factor > 1:
             self._walls = resize_walls(WALLS[walls], resize_factor)
         else:
             self._walls = WALLS[walls]
+
         (height, width) = self._walls.shape
         self._apsp = self._compute_apsp(self._walls)
 
@@ -335,47 +339,20 @@ class Pointmass(gym.Env):
         self.dense_reward = dense_reward
         self.num_actions = 5
         self.epsilon = resize_factor
-        self.action_noise = 0.5
+        self.action_noise = action_noise
 
         self.obs_vec = []
-        self.last_trajectory = None
         self.difficulty = difficulty
 
         self.num_runs = 0
         self.reset()
 
-        # logdir
-        self.set_logdir("./log")
-
-    def seed(self, seed):
-        np.random.seed(seed)
-
-    def reset(self, seed=None):
-        if seed: self.seed(seed)
-
-        if len(self.obs_vec) > 0:
-            # self.last_trajectory = self.plot_trajectory()
-            self.plot_trajectory()
-
-        self.plt.clf()
-        self.timesteps_left = self.max_episode_steps
-
+    def reset(self):
+        self.timesteps_left = self._max_episode_steps
         self.obs_vec = [self._normalize_obs(self.fixed_start.copy())]
         self.state = self.fixed_start.copy()
         self.num_runs += 1
         return self._normalize_obs(self.state.copy())
-
-    def set_logdir(self, path):
-        self.traj_filepath = path + 'last_traj.png'
-
-    def _get_distance(self, obs, goal):
-        """Compute the shortest path distance.
-    
-        Note: This distance is *not* used for training.
-        """
-        (i1, j1) = self._discretize_state(obs.copy())
-        (i2, j2) = self._discretize_state(goal.copy())
-        return self._apsp[i1, j1, i2, j2]
 
     def simulate_step(self, state, action):
         num_substeps = 10
@@ -402,6 +379,15 @@ class Pointmass(gym.Env):
                 best_dist = dist
                 best_action = i
         return best_action
+
+    def _get_distance(self, obs, goal):
+        """Compute the shortest path distance.
+    
+        Note: This distance is *not* used for training.
+        """
+        (i1, j1) = self._discretize_state(obs.copy())
+        (i2, j2) = self._discretize_state(goal.copy())
+        return self._apsp[i1, j1, i2, j2]
 
     def _discretize_state(self, state, resolution=1.0):
         (i, j) = np.floor(resolution * state).astype(np.int)
@@ -470,19 +456,19 @@ class Pointmass(gym.Env):
             for j in range(width):
                 for di in [-1, 0, 1]:
                     for dj in [-1, 0, 1]:
-                        if di == dj == 0: continue  # Don't add self loops
+                        if di == dj == 0: continue  # Don"t add self loops
                         if i + di < 0 or i + di > height - 1:
                             continue  # No cell here
                         if j + dj < 0 or j + dj > width - 1:
                             continue  # No cell here
                         if walls[i, j] == 1:
-                            continue  # Don't add edges to walls
+                            continue  # Don"t add edges to walls
                         if walls[i + di, j + dj] == 1:
-                            continue  # Don't add edges to walls
+                            continue  # Don"t add edges to walls
                         g.add_edge((i, j), (i + di, j + dj))
 
         # dist[i, j, k, l] is path from (i, j) -> (k, l)
-        dist = np.full((height, width, height, width), np.float('inf'))
+        dist = np.full((height, width, height, width), np.float("inf"))
         for ((i1, j1), dist_dict) in nx.shortest_path_length(g):
             for ((i2, j2), d) in dist_dict.items():
                 dist[i1, j1, i2, j2] = d
@@ -493,40 +479,36 @@ class Pointmass(gym.Env):
         self.plot_walls()
 
         # current and end
-        self.plt.plot(self.fixed_goal[0], self.fixed_goal[1], 'go')
-        self.plt.plot(self.state[0], self.state[1], 'ko')
-        self.plt.pause(0.1)
+        plt.plot(self.fixed_goal[0], self.fixed_goal[1], "go")
+        plt.plot(self.state[0], self.state[1], "ko")
+        plt.pause(0.1)
 
         img = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
         img = img.reshape(self.fig.canvas.get_width_height()[::-1] + (3, ))
         return img
 
-    def plot_trajectory(self):
-        self.plt.clf()
+    def plot_trajectory(self, fname):
         self.plot_walls()
-
         obs_vec, goal = np.array(self.obs_vec), self.goal
-        self.plt.plot(obs_vec[:, 0], obs_vec[:, 1], 'b-o', alpha=0.3)
-        self.plt.scatter([obs_vec[0, 0]], [obs_vec[0, 1]],
-                         marker='+',
-                         color='red',
-                         s=200,
-                         label='start')
-        self.plt.scatter([obs_vec[-1, 0]], [obs_vec[-1, 1]],
-                         marker='+',
-                         color='green',
-                         s=200,
-                         label='end')
-        self.plt.scatter([goal[0]], [goal[1]],
-                         marker='*',
-                         color='green',
-                         s=200,
-                         label='goal')
-        self.plt.legend(loc='upper left')
-        self.plt.savefig(self.traj_filepath)
-
-    def get_last_trajectory(self):
-        return self.last_trajectory
+        plt.plot(obs_vec[:, 0], obs_vec[:, 1], "b-o", alpha=0.3)
+        plt.scatter([obs_vec[0, 0]], [obs_vec[0, 1]],
+                    marker="+",
+                    color="red",
+                    s=100,
+                    label="start")
+        plt.scatter([obs_vec[-1, 0]], [obs_vec[-1, 1]],
+                    marker="+",
+                    color="green",
+                    s=100,
+                    label="end")
+        plt.scatter([goal[0]], [goal[1]],
+                    marker="*",
+                    color="green",
+                    s=100,
+                    label="goal")
+        plt.legend(loc="upper left")
+        plt.savefig(f"{fname}.png")
+        plt.close()
 
     def plot_walls(self, walls=None):
         if walls is None:
@@ -536,11 +518,11 @@ class Pointmass(gym.Env):
             x = np.array([j, j + 1]) / float(width)
             y0 = np.array([i, i]) / float(height)
             y1 = np.array([i + 1, i + 1]) / float(height)
-            self.plt.fill_between(x, y0, y1, color='grey')
-        self.plt.xlim([0, 1])
-        self.plt.ylim([0, 1])
-        self.plt.xticks([])
-        self.plt.yticks([])
+            plt.fill_between(x, y0, y1, color="grey")
+        plt.xlim([0, 1])
+        plt.ylim([0, 1])
+        plt.xticks([])
+        plt.yticks([])
 
     def _sample_normalized_empty_state(self):
         s = self._sample_empty_state()
@@ -550,9 +532,8 @@ class Pointmass(gym.Env):
         candidate_states = np.where(self._walls == 0)
         num_candidate_states = len(candidate_states[0])
         state_index = np.random.choice(num_candidate_states)
-        state = np.array([
-            candidate_states[0][state_index], candidate_states[1][state_index]
-        ],
+        state = np.array([candidate_states[0][state_index],
+                          candidate_states[1][state_index]],
                          dtype=np.float)
         state += np.random.uniform(size=2)
         assert not self._is_blocked(state)
@@ -561,15 +542,15 @@ class Pointmass(gym.Env):
 
 def refresh_path():
     path = dict()
-    path['observations'] = []
-    path['actions'] = []
-    path['next_observations'] = []
-    path['terminals'] = []
-    path['rewards'] = []
+    path["observations"] = []
+    path["actions"] = []
+    path["next_observations"] = []
+    path["terminals"] = []
+    path["rewards"] = []
     return path
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     env = Pointmass(difficulty=0, dense_reward=False)
     num_samples = 50000
     total_samples = 0
@@ -586,10 +567,12 @@ if __name__ == '__main__':
         else:
             goal_state = env.fixed_goal
 
-        print('Start: ', start_state, ' Goal state: ', goal_state, total_samples)
+        print("Start: ", start_state,
+              " Goal state: ", goal_state,
+              total_samples)
         curr_state = env.reset(start_state)
         done = False
-        for i in range(env.max_episode_steps):
+        for i in range(env._max_episode_steps):
             action = env.get_optimal_action(goal_state)
             temp_bern = (np.random.rand() < 0.2)
             if temp_bern:
@@ -598,18 +581,18 @@ if __name__ == '__main__':
             next_state, reward, done, _ = env.step(action)
             if reward >= 0:
                 num_positive_rewards += 1
-            path['observations'].append(curr_state)
-            path['actions'].append(action)
-            path['next_observations'].append(next_state)
-            path['terminals'].append(done)
-            path['rewards'].append(reward)
+            path["observations"].append(curr_state)
+            path["actions"].append(action)
+            path["next_observations"].append(next_state)
+            path["terminals"].append(done)
+            path["rewards"].append(reward)
 
             if done == True:
                 total_samples += i
                 break
 
         all_paths.append(path)
-        print('Num Positive Rewards: ', num_positive_rewards)
+        print("Num Positive Rewards: ", num_positive_rewards)
 
-    with open('buffer_debug_final' + str(env.difficulty) + '.pkl', 'wb') as f:
+    with open("buffer_debug_final" + str(env.difficulty) + ".pkl", "wb") as f:
         pickle.dump(all_paths, f)

@@ -1,9 +1,10 @@
 import collections
 import torch
-import gym
-from gym.envs.registration import registry, register
 
 import numpy as np
+
+import gym
+from gym.envs.registration import registry, register
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -45,7 +46,6 @@ class ReplayBuffer:
                       discounts=torch.FloatTensor(self.discounts[idx]).to(device),
                       next_observations=torch.FloatTensor(self.next_observations[idx]).to(device))
         return batch
-
 
 
 def register_custom_envs():
