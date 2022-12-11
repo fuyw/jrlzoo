@@ -77,7 +77,7 @@ class CQLAgent:
                  obs_dim: int = 2,
                  act_dim: int = 2,
                  hid_dim: int = 64,
-                 cql_alpha: float = 1.,
+                 cql_alpha: float = 10.,
                  gamma: float = 0.99,
                  tau: float = 0.005):
         self.act_dim = act_dim
@@ -97,23 +97,25 @@ class CQLAgent:
     def update(self, batch):
         self.optimizer.zero_grad()
         Qs = self.qnet(batch.observations)                # (256, act_dim)
-        Q = torch.gather(Qs, 1, batch.actions).squeeze()  # (256, 1)
+        Q = torch.gather(Qs, 1, batch.actions).squeeze()  # (256,)
         with torch.no_grad():
-            next_Q = self.target_qnet(batch.next_observations).max(1)[0]
-        target_Q = batch.rewards + self.gamma * batch.discounts * next_Q
+            next_Q = self.target_qnet(batch.next_observations).max(1)[0]  # (256,)
+        target_Q = batch.rewards + self.gamma * batch.discounts * next_Q  # (256,)
 
         # CQL loss
-        ood_Q = torch.logsumexp(Qs, dim=1)
-        cql_loss = ood_Q.mean() - Q.mean()
+        ood_Q = torch.logsumexp(Qs, dim=1)  # (256)
+        cql_loss = self.cql_alpha * (ood_Q - Q).mean()
+        mse_loss = F.mse_loss(Q, target_Q)
 
         # DQN loss + CQL loss
-        loss = self.cql_alpha * cql_loss + F.mse_loss(Q, target_Q)
+        loss = cql_loss + mse_loss
         loss.backward()
         self.optimizer.step()
         for param, target_param in zip(self.qnet.parameters(), self.target_qnet.parameters()):
             target_param.data.copy_(self.tau*param.data + (1-self.tau)*target_param.data)
         return {"avg_loss": loss,
                 "avg_cql_loss": cql_loss,
+                "avg_mse_loss": mse_loss,
                 "avg_Q": Q.mean(),
                 "avg_target_Q": target_Q.mean(),
                 "avg_ood_Q": ood_Q.mean()}
