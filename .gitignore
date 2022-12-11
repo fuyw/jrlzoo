@@ -2,13 +2,10 @@
 __pycache__
 tmp
 res
+*.xml
+*.npz
 *logs*
+bsuite*.csv
 case_study
 saved_models
 saved_buffers
-MTD3BC
-JaxCOMBO
-JaxCQL
-JaxIQL
-JaxTD3*
-MIQL

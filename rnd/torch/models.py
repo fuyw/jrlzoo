@@ -58,11 +58,11 @@ class DQNAgent:
 
     def update(self, batch):
         self.optimizer.zero_grad()
-        Qs = self.qnet(batch.observations)  # (256, act_dim)
-        Q = torch.gather(Qs, 1, batch.actions).squeeze()  # (256, 1)
+        Qs = self.qnet(batch.observations)                # (256, act_dim)
+        Q = torch.gather(Qs, 1, batch.actions).squeeze()  # (256,)
         with torch.no_grad():
-            next_Q = self.target_qnet(batch.next_observations).max(1)[0]
-        target_Q = batch.rewards + self.gamma * batch.discounts * next_Q
+            next_Q = self.target_qnet(batch.next_observations).max(1)[0]  # (256,)
+        target_Q = batch.rewards + self.gamma * batch.discounts * next_Q  # (256,)
         loss = F.mse_loss(Q, target_Q)
         loss.backward()
         self.optimizer.step()
