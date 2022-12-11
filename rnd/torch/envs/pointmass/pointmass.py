@@ -507,7 +507,7 @@ class Pointmass(gym.Env):
                     s=100,
                     label="goal")
         plt.legend(loc="upper left")
-        plt.savefig(f"{fname}.png")
+        plt.savefig(f"{fname}.png", dpi=360)
         plt.close()
 
     def plot_walls(self, walls=None):

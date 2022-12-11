@@ -4,28 +4,31 @@ import time
 import torch
 import numpy as np
 
-from models import DQNAgent
+from models import DQNAgent, RNDAgent
 from utils import ReplayBuffer, register_custom_envs
 
 
 ###################
 # Utils Functions #
 ###################
+AGENT_DICTS = {"dqn": DQNAgent, "rnd": RNDAgent}
+
+
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--env_name", default="PointmassHard-v0", choices=(
         "PointmassEasy-v0", "PointmassMedium-v0", "PointmassHard-v0", "PointmassVeryHard-v0"))
+    parser.add_argument("--agent", default="dqn", choices=("dqn", "rnd"))
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max_timesteps", type=int, default=50_000)
     parser.add_argument("--eval_freq", type=int, default=1000)
     parser.add_argument("--start_timesteps", type=int, default=2000)
     parser.add_argument("--batch_size", type=int, default=256)
-    parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--hid_dim", type=int, default=64)
     parser.add_argument("--eval_batch_size", type=int, default=1000)
-    parser.add_argument("--plot_traj", action="store_true", default=False)
+    parser.add_argument("--plot_traj", action="store_true", default=True)
     parser.add_argument("--epsilon", type=float, default=0.2)
     args = parser.parse_args()
     return args
@@ -65,11 +68,7 @@ def train_and_evaluate(args):
     torch.manual_seed(args.seed)
 
     # initialize the agent
-    agent = DQNAgent(lr=args.lr,
-                     act_dim=act_dim,
-                     obs_dim=obs_dim,
-                     hid_dim=args.hid_dim,
-                     num_layers=args.num_layers)
+    agent = AGENT_DICTS[args.agent](lr=args.lr, obs_dim=obs_dim, act_dim=act_dim, hid_dim=args.hid_dim)
 
     # create replay buffer
     replay_buffer = ReplayBuffer(obs_dim,
@@ -112,8 +111,11 @@ def train_and_evaluate(args):
             obs, done = env.reset(), False
             episode_steps = 0
 
+    # save the buffer
+    replay_buffer.save(f"buffers/{args.agent}")
 
 if __name__ == "__main__":
     os.makedirs("imgs", exist_ok=True)
+    os.makedirs("buffers", exist_ok=True)
     args = get_args()
     train_and_evaluate(args)

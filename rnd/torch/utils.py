@@ -46,6 +46,16 @@ class ReplayBuffer:
                       discounts=torch.FloatTensor(self.discounts[idx]).to(device),
                       next_observations=torch.FloatTensor(self.next_observations[idx]).to(device))
         return batch
+    
+    def save(self, fname):
+        np.savez(fname,
+                 observations=self.observations,
+                 actions=self.actions,
+                 rewards=self.rewards,
+                 discounts=self.discounts,
+                 next_observations=self.next_observations,
+                 ptr=self.ptr,
+                 size=self.size)
 
 
 def register_custom_envs():
