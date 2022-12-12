@@ -92,3 +92,9 @@ def register_custom_envs():
             entry_point="envs.pointmass.pointmass:Pointmass",
             kwargs={"difficulty": 3}
         )
+    if "PointmassHard-v1" not in registry.env_specs:
+        register(
+            id="PointmassHard-v1",
+            entry_point="envs.pointmass.pointmass:Pointmass",
+            kwargs={"difficulty": 4}
+        )

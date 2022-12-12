@@ -4,32 +4,30 @@ import time
 import torch
 import numpy as np
 
-from models import DQNAgent, RNDAgent
-from utils import ReplayBuffer, register_custom_envs
+from models import DQNAgent
+from utils import ReplayBuffer
 
 import bsuite
 from bsuite.utils import gym_wrapper
 
+
 ###################
 # Utils Functions #
 ###################
-AGENT_DICTS = {"dqn": DQNAgent, "rnd": RNDAgent}
+AGENT_DICTS = {"dqn": DQNAgent}
 
 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_name", default="PointmassHard-v0", choices=(
-        "PointmassEasy-v0", "PointmassMedium-v0", "PointmassHard-v0", "PointmassVeryHard-v0"))
-    parser.add_argument("--agent", default="dqn", choices=("dqn", "rnd"))
+    parser.add_argument("--agent", default="dqn")
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max_timesteps", type=int, default=3_000)
     parser.add_argument("--eval_freq", type=int, default=200)
-    parser.add_argument("--start_timesteps", type=int, default=1000)
+    parser.add_argument("--start_timesteps", type=int, default=1_000)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--hid_dim", type=int, default=64)
-    parser.add_argument("--plot_traj", action="store_true", default=False)
     parser.add_argument("--epsilon", type=float, default=0.2)
     args = parser.parse_args()
     return args
@@ -55,17 +53,11 @@ def eval_policy(agent: DQNAgent,
 def train_and_evaluate(args):
     t1 = time.time()
 
-    # register pointmass environments
-    # register_custom_envs()
-
-    # initialize environments
-    # env = gym.make(args.env_name)
-    # eval_env = gym.make(args.env_name)
-
-    env = bsuite.load_and_record_to_csv('catch/0', results_dir='./')
+    # initialize bsuite environments
+    env = bsuite.load_from_id("catch/0")
     env = gym_wrapper.GymFromDMEnv(env)
 
-    eval_env = bsuite.load_and_record_to_csv('catch/0', results_dir='./')
+    eval_env = bsuite.load_from_id("catch/0")
     eval_env = gym_wrapper.GymFromDMEnv(eval_env)
 
     obs_dim = np.prod(env.observation_space.shape)
@@ -84,11 +76,9 @@ def train_and_evaluate(args):
                                  max_size=int(1e5))
 
     # start training
-    episode_steps = 0
     obs, done = env.reset(), False
     logs = [{"step":0, "reward":eval_policy(agent, eval_env, args.seed)}]
     for t in range(1, args.max_timesteps+1):
-        episode_steps += 1
         if t <= args.start_timesteps: 
             action = env.action_space.sample()
         else:
@@ -96,20 +86,16 @@ def train_and_evaluate(args):
                 action = env.action_space.sample()
             else:
                 action = agent.select_action(obs.flatten())
-
         next_obs, reward, done, info = env.step(action)
-        done_bool = float(done) #if episode_steps < env.unwrapped._max_episode_steps else 0
-        replay_buffer.add(obs.flatten(), action, next_obs.flatten(),
-                          reward, done_bool)
-        obs = next_obs.flatten()
+        done_bool = float(done)
+        replay_buffer.add(obs.flatten(), action, next_obs.flatten(), reward, done_bool)
+        obs = next_obs
 
         if t > args.start_timesteps:
             batch = replay_buffer.sample(args.batch_size)
             log_info = agent.update(batch)
             if t % args.eval_freq == 0:
                 eval_reward = eval_policy(agent, eval_env, args.seed)
-                if args.plot_traj:
-                    eval_env.plot_trajectory(f"imgs/{t//args.eval_freq}")
                 print(f"[Step {t}] eval_reward = {eval_reward:.2f}\t"
                       f"time = {(time.time()-t1)/60:.2f}\t"
                       f"loss = {log_info['avg_loss'].item():.2f}\t"
@@ -118,7 +104,6 @@ def train_and_evaluate(args):
 
         if done:
             obs, done = env.reset(), False
-            episode_steps = 0
 
     # save the buffer
     replay_buffer.save(f"buffers/catch_{args.agent}")

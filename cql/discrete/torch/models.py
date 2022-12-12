@@ -41,6 +41,7 @@ class DQNAgent:
                  obs_dim: int = 2,
                  act_dim: int = 2,
                  hid_dim: int = 64,
+                 *,
                  gamma: float = 0.99,
                  tau: float = 0.005):
         self.act_dim = act_dim
@@ -117,5 +118,14 @@ class CQLAgent:
                 "avg_cql_loss": cql_loss,
                 "avg_mse_loss": mse_loss,
                 "avg_Q": Q.mean(),
+                "avg_ood_Q": ((Qs.sum(axis=1) - Q)/(self.act_dim-1)).mean(),
+                # "avg_ood_Q": ood_Q.mean(),
                 "avg_target_Q": target_Q.mean(),
-                "avg_ood_Q": ood_Q.mean()}
+                }
+
+    def save(self, fname):
+        torch.save(self.qnet.state_dict(), fname)
+
+    def load(self, fname):
+        self.qnet.load_state_dict(torch.load(fname))
+

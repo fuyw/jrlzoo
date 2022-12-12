@@ -316,6 +316,13 @@ class Pointmass(gym.Env):
             self.fixed_start = np.array([0.5, 0.5]) * resize_factor
             self.fixed_goal = np.array([0.5, 10.5]) * resize_factor
             self._max_episode_steps = 200
+        
+        elif difficulty == 4:
+            walls = "FourRooms"
+            resize_factor = 2
+            self.fixed_start = np.array([1.0, 1.0]) * resize_factor
+            self.fixed_goal = np.array([2.0, 8.0]) * resize_factor
+            self._max_episode_steps = 100
 
         else:
             print("Invalid difficulty setting")

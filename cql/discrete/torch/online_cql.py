@@ -7,6 +7,9 @@ import numpy as np
 from models import DQNAgent, CQLAgent
 from utils import ReplayBuffer, register_custom_envs
 
+import bsuite
+from bsuite.utils import gym_wrapper
+
 
 ###################
 # Utils Functions #
@@ -17,15 +20,14 @@ AGENT_DICTS = {"cql": CQLAgent, "dqn": DQNAgent}
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_name", default="PointmassHard-v0", choices=(
-        "PointmassEasy-v0", "PointmassMedium-v0", "PointmassHard-v0", "PointmassVeryHard-v0"))
+    parser.add_argument("--env_name", default="PointmassHard-v1")
     parser.add_argument("--agent", default="cql", choices=("cql", "dqn"))
     parser.add_argument("--lr", type=float, default=3e-4)
-    parser.add_argument("--cql_alpha", type=float, default=.5)
+    parser.add_argument("--cql_alpha", type=float, default=1.0)
     parser.add_argument("--hid_dim", type=int, default=64)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--max_timesteps", type=int, default=80_000)
-    parser.add_argument("--eval_freq", type=int, default=4000)
+    parser.add_argument("--max_timesteps", type=int, default=50_000)
+    parser.add_argument("--eval_freq", type=int, default=1000)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--plot_traj", action="store_true", default=True)
     args = parser.parse_args()
@@ -46,6 +48,22 @@ def eval_policy(agent: CQLAgent,
     return avg_reward
 
 
+def collect_trajectory(agent: CQLAgent, env: gym.Env, epsilon: float = 0.1):
+    obs, done = env.reset(), False
+    trajectories = [obs]
+    while not done:
+        trajectories.append(obs)
+        if np.random.random() <= epsilon:
+            action = env.action_space.sample()
+        else:
+            action = agent.select_action(obs.flatten())
+        next_obs, reward, done, info = env.step(action)
+        obs = next_obs
+    return trajectories
+
+trajectory = collect_trajectory(agent, env)
+env.plot_trajectory("demo")
+
 #################
 # Main Function #
 #################
@@ -56,7 +74,7 @@ def train_and_evaluate(args):
     register_custom_envs()
 
     # initialize environments
-    env = gym.make(args.env_name) 
+    env = gym.make(args.env_name)
     obs_dim = np.prod(env.observation_space.shape)
     act_dim = env.action_space.n
 
@@ -70,12 +88,19 @@ def train_and_evaluate(args):
                                     act_dim=act_dim,
                                     hid_dim=args.hid_dim,
                                     cql_alpha=args.cql_alpha)
+    agent.load(f"saved_models/cql/cql_20")
+
+    # plot trajectories
+
+
+
+
+
 
     # create replay buffer
     replay_buffer = ReplayBuffer(obs_dim,
                                  act_dim,
                                  max_size=int(1e5))
-    replay_buffer.load("buffers/dqn.npz")
 
     # start training
     obs, done = env.reset(), False
@@ -95,7 +120,7 @@ def train_and_evaluate(args):
                     f"avg_ood_Q = {log_info['avg_ood_Q']:.2f}\t"
                     f"avg_Q = {log_info['avg_Q']:.2f}\t"
                     f"avg_target_Q = {log_info['avg_target_Q']:.2f}\t")
-            agent.save(f"saved_models/{args.agent}/cql_{t//args.eval_freq}")
+    agent.save(f"saved_models/{args.agent}/cql")
 
 
 if __name__ == "__main__":
