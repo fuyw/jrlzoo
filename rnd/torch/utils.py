@@ -57,6 +57,16 @@ class ReplayBuffer:
                  ptr=self.ptr,
                  size=self.size)
 
+    def load(self, fname):
+        dataset = np.load(fname)
+        self.observations = dataset["observations"]
+        self.actions = dataset["actions"]
+        self.rewards = dataset["rewards"]
+        self.discounts = dataset["discounts"]
+        self.next_observations = dataset["next_observations"]
+        self.ptr = dataset["ptr"]
+        self.size = dataset["size"]
+
 
 def register_custom_envs():
     if "PointmassEasy-v0" not in registry.env_specs:
@@ -82,4 +92,16 @@ def register_custom_envs():
             id="PointmassVeryHard-v0",
             entry_point="envs.pointmass.pointmass:Pointmass",
             kwargs={"difficulty": 3}
+        )
+    if "PointmassHard-v1" not in registry.env_specs:
+        register(
+            id="PointmassHard-v1",
+            entry_point="envs.pointmass.pointmass:Pointmass",
+            kwargs={"difficulty": 4}
+        )
+    if "PointmassHard-v2" not in registry.env_specs:
+        register(
+            id="PointmassHard-v2",
+            entry_point="envs.pointmass.pointmass2:Pointmass2",
+            kwargs={"difficulty": 2}
         )

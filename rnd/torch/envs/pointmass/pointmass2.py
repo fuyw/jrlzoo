@@ -7,7 +7,6 @@ import numpy as np
 
 import matplotlib
 import matplotlib.pyplot as plt
-# matplotlib.use("Agg")
 
 
 WALLS = {
@@ -57,9 +56,6 @@ WALLS = {
               [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
               [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]]),
     "Maze5x5":
-    # np.array([[0, 0, 0],
-    #           [1, 1, 0],
-    #           [0, 0, 0]]),
     np.array([[0, 0, 0, 0, 0], [1, 1, 1, 1, 0], [1, 1, 1, 1, 0],
               [1, 1, 1, 1, 0], [1, 1, 1, 1, 0]]),
     "Maze6x6":
@@ -270,7 +266,7 @@ def resize_walls(walls, factor):
     return walls
 
 
-class Pointmass(gym.Env):
+class Pointmass2(gym.Env):
     """Abstract class for 2D navigation environments."""
     def __init__(self, difficulty=0, dense_reward=False, action_noise=0.5):
         """Initialize the point environment.
@@ -306,24 +302,10 @@ class Pointmass(gym.Env):
             walls = "FourRooms"
             resize_factor = 2
             self.fixed_start = np.array([1.0, 1.0]) * resize_factor
-            self.fixed_goal = np.array([10.0, 10.0]) * resize_factor
+            self.fixed_goal1 = np.array([10.0, 10.0]) * resize_factor
+            self.fixed_goal2 = np.array([1.0, 8.0]) * resize_factor
             self._max_episode_steps = 100
-
-        elif difficulty == 3:
-            #NOTE TO STUDENTS: FEEL FREE TO EDIT THESE PARAMS FOR THE EXTRA CREDIT PROBLEM!
-            walls = "Maze11x11"
-            resize_factor = 1
-            self.fixed_start = np.array([0.5, 0.5]) * resize_factor
-            self.fixed_goal = np.array([0.5, 10.5]) * resize_factor
-            self._max_episode_steps = 200
-        
-        elif difficulty == 4:
-            walls = "FourRooms"
-            resize_factor = 2
-            self.fixed_start = np.array([1.0, 1.0]) * resize_factor
-            self.fixed_goal = np.array([1.0, 8.0]) * resize_factor
-            self._max_episode_steps = 100
-
+ 
         else:
             print("Invalid difficulty setting")
 
@@ -374,28 +356,6 @@ class Pointmass(gym.Env):
                     state = new_state
         return state
 
-    def get_optimal_action(self, state):
-        state = self._unnormalize_obs(state)
-        best_action = 0
-        best_dist = np.inf
-        for i in range(self.num_actions):
-            action = np.array(ACT_DICT[i])
-            s_prime = self.simulate_step(state, action)
-            dist = self._get_distance(s_prime, self.fixed_goal)
-            if dist < best_dist:
-                best_dist = dist
-                best_action = i
-        return best_action
-
-    def _get_distance(self, obs, goal):
-        """Compute the shortest path distance.
-    
-        Note: This distance is *not* used for training.
-        """
-        (i1, j1) = self._discretize_state(obs.copy())
-        (i2, j2) = self._discretize_state(goal.copy())
-        return self._apsp[i1, j1, i2, j2]
-
     def _discretize_state(self, state, resolution=1.0):
         (i, j) = np.floor(resolution * state).astype(np.int)
         # Round down to the nearest cell if at the boundary.
@@ -429,7 +389,9 @@ class Pointmass(gym.Env):
         action = np.random.normal(action, self.action_noise)
         self.state = self.simulate_step(self.state, action)
 
-        dist = np.linalg.norm(self.state - self.fixed_goal)
+        dist1 = np.linalg.norm(self.state - self.fixed_goal1)
+        dist2 = np.linalg.norm(self.state - self.fixed_goal2)
+        dist = min(dist1, dist2)
         done = (dist < self.epsilon) or (self.timesteps_left == 0)
         ns = self._normalize_obs(self.state.copy())
         self.obs_vec.append(ns.copy())
@@ -446,8 +408,12 @@ class Pointmass(gym.Env):
         return self._walls
 
     @property
-    def goal(self):
-        return self._normalize_obs(self.fixed_goal.copy())
+    def goal1(self):
+        return self._normalize_obs(self.fixed_goal1.copy())
+
+    @property
+    def goal2(self):
+        return self._normalize_obs(self.fixed_goal2.copy())
 
     def _compute_apsp(self, walls):
         (height, width) = walls.shape
@@ -482,21 +448,9 @@ class Pointmass(gym.Env):
 
         return dist
 
-    def render(self, mode=None):
-        self.plot_walls()
-
-        # current and end
-        plt.plot(self.fixed_goal[0], self.fixed_goal[1], "go")
-        plt.plot(self.state[0], self.state[1], "ko")
-        plt.pause(0.1)
-
-        img = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
-        img = img.reshape(self.fig.canvas.get_width_height()[::-1] + (3, ))
-        return img
-
     def plot_trajectory(self, fname):
         self.plot_walls()
-        obs_vec, goal = np.array(self.obs_vec), self.goal
+        obs_vec, goal1, goal2 = np.array(self.obs_vec), self.goal1, self.goal2
         plt.plot(obs_vec[:, 0], obs_vec[:, 1], "b-o", alpha=0.3)
         plt.scatter([obs_vec[0, 0]], [obs_vec[0, 1]],
                     marker="+",
@@ -505,14 +459,19 @@ class Pointmass(gym.Env):
                     label="start")
         plt.scatter([obs_vec[-1, 0]], [obs_vec[-1, 1]],
                     marker="+",
-                    color="green",
+                    color="orange",
                     s=100,
                     label="end")
-        plt.scatter([goal[0]], [goal[1]],
+        plt.scatter([goal1[0]], [goal1[1]],
                     marker="*",
                     color="green",
                     s=100,
-                    label="goal")
+                    label="goal1")
+        plt.scatter([goal2[0]], [goal2[1]],
+                    marker="*",
+                    color="green",
+                    s=100,
+                    label="goal2")
         plt.legend(loc="lower right")
         plt.savefig(f"{fname}.png", dpi=360)
         plt.close()
@@ -530,21 +489,6 @@ class Pointmass(gym.Env):
         plt.ylim([0, 1])
         plt.xticks([])
         plt.yticks([])
-
-    def _sample_normalized_empty_state(self):
-        s = self._sample_empty_state()
-        return self._normalize_obs(s)
-
-    def _sample_empty_state(self):
-        candidate_states = np.where(self._walls == 0)
-        num_candidate_states = len(candidate_states[0])
-        state_index = np.random.choice(num_candidate_states)
-        state = np.array([candidate_states[0][state_index],
-                          candidate_states[1][state_index]],
-                         dtype=np.float)
-        state += np.random.uniform(size=2)
-        assert not self._is_blocked(state)
-        return state
 
 
 def refresh_path():

@@ -70,6 +70,12 @@ class DQNAgent:
             target_param.data.copy_(self.tau*param.data + (1-self.tau)*target_param.data)
         return {"avg_loss": loss, "avg_Q": Q.mean(), "avg_target_Q": target_Q.mean()}
 
+    def save(self, fname):
+        torch.save(self.qnet.state_dict(), fname)
+
+    def load(self, fname):
+        self.qnet.load_state_dict(torch.load(fname))
+
 
 class RNDModel:
     def __init__(self, obs_dim, out_dim, hid_dim, lr=1e-4):
@@ -100,11 +106,13 @@ class RNDAgent:
                  act_dim: int = 2,
                  hid_dim: int = 64,
                  gamma: float = 0.99,
-                 tau: float = 0.005):
+                 tau: float = 0.005,
+                 expl_alpha: float = .5):
         self.act_dim = act_dim
         self.obs_dim = obs_dim
         self.gamma = gamma
         self.tau = tau
+        self.expl_alpha = expl_alpha
         self.qnet = QNetwork(obs_dim, act_dim, hid_dim).to(device)
         self.target_qnet = copy.deepcopy(self.qnet).to(device)
         self.rnet = RNDModel(obs_dim, act_dim, hid_dim)
@@ -128,7 +136,7 @@ class RNDAgent:
         expl_bonus = (expl_bonus - expl_bonus.mean()) / (1e-6 + expl_bonus.std())
 
         # update DQN
-        target_Q = (expl_bonus + batch.rewards) + self.gamma * batch.discounts * next_Q
+        target_Q = (self.expl_alpha * expl_bonus + batch.rewards) + self.gamma * batch.discounts * next_Q
         loss = F.mse_loss(Q, target_Q)
         loss.backward()
         self.optimizer.step()
@@ -138,5 +146,14 @@ class RNDAgent:
         # update RND
         rnd_loss = self.rnet.update(batch.next_observations)
         return {"avg_loss": loss, "avg_Q": Q.mean(), "avg_target_Q": target_Q.mean(),
-                "avg_expl_bonus": expl_bonus.mean(),
+                "avg_expl_bonus": expl_bonus.mean()*self.expl_alpha,
+                "max_expl_bonus": expl_bonus.max()*self.expl_alpha,
+                "avg_batch_reward": batch.rewards.mean(),
+                "max_batch_reward": batch.rewards.max(),
                 "rnd_loss": rnd_loss}
+
+    def save(self, fname):
+        torch.save(self.qnet.state_dict(), fname)
+
+    def load(self, fname):
+        self.qnet.load_state_dict(torch.load(fname))

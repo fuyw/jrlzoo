@@ -17,17 +17,16 @@ AGENT_DICTS = {"dqn": DQNAgent, "rnd": RNDAgent}
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env_name", default="PointmassHard-v0", choices=(
-        "PointmassEasy-v0", "PointmassMedium-v0", "PointmassHard-v0", "PointmassVeryHard-v0"))
+    parser.add_argument("--env_name", default="PointmassHard-v0") 
     parser.add_argument("--agent", default="dqn", choices=("dqn", "rnd"))
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--max_timesteps", type=int, default=50_000)
-    parser.add_argument("--eval_freq", type=int, default=1000)
-    parser.add_argument("--start_timesteps", type=int, default=2000)
+    parser.add_argument("--max_timesteps", type=int, default=80_000)
+    parser.add_argument("--eval_freq", type=int, default=4000)
+    parser.add_argument("--ckpt_freq", type=int, default=4000)
+    parser.add_argument("--start_timesteps", type=int, default=4000)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--hid_dim", type=int, default=64)
-    parser.add_argument("--eval_batch_size", type=int, default=1000)
     parser.add_argument("--plot_traj", action="store_true", default=True)
     parser.add_argument("--epsilon", type=float, default=0.2)
     args = parser.parse_args()
@@ -68,7 +67,10 @@ def train_and_evaluate(args):
     torch.manual_seed(args.seed)
 
     # initialize the agent
-    agent = AGENT_DICTS[args.agent](lr=args.lr, obs_dim=obs_dim, act_dim=act_dim, hid_dim=args.hid_dim)
+    agent = AGENT_DICTS[args.agent](lr=args.lr,
+                                    obs_dim=obs_dim,
+                                    act_dim=act_dim,
+                                    hid_dim=args.hid_dim)
 
     # create replay buffer
     replay_buffer = ReplayBuffer(obs_dim,
@@ -101,21 +103,37 @@ def train_and_evaluate(args):
                 eval_reward = eval_policy(agent, eval_env, args.seed)
                 if args.plot_traj:
                     eval_env.plot_trajectory(f"imgs/{t//args.eval_freq}")
-                print(f"[Step {t}] eval_reward = {eval_reward:.2f}\t"
-                      f"time = {(time.time()-t1)/60:.2f}\t"
-                      f"loss = {log_info['avg_loss'].item():.2f}\t"
-                      f"avg_Q = {log_info['avg_Q']:.2f}\t"
-                      f"avg_target_Q = {log_info['avg_target_Q']:.2f}")
+                if args.agent == "dqn":
+                    print(f"[Step {t}] eval_reward = {eval_reward:.2f}\t"
+                        f"time = {(time.time()-t1)/60:.2f}\t"
+                        f"loss = {log_info['avg_loss'].item():.2f}\t"
+                        f"avg_Q = {log_info['avg_Q']:.2f}\t"
+                        f"avg_target_Q = {log_info['avg_target_Q']:.2f}")
+                if args.agent == "rnd":
+                    print(f"[Step {t}] eval_reward = {eval_reward:.2f}\t"
+                          f"time = {(time.time()-t1)/60:.2f}\t"
+                          f"loss = {log_info['avg_loss'].item():.2f}\t"
+                          f"avg_Q = {log_info['avg_Q']:.2f}\t"
+                          f"avg_target_Q = {log_info['avg_target_Q']:.2f}\n\t"
+                          f"avg_expl_bonus = {log_info['avg_expl_bonus']:.3f}\t"
+                          f"max_expl_bonus = {log_info['max_expl_bonus']:.3f}\t"
+                          f"avg_batch_reward = {log_info['avg_batch_reward']:.3f}\t"
+                          f"max_batch_reward = {log_info['max_batch_reward']:.3f}")
 
         if done:
             obs, done = env.reset(), False
             episode_steps = 0
 
+        if (t % args.ckpt_freq == 0):
+            agent.save(f"ckpts/{args.agent}{t//args.ckpt_freq}.ckpt")
+
     # save the buffer
-    replay_buffer.save(f"buffers/{args.agent}")
+    # replay_buffer.save(f"buffers/{args.agent}")
+
 
 if __name__ == "__main__":
     os.makedirs("imgs", exist_ok=True)
+    os.makedirs("ckpts", exist_ok=True)
     os.makedirs("buffers", exist_ok=True)
     args = get_args()
     train_and_evaluate(args)
