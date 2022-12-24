@@ -105,3 +105,17 @@ def register_custom_envs():
             entry_point="envs.pointmass.pointmass2:Pointmass2",
             kwargs={"difficulty": 2}
         )
+
+
+def eval_policy(agent,
+                eval_env: gym.Env,
+                eval_episodes: int = 10) -> float:
+    avg_reward = 0.
+    for _ in range(eval_episodes):
+        obs, done = eval_env.reset(), False
+        while not done:
+            action = agent.select_action(obs.flatten())
+            obs, reward, done, _ = eval_env.step(action)
+            avg_reward += reward
+    avg_reward /= eval_episodes
+    return avg_reward

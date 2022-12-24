@@ -8,6 +8,8 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
+from collections import deque
+
 
 WALLS = {
     "Small":
@@ -268,7 +270,10 @@ def resize_walls(walls, factor):
 
 class Pointmass2(gym.Env):
     """Abstract class for 2D navigation environments."""
-    def __init__(self, difficulty=0, dense_reward=False, action_noise=0.5):
+    def __init__(self,
+                 difficulty=0,
+                 dense_reward=False,
+                 action_noise=0.5):
         """Initialize the point environment.
 
         Args:
@@ -331,6 +336,7 @@ class Pointmass2(gym.Env):
         self.action_noise = action_noise
 
         self.obs_vec = []
+        self.obs_queue = deque(maxlen=20)
         self.difficulty = difficulty
 
         self.num_runs = 0
@@ -338,6 +344,8 @@ class Pointmass2(gym.Env):
 
     def reset(self):
         self.timesteps_left = self._max_episode_steps
+        if len(self.obs_vec) > 0:
+            self.obs_queue.append(self.obs_vec) 
         self.obs_vec = [self._normalize_obs(self.fixed_start.copy())]
         self.state = self.fixed_start.copy()
         self.num_runs += 1
@@ -447,6 +455,31 @@ class Pointmass2(gym.Env):
                 dist[i1, j1, i2, j2] = d
 
         return dist
+
+    def plot_trajectories(self, fname):
+        self.plot_walls()
+        obs_vecs = [np.array(i) for i in self.obs_queue]
+        goal1, goal2 = self.goal1, self.goal2
+        for obs_vec in obs_vecs:
+            plt.plot(obs_vec[1:, 0], obs_vec[1:, 1], "b-o", alpha=0.05)
+        plt.scatter([obs_vec[0, 0]], [obs_vec[0, 1]],
+                    marker="+",
+                    color="red",
+                    s=100,
+                    label="start")
+        plt.scatter([goal1[0]], [goal1[1]],
+                    marker="*",
+                    color="green",
+                    s=100,
+                    label="goal1")
+        plt.scatter([goal2[0]], [goal2[1]],
+                    marker="*",
+                    color="green",
+                    s=100,
+                    label="goal2")
+        plt.legend(loc="lower right")
+        plt.savefig(f"{fname}.png", dpi=360)
+        plt.close()
 
     def plot_trajectory(self, fname):
         self.plot_walls()
