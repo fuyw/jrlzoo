@@ -47,9 +47,10 @@ class DQNAgent:
         self.obs_dim = obs_dim
         self.gamma = gamma
         self.tau = tau
+        self.lr = lr
         self.qnet = QNetwork(obs_dim, act_dim, hid_dim).to(device)
         self.target_qnet = copy.deepcopy(self.qnet).to(device)
-        self.optimizer = torch.optim.Adam(self.qnet.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(self.qnet.parameters(), lr=self.lr)
 
     def select_action(self, obs):
         with torch.no_grad():
