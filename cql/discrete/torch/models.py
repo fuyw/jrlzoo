@@ -47,15 +47,23 @@ class DQNAgent:
         self.act_dim = act_dim
         self.obs_dim = obs_dim
         self.gamma = gamma
+        self.lr = lr
         self.tau = tau
         self.qnet = QNetwork(obs_dim, act_dim, hid_dim).to(device)
         self.target_qnet = copy.deepcopy(self.qnet).to(device)
-        self.optimizer = torch.optim.Adam(self.qnet.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(self.qnet.parameters(), lr=self.lr)
 
     def select_action(self, obs):
-        Qs = self.qnet(torch.FloatTensor(obs).to(device))
+        with torch.no_grad():
+            Qs = self.qnet(torch.FloatTensor(obs).to(device))
         action = Qs.argmax().item()
         return action
+
+    def get_qvalues(self, batch):
+        with torch.no_grad():
+            Qs = self.qnet(batch.observations)
+        Q = torch.gather(Qs, 1, batch.actions).squeeze()  # (256,)
+        return Q.mean().item()
 
     def update(self, batch):
         self.optimizer.zero_grad()
@@ -78,6 +86,7 @@ class DQNAgent:
     def load(self, fname):
         self.qnet.load_state_dict(torch.load(f"{fname}_qnet"))
         self.target_qnet.load_state_dict(torch.load(f"{fname}_target_qnet"))
+        self.optimizer = torch.optim.Adam(self.qnet.parameters(), lr=self.lr)
 
 
 class CQLAgent:
@@ -100,9 +109,16 @@ class CQLAgent:
         self.optimizer = torch.optim.Adam(self.qnet.parameters(), lr=self.lr)
 
     def select_action(self, obs):
-        Qs = self.qnet(torch.FloatTensor(obs).to(device))
+        with torch.no_grad():
+            Qs = self.qnet(torch.FloatTensor(obs).to(device))
         action = Qs.argmax().item()
         return action
+    
+    def get_qvalues(self, batch):
+        with torch.no_grad():
+            Qs = self.qnet(batch.observations)
+        Q = torch.gather(Qs, 1, batch.actions).squeeze()  # (256,)
+        return Q.mean().item()
 
     def update(self, batch):
         self.optimizer.zero_grad()

@@ -19,7 +19,7 @@ def get_args():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--env_name", default="PointmassHard-v2")
-    parser.add_argument("--agent", default="cql", choices=("cql", "dqn"))
+    parser.add_argument("--agent", default="dqn", choices=("cql", "dqn"))
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--cql_alpha", type=float, default=3.0)
     parser.add_argument("--hid_dim", type=int, default=64)
