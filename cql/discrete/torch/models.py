@@ -41,9 +41,9 @@ class DQNAgent:
                  obs_dim: int = 2,
                  act_dim: int = 2,
                  hid_dim: int = 64,
-                 *,
                  gamma: float = 0.99,
-                 tau: float = 0.005):
+                 tau: float = 0.005,
+                 **kwargs):
         self.act_dim = act_dim
         self.obs_dim = obs_dim
         self.gamma = gamma
@@ -71,6 +71,14 @@ class DQNAgent:
             target_param.data.copy_(self.tau*param.data + (1-self.tau)*target_param.data)
         return {"avg_loss": loss, "avg_Q": Q.mean(), "avg_target_Q": target_Q.mean()}
 
+    def save(self, fname):
+        torch.save(self.qnet.state_dict(), f"{fname}_qnet")
+        torch.save(self.target_qnet.state_dict(), f"{fname}_target_qnet")
+
+    def load(self, fname):
+        self.qnet.load_state_dict(torch.load(f"{fname}_qnet"))
+        self.target_qnet.load_state_dict(torch.load(f"{fname}_target_qnet"))
+
 
 class CQLAgent:
     def __init__(self,
@@ -78,17 +86,18 @@ class CQLAgent:
                  obs_dim: int = 2,
                  act_dim: int = 2,
                  hid_dim: int = 64,
-                 cql_alpha: float = 10.,
+                 cql_alpha: float = 3.0,
                  gamma: float = 0.99,
                  tau: float = 0.005):
         self.act_dim = act_dim
         self.obs_dim = obs_dim
         self.gamma = gamma
         self.tau = tau
+        self.lr = lr
         self.cql_alpha = cql_alpha
         self.qnet = QNetwork(obs_dim, act_dim, hid_dim).to(device)
         self.target_qnet = copy.deepcopy(self.qnet).to(device)
-        self.optimizer = torch.optim.Adam(self.qnet.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(self.qnet.parameters(), lr=self.lr)
 
     def select_action(self, obs):
         Qs = self.qnet(torch.FloatTensor(obs).to(device))
@@ -120,12 +129,13 @@ class CQLAgent:
                 "avg_Q": Q.mean(),
                 "avg_ood_Q": ((Qs.sum(axis=1) - Q)/(self.act_dim-1)).mean(),
                 # "avg_ood_Q": ood_Q.mean(),
-                "avg_target_Q": target_Q.mean(),
-                }
+                "avg_target_Q": target_Q.mean()}
 
     def save(self, fname):
-        torch.save(self.qnet.state_dict(), fname)
+        torch.save(self.qnet.state_dict(), f"{fname}_qnet")
+        torch.save(self.target_qnet.state_dict(), f"{fname}_target_qnet")
 
     def load(self, fname):
-        self.qnet.load_state_dict(torch.load(fname))
-
+        self.qnet.load_state_dict(torch.load(f"{fname}_qnet"))
+        self.target_qnet.load_state_dict(torch.load(f"{fname}_target_qnet"))
+        self.optimizer = torch.optim.Adam(self.qnet.parameters(), lr=self.lr)

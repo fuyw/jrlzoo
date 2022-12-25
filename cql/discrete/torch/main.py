@@ -73,23 +73,37 @@ def train_and_evaluate(args):
             eval_reward = eval_policy(agent, env, args.seed)
             if args.plot_traj:
                 env.plot_trajectory(f"imgs/{args.agent}/{t//args.eval_freq}")
-            print(f"[Step {t}] eval_reward = {eval_reward:.2f}\t"
-                    f"time = {(time.time()-t1)/60:.2f}\n\t"
-                    f"loss = {log_info['avg_loss'].item():.2f}\t"
-                    f"mse_loss = {log_info['avg_mse_loss'].item():.2f}\t"
-                    f"cql_loss = {log_info['avg_cql_loss'].item():.2f}\n\t"
-                    f"avg_ood_Q = {log_info['avg_ood_Q']:.2f}\t"
-                    f"avg_Q = {log_info['avg_Q']:.2f}\t"
-                    f"avg_target_Q = {log_info['avg_target_Q']:.2f}\n\n")
-            logs.append({"step": t,
-                         "reward": eval_reward,
-                         "time": (time.time()-t1)/60,
-                         "loss": log_info['avg_loss'].item(),
-                         "mse_loss": log_info['avg_mse_loss'].item(),
-                         "cql_loss": log_info['avg_cql_loss'].item(),
-                         "avg_ood_Q": log_info['avg_ood_Q'].item(),
-                         "avg_Q": log_info['avg_Q'].item(),
-                         "avg_target_Q": log_info['avg_target_Q'].item()})
+            if args.agent == "cql":
+                print(f"[Step {t}] eval_reward = {eval_reward:.2f}\t"
+                        f"time = {(time.time()-t1)/60:.2f}\n\t"
+                        f"loss = {log_info['avg_loss'].item():.2f}\t"
+                        f"mse_loss = {log_info['avg_mse_loss'].item():.2f}\t"
+                        f"cql_loss = {log_info['avg_cql_loss'].item():.2f}\n\t"
+                        f"avg_ood_Q = {log_info['avg_ood_Q']:.2f}\t"
+                        f"avg_Q = {log_info['avg_Q']:.2f}\t"
+                        f"avg_target_Q = {log_info['avg_target_Q']:.2f}\n\n")
+                logs.append({"step": t,
+                            "reward": eval_reward,
+                            "time": (time.time()-t1)/60,
+                            "loss": log_info['avg_loss'].item(),
+                            "mse_loss": log_info['avg_mse_loss'].item(),
+                            "cql_loss": log_info['avg_cql_loss'].item(),
+                            "avg_ood_Q": log_info['avg_ood_Q'].item(),
+                            "avg_Q": log_info['avg_Q'].item(),
+                            "avg_target_Q": log_info['avg_target_Q'].item()})
+            else:
+                print(f"[Step {t}] eval_reward = {eval_reward:.2f}\t"
+                        f"time = {(time.time()-t1)/60:.2f}\n\t"
+                        f"loss = {log_info['avg_loss'].item():.2f}\t"
+                        f"avg_Q = {log_info['avg_Q']:.2f}\t"
+                        f"avg_target_Q = {log_info['avg_target_Q']:.2f}\n\n")
+                logs.append({"step": t,
+                            "reward": eval_reward,
+                            "time": (time.time()-t1)/60,
+                            "loss": log_info['avg_loss'].item(),
+                            "avg_Q": log_info['avg_Q'].item(),
+                            "avg_target_Q": log_info['avg_target_Q'].item()})
+
     log_df = pd.DataFrame(logs) 
     log_df.to_csv(f"logs/{args.agent}/{exp_name}.csv")
     agent.save(f"saved_models/{args.agent}/{exp_name}")
