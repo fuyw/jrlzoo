@@ -28,7 +28,7 @@ def eval_policy(agent: TD3Agent, env: gym.Env, eval_episodes: int = 10) -> Tuple
     return avg_reward, time.time() - t1
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict): 
+def train_and_evaluate(config: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     exp_name = f'td3_s{config.seed}_{timestamp}'
@@ -39,7 +39,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     logger = get_logger(f'logs/{config.env_name.lower()}/{exp_name}.log')
     logger.info(f"Exp configurations:\n{config}")
 
-    # initialize the gym/d4rl environment 
+    # initialize the gym/d4rl environment
     env = gym.make(config.env_name)
     eval_env = gym.make(config.env_name)
 
@@ -81,7 +81,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                     size=act_dim)).clip(-max_action, max_action)
 
         next_obs, reward, done, info = env.step(action)
-        done_bool = float(done) if 'TimeLimit.truncated' not in info else 0
+        done_bool = float(done) if "TimeLimit.truncated" not in info else 0
         # done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
 
         replay_buffer.add(obs, action, next_obs, reward, done_bool)
@@ -111,7 +111,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                     f"\tq1: {log_info['q1']:.3f}, max_q1: {log_info['max_q1']:.3f}, min_q1: {log_info['min_q1']:.3f}\n"
                     f"\tq2: {log_info['q2']:.3f}, max_q2: {log_info['max_q2']:.3f}, min_q2: {log_info['min_q2']:.3f}\n"
                     f"\ttarget_q: {log_info['target_q']:.3f}, max_target_q: {log_info['max_target_q']:.3f}, min_target_q: {log_info['min_target_q']:.3f}\n"
-                ) 
+                )
                 logs.append(log_info)
             else:
                 logs.append({"step": t, "reward": eval_reward})
