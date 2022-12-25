@@ -60,14 +60,14 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
     logs = [{"episode":0, "reward":eval_policy(agent, env, configs.eval_episodes)[0]}]
 
     # start training
-    obs, done = env.reset(), False
     episode_steps = 0
+    obs, done = env.reset(), False
     for t in trange(1, configs.max_timesteps+1):
         episode_steps += 1
         if t <= configs.start_timesteps:
             action = env.action_space.sample()
         else:
-            if np.random.random() < configs.epsilon:
+            if np.random.random() <= configs.epsilon:
                 action = env.action_space.sample()
             else:
                 action = agent.sample_action(agent.state.params, obs).item()
