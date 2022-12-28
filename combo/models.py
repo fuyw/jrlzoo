@@ -280,8 +280,8 @@ class DynamicsModel:
                                     "delta_log_var": delta_log_var}
             grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
             (_, log_info), gradients = grad_fn(model_state.params, batch_inputs, batch_targets)
-            log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
-            gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
+            log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+            gradients = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), gradients)
             new_model_state = model_state.apply_gradients(grads=gradients)
             return new_model_state, log_info
 
@@ -298,7 +298,7 @@ class DynamicsModel:
                 return eval_loss, {"reward_loss": reward_loss, "state_loss": state_loss, "mse_loss": mse_loss}
             loss_fn = jax.vmap(loss_fn, in_axes=(None, 1, 1))
             loss, log_info = loss_fn(model_state.params, batch_inputs, batch_targets)
-            log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+            log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
             return loss, log_info
 
         for epoch in trange(self.epochs):
@@ -392,8 +392,8 @@ class DynamicsModel:
                                     "train_loss": train_loss}
             grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
             (_, log_info), gradients = grad_fn(model_state.params, batch_inputs, batch_targets)
-            log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
-            gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
+            log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+            gradients = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), gradients)
             new_model_state = model_state.apply_gradients(grads=gradients)
             return new_model_state, log_info
 
@@ -407,7 +407,7 @@ class DynamicsModel:
                 return mse_loss, {"reward_loss": reward_loss, "state_loss": state_loss, "mse_loss": mse_loss}
             loss_fn = jax.vmap(loss_fn, in_axes=(None, 1, 1))
             loss, log_info = loss_fn(model_state.params, batch_inputs, batch_targets)
-            log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+            log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
             return loss, log_info
 
         for epoch in trange(self.epochs):
@@ -767,7 +767,7 @@ class COMBOAgent:
                                            batch.discounts,
                                            self.masks_real,
                                            self.masks_model)
-        gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
+        gradients = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), gradients)
         extra_log_info = {
             'q1_min': log_info['q1'].min(),
             'q1_max': log_info['q1'].max(),
@@ -804,7 +804,7 @@ class COMBOAgent:
             'cql2_loss_max': log_info['cql2_loss'].max(),
             'cql2_loss_std': log_info['cql2_loss'].std(),
         }
-        log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+        log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
         log_info.update(extra_log_info)
         alpha_grads, actor_grads, critic_grads = gradients
 
@@ -1112,7 +1112,7 @@ class COMBOAgent_nocql:
                                            batch.discounts,
                                            self.masks_real,
                                            self.masks_model)
-        gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
+        gradients = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), gradients)
         extra_log_info = {
             'q1_min': log_info['q1'].min(),
             'q1_max': log_info['q1'].max(),
@@ -1149,7 +1149,7 @@ class COMBOAgent_nocql:
             'cql2_loss_max': log_info['cql2_loss'].max(),
             'cql2_loss_std': log_info['cql2_loss'].std(),
         }
-        log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+        log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
         log_info.update(extra_log_info)
         alpha_grads, actor_grads, critic_grads = gradients
 
@@ -1467,7 +1467,7 @@ class COMBOAgent_noimp:
                                            batch.discounts,
                                            self.masks_real,
                                            self.masks_model)
-        gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
+        gradients = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), gradients)
         extra_log_info = {
             'q1_min': log_info['q1'].min(),
             'q1_max': log_info['q1'].max(),
@@ -1504,7 +1504,7 @@ class COMBOAgent_noimp:
             'cql2_loss_max': log_info['cql2_loss'].max(),
             'cql2_loss_std': log_info['cql2_loss'].std(),
         }
-        log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+        log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
         log_info.update(extra_log_info)
         alpha_grads, actor_grads, critic_grads = gradients
 
@@ -1823,7 +1823,7 @@ class COMBOAgent_cqlreal:
                                            batch.discounts,
                                            self.masks_real,
                                            self.masks_model)
-        gradients = jax.tree_map(functools.partial(jnp.mean, axis=0), gradients)
+        gradients = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), gradients)
         extra_log_info = {
             'q1_min': log_info['q1'].min(),
             'q1_max': log_info['q1'].max(),
@@ -1860,7 +1860,7 @@ class COMBOAgent_cqlreal:
             'cql2_loss_max': log_info['cql2_loss'].max(),
             'cql2_loss_std': log_info['cql2_loss'].std(),
         }
-        log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+        log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
         log_info.update(extra_log_info)
         alpha_grads, actor_grads, critic_grads = gradients
 

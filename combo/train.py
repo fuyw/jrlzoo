@@ -85,8 +85,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
     # Load the trained dynamics model
     agent.model.load(f'saved_dynamics_models/{configs.env_name}')
     # agent.model.load(f'{configs.dynamics_model_dir}/{configs.env_name}/s0')
-    logger.info(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
-    logger.info(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
+    logger.info(f"\nThe actor architecture is:\n{jax.tree_util.tree_map(lambda x: x.shape, agent.actor_state.params)}")
+    logger.info(f"\nThe critic architecture is:\n{jax.tree_util.tree_map(lambda x: x.shape, agent.critic_state.params)}")
 
     # Replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)

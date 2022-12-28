@@ -392,7 +392,7 @@ class CQLAgent:
                                        batch.rewards,
                                        batch.next_observations,
                                        batch.discounts)
-        grads = jax.tree_map(functools.partial(jnp.mean, axis=0), grads)
+        grads = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), grads)
         extra_log_info = {
             'q1_min': log_info['q1'].min(),
             'q1_max': log_info['q1'].max(),
@@ -425,7 +425,7 @@ class CQLAgent:
             'cql_loss2_max': log_info['cql_loss2'].max(),
             'cql_loss2_std': log_info['cql_loss2'].std(),
         }
-        log_info = jax.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+        log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
         log_info.update(extra_log_info)
         alpha_grads, actor_grads, critic_grads = grads
 

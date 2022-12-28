@@ -41,12 +41,13 @@ def eval_policy(agent: TD3BCAgent, env: gym.Env, mean: np.ndarray = 0.0,
 
 def train_and_evaluate(configs: ml_collections.ConfigDict): 
     start_time = time.time()
-    exp_name = f'{configs.algo}_s{configs.seed}'
+    timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+    exp_name = f'{configs.algo}_s{configs.seed}_{timestamp}'
     exp_info = f'# Running experiment for: {exp_name}_{configs.env_name} #'
-    ckpt_dir = f"{configs.model_dir}/{configs.env_name}/s{configs.seed}"
+    ckpt_dir = f"{configs.model_dir}/{configs.env_name.lower()}/s{configs.seed}"
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
-    logger = get_logger(f'logs/{configs.env_name}/{exp_name}.log')
+    logger = get_logger(f'logs/{configs.env_name.lower()}/{exp_name}.log')
     logger.info(f"Exp configurations:\n{configs}")
 
     # initialize the d4rl environment 

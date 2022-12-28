@@ -33,12 +33,12 @@ def eval_policy(agent: SACAgent,
 def train_and_evaluate(configs: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
-    exp_name = f'sac_s{configs.seed}_ups{configs.updates_per_step}_{timestamp}'
+    exp_name = f'sac_s{configs.seed}_{timestamp}'
     exp_info = f'# Running experiment for: {exp_name}_{configs.env_name} #'
-    ckpt_dir = f"{configs.model_dir}/{configs.env_name.lower()}/ups{configs.updates_per_step}/{exp_name}"
+    ckpt_dir = f"{configs.model_dir}/{configs.env_name.lower()}/{exp_name}"
     print('#' * len(exp_info) + f'\n{exp_info}\n' + '#' * len(exp_info))
 
-    logger = get_logger(f'logs/{configs.env_name.lower()}/ups{configs.updates_per_step}/{exp_name}.log')
+    logger = get_logger(f'logs/{configs.env_name.lower()}/{exp_name}.log')
     logger.info(f"Exp configurations:\n{configs}")
 
     # env = gym.make(configs.env_name)
@@ -84,9 +84,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
         obs = next_obs
 
         if t > configs.start_timesteps:
-            for _ in range(configs.updates_per_step):
-                batch = replay_buffer.sample(configs.batch_size)
-                log_info = agent.update(batch)
+            batch = replay_buffer.sample(configs.batch_size)
+            log_info = agent.update(batch)
 
         if done:
             obs, done = env.reset(), False
@@ -131,4 +130,4 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
     # Save logs
     log_df = pd.DataFrame(logs)
     log_df.to_csv(
-        f"{configs.log_dir}/{configs.env_name.lower()}/ups{configs.updates_per_step}/{exp_name}.csv")
+        f"{configs.log_dir}/{configs.env_name.lower()}/{exp_name}.csv")

@@ -98,7 +98,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                                                 config.actor_steps)
             trajectories = tuple(x[permutation] for x in trajectories)
 
-            batch_trajectories = jax.tree_map(
+            batch_trajectories = jax.tree_util.tree_map(
                 lambda x: x.reshape(
                     (iterations, config.batch_size, *x.shape[1:])),
                 trajectories)

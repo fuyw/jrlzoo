@@ -70,8 +70,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                      critic_hidden_dims=configs.hidden_dims,
                      initializer=configs.initializer)
 
-    logger.info(f"\nThe actor architecture is:\n{jax.tree_map(lambda x: x.shape, agent.actor_state.params)}")
-    logger.info(f"\nThe critic architecture is:\n{jax.tree_map(lambda x: x.shape, agent.critic_state.params)}")
+    logger.info(f"\nThe actor architecture is:\n{jax.tree_util.tree_map(lambda x: x.shape, agent.actor_state.params)}")
+    logger.info(f"\nThe critic architecture is:\n{jax.tree_util.tree_map(lambda x: x.shape, agent.critic_state.params)}")
 
     # replay buffer
     replay_buffer = ReplayBuffer(obs_dim, act_dim)

@@ -19,7 +19,6 @@ do
         python main.py \
         --config=configs/mujoco.py \
         --config.env_name=$env \
-        --config.updates_per_step=1 \
         --config.seed=$seed
     done
 done
