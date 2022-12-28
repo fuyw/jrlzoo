@@ -93,12 +93,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
             logs.append(log_info)
             logger.info(
                 f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
-                f"\tcritic_loss: {log_info['critic_loss']:.3f}, max_critic_loss: {log_info['max_critic_loss']:.3f}, min_critic_loss: {log_info['min_critic_loss']:.3f}\n"
-                f"\tactor_loss: {log_info['actor_loss']:.3f}, max_actor_loss: {log_info['max_actor_loss']:.3f}, min_actor_loss: {log_info['min_actor_loss']:.3f}\n"
-                f"\tbc_loss: {log_info['bc_loss']:.3f}, max_bc_loss: {log_info['max_bc_loss']:.3f}, min_bc_loss: {log_info['min_bc_loss']:.3f}\n"
+                f"\tcritic_loss: {log_info['critic_loss']:.3f}, actor_loss: {log_info['actor_loss']:.3f}, bc_loss: {log_info['bc_loss']:.3f}\n"
                 f"\tq1: {log_info['q1']:.3f}, max_q1: {log_info['max_q1']:.3f}, min_q1: {log_info['min_q1']:.3f}\n"
-                f"\tq2: {log_info['q2']:.3f}, max_q2: {log_info['max_q2']:.3f}, min_q2: {log_info['min_q2']:.3f}\n"
-                f"\ttarget_q: {log_info['target_q']:.3f}, max_target_q: {log_info['max_target_q']:.3f}, min_target_q: {log_info['min_target_q']:.3f}\n"
             ) 
 
     log_df = pd.DataFrame(logs)

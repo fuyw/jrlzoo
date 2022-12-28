@@ -152,18 +152,14 @@ class TD3BCAgent:
                          critic_params: FrozenDict):
         def loss_fn(params: FrozenDict):
             actions = self.actor.apply({"params": params}, batch.observations)
-            q = self.critic.apply({"params": critic_params}, batch.observations, actions, method=DoubleCritic.Q1)
+            q, _ = self.critic.apply({"params": critic_params}, batch.observations, actions)
             lmbda = self.alpha / jnp.abs(jax.lax.stop_gradient(q)).mean()
             bc_loss = jnp.mean((actions - batch.actions)**2, axis=-1)
             actor_loss = -lmbda * q + bc_loss
             avg_actor_loss = actor_loss.mean()
             return avg_actor_loss, {
                 "actor_loss": avg_actor_loss,
-                "max_actor_loss": actor_loss.max(),
-                "min_actor_loss": actor_loss.min(),
                 "bc_loss": bc_loss.mean(),
-                "max_bc_loss": bc_loss.max(),
-                "min_bc_loss": bc_loss.min(),
             }
         (_, actor_info), actor_grads = jax.value_and_grad(loss_fn, has_aux=True)(actor_state.params)
         actor_state = actor_state.apply_gradients(grads=actor_grads)
@@ -190,10 +186,8 @@ class TD3BCAgent:
             critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
             avg_critic_loss = critic_loss.mean()
             return avg_critic_loss, {
-                "critic_loss": avg_critic_loss, "max_critic_loss": critic_loss.max(), "min_critic_loss": critic_loss.min(),
-                "target_q": target_q.mean(), "max_target_q": target_q.max(), "min_target_q": target_q.min(),
+                "critic_loss": avg_critic_loss, 
                 "q1": q1.mean(), "max_q1": q1.max(), "min_q1": q1.min(),
-                "q2": q2.mean(), "max_q2": q2.max(), "min_q2": q2.min(),
             }
         (_, critic_info), critic_grads = jax.value_and_grad(loss_fn, has_aux=True)(critic_state.params)
         critic_state = critic_state.apply_gradients(grads=critic_grads)
