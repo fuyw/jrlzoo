@@ -2,12 +2,12 @@
 
 # Script to reproduce results
 envs=(
-    "humanoid-run"
-    "cheetah-run"
-    "quadruped-run"
-    "hopper-hop"
+    # "humanoid-run"
+    # "cheetah-run"
+    # "quadruped-run"
+    # "hopper-hop"
     # "cartpole-balance"
-    # "HalfCheetah-v2"
+    "HalfCheetah-v2"
     # "Hopper-v2"
     # "Walker2d-v2"
     # "Ant-v2"

@@ -8,7 +8,7 @@ def get_config():
     config.log_dir = "logs"
     config.model_dir = "saved_models"
     config.initializer = "glorut_uniform"
-    config.hidden_dims = (256, 256, 256)
+    config.hidden_dims = (256, 256)
     config.lr_critic = 3e-4
     config.lr_actor = 1e-4
     config.seed = 0

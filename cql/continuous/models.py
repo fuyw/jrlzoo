@@ -30,7 +30,7 @@ def atanh(x: jnp.ndarray):
 
 
 class MLP(nn.Module):
-    hidden_dims: Sequence[int] = (256, 256, 256)
+    hidden_dims: Sequence[int] = (256, 256)
     init_fn: Callable = nn.initializers.glorot_uniform()
     activate_final: bool = True
 
@@ -44,7 +44,7 @@ class MLP(nn.Module):
 
 
 class Critic(nn.Module):
-    hidden_dims: Sequence[int] = (256, 256, 256)
+    hidden_dims: Sequence[int] = (256, 256)
     initializer: str = "glorot_uniform"
 
     def setup(self):
@@ -64,7 +64,7 @@ class Critic(nn.Module):
 
 
 class DoubleCritic(nn.Module):
-    hidden_dims: Sequence[int] = (256, 256, 256)
+    hidden_dims: Sequence[int] = (256, 256)
     initializer: str = "glorot_uniform"
 
     def setup(self):
@@ -84,11 +84,13 @@ class DoubleCritic(nn.Module):
 class Actor(nn.Module):
     act_dim: int
     max_action: float = 1.0
-    hidden_dims: Sequence[int] = (256, 256, 256)
+    hidden_dims: Sequence[int] = (256, 256)
     initializer: str = "glorot_uniform"
 
     def setup(self):
-        self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
+        self.net = MLP(self.hidden_dims,
+                       init_fn=init_fn(self.initializer),
+                       activate_final=True)
         self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1e-2))
         self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1e-2))
 
@@ -153,8 +155,8 @@ class CQLAgent:
                  max_target_backup: bool = False,
                  cql_clip_diff_min: float = -np.inf,
                  cql_clip_diff_max: float = np.inf,
-                 actor_hidden_dims: Sequence[int] = (256, 256, 256),
-                 critic_hidden_dims: Sequence[int] = (256, 256, 256),
+                 actor_hidden_dims: Sequence[int] = (256, 256),
+                 critic_hidden_dims: Sequence[int] = (256, 256),
                  initializer: str = "glorot_uniform"):
 
         self.update_step = 0
@@ -226,11 +228,6 @@ class CQLAgent:
         rng, sample_rng = jax.random.split(rng)
         mean_action, sampled_action, _ = self.actor.apply({"params": params}, sample_rng, observation)
         return rng, jnp.where(eval_mode, mean_action, sampled_action)
-
-    @functools.partial(jax.jit, static_argnames=("self"), device=jax.devices("cpu")[0])
-    def eval_select_action(self, params: FrozenDict, rng: Any, observation: np.ndarray) -> jnp.ndarray:
-        mean_action, _, _ = self.actor.apply({"params": params}, rng, observation)
-        return rng, mean_action
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def lagrange_train_step(self,

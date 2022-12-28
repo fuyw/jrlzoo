@@ -2,7 +2,7 @@
 
 # Script to reproduce results
 mujoco_envs=(
-    # "halfcheetah-medium-v2"
+    "halfcheetah-medium-v2"
     # "hopper-medium-v2"
     "walker2d-medium-v2"
     # "hopper-medium-replay-v2"

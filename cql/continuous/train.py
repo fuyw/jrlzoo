@@ -6,6 +6,7 @@ import gym
 import d4rl
 import jax
 import time
+import numpy as np
 import pandas as pd
 from tqdm import trange
 from models import CQLAgent
@@ -23,7 +24,8 @@ def eval_policy(agent, eval_env, eval_episodes: int = 10) -> Tuple[float, float]
     for _ in range(eval_episodes):
         obs, done = eval_env.reset(), False
         while not done:
-            _, action = agent.eval_select_action(agent.actor_state.params, agent.rng, obs)
+            _, action = agent.select_action(agent.actor_state.params, agent.rng, obs, True)
+            action = np.asarray(action)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
