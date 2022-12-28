@@ -20,7 +20,7 @@ def eval_policy(agent: AWACAgent,
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
-            action = agent.sample_action(obs, 0.0)
+            action = agent.sample_action(obs)
             obs, reward, done, _ = env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -63,8 +63,7 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
             logs.append(log_info)
             logger.info(
                 f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
-                f"\tactor_loss: {log_info['actor_loss']:.3f}, actor_loss_max: {log_info['actor_loss_max']:.3f}, actor_loss_min: {log_info['actor_loss_min']:.3f}\n"
-                f"\tcritic_loss: {log_info['critic_loss']:.3f}, critic_loss_max: {log_info['critic_loss_max']:.3f}, critic_loss_min: {log_info['critic_loss_min']:.3f}\n"
+                f"\tactor_loss: {log_info['actor_loss']:.3f}, critic_loss: {log_info['critic_loss']:.3f}\n"
                 f"\tq1: {log_info['q1']:.3f}, q1_max: {log_info['q1_max']:.3f}, q1_min: {log_info['q1_min']:.3f} \n"
                 f"\tlogp: {log_info['logp']:.3f}, logp_max: {log_info['logp_max']:.3f}, logp_min: {log_info['logp_min']:.3f}\n"
             )

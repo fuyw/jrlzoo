@@ -69,21 +69,20 @@ class Critic(nn.Module):
 
 
 class DoubleCritic(nn.Module):
-    hidden_dims: Sequence[int] = (256, 256, 256)
+    hidden_dims: Sequence[int] = (256, 256)
     initializer: str = "orthogonal"
+    num_qs: int = 2
 
-    def setup(self):
-        self.critic1 = Critic(self.hidden_dims, initializer=self.initializer)
-        self.critic2 = Critic(self.hidden_dims, initializer=self.initializer)
-
-    def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        q1 = self.critic1(observations, actions)
-        q2 = self.critic2(observations, actions)
-        return q1, q2
-
-    def Q1(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        q1 = self.critic1(observations, actions)
-        return q1
+    @nn.compact
+    def __call__(self, states, actions):
+        VmapCritic = nn.vmap(Critic,
+                             variable_axes={"params": 0},
+                             split_rngs={"params": True},
+                             in_axes=None,
+                             out_axes=0,
+                             axis_size=self.num_qs)
+        qs = VmapCritic(self.hidden_dims, self.initializer)(states, actions)
+        return qs
 
 
 class Actor(nn.Module):

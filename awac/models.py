@@ -45,20 +45,37 @@ class MLP(nn.Module):
 
 class Actor(nn.Module):
     act_dim: int
+    max_action: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
+    initializer: str = "glorot_uniform"
 
-    @nn.compact
-    def __call__(self, observations: jnp.ndarray, temperature: float = 1.0):
-        outputs = MLP(self.hidden_dims, activate_final=True)(observations)
-        means = nn.Dense(self.act_dim)(outputs)
-        means = nn.tanh(means)
+    def setup(self):
+        self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
+        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
+        self.log_std = self.param('log_std', nn.initializers.zeros, (self.act_dim))
 
-        log_stds = self.param('log_stds', nn.initializers.zeros, (self.act_dim))
-        log_stds = jnp.clip(log_stds, LOG_STD_MIN, LOG_STD_MAX)
-        stds = jnp.exp(log_stds)
+    def __call__(self, rng: Any, observations: jnp.ndarray):
+        x = self.net(observations)
+        x = self.mu_layer(x)
+        mean_action = nn.tanh(x) * self.max_action
 
-        base_dist = distrax.MultivariateNormalDiag(means, stds*temperature)
-        return base_dist
+        log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
+        std = jnp.exp(log_std)
+        action_distribution = distrax.MultivariateNormalDiag(mean_action, std)
+        sampled_action = action_distribution.sample(seed=rng)
+        return mean_action, sampled_action
+
+    def get_logp(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
+        x = self.net(observation)
+        x = self.mu_layer(x)
+        mean_action = nn.tanh(x) * self.max_action
+
+        log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
+        std = jnp.exp(log_std)
+        action_distribution = distrax.MultivariateNormalDiag(mean_action, std)
+
+        logp = action_distribution.log_prob(action)
+        return logp
 
 
 class Critic(nn.Module):
@@ -83,6 +100,7 @@ class Critic(nn.Module):
 
 class DoubleCritic(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
+    initializer: str = "orthogonal"
     num_qs: int = 2
 
     @nn.compact
@@ -93,7 +111,7 @@ class DoubleCritic(nn.Module):
                              in_axes=None,
                              out_axes=0,
                              axis_size=self.num_qs)
-        qs = VmapCritic(self.hidden_dims)(states, actions)
+        qs = VmapCritic(self.hidden_dims, self.initializer)(states, actions)
         return qs
 
 
@@ -121,14 +139,14 @@ class AWACAgent:
         dummy_obs = jnp.ones([1, obs_dim], dtype=jnp.float32)
         dummy_act = jnp.ones([1, act_dim], dtype=jnp.float32)
 
-        self.actor = Actor(act_dim) 
-        actor_params = self.actor.init(actor_key, dummy_obs, 1.0)["params"]
+        self.actor = Actor(act_dim, initializer=initializer) 
+        actor_params = self.actor.init(actor_key, actor_key, dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(apply_fn=Actor.apply,
                                                          params=actor_params,
                                                          tx=optax.adam(learning_rate=lr))
 
         # Initialize the critic
-        self.critic = DoubleCritic(hidden_dims=hidden_dims)
+        self.critic = DoubleCritic(hidden_dims=hidden_dims, initializer=initializer)
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]
         self.critic_target_params = critic_params
         self.critic_state = train_state.TrainState.create(apply_fn=Critic.apply,
@@ -136,16 +154,15 @@ class AWACAgent:
                                                           tx=optax.adam(learning_rate=lr))
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def _sample_action(self, params, key, observation, temperature):
-        dist = self.actor.apply({"params": params}, observation, temperature)
-        sampled_action = dist.sample(seed=key)
-        return sampled_action
+    def _sample_action(self, params, key, observation):
+        mean_action, _ = self.actor.apply({"params": params}, key, observation)
+        return mean_action
 
-    def sample_action(self, observation, temperature):
+    def sample_action(self, observation):
         self.rng, sample_rng = jax.random.split(self.rng, 2)
-        sampled_action = self._sample_action(self.actor_state.params, sample_rng, observation, temperature)
+        sampled_action = self._sample_action(self.actor_state.params, sample_rng, observation)
         sampled_action = np.asarray(sampled_action)
-        return sampled_action.clip(-1.0, 1.0)
+        return sampled_action.clip(-self.max_action, self.max_action)
 
     def actor_train_step(self,
                          batch: Batch,
@@ -156,18 +173,18 @@ class AWACAgent:
         q = jnp.minimum(q1, q2)
 
         def loss_fn(actor_params: FrozenDict):
-            dist = self.actor.apply({"params": actor_params}, batch.observations, 1.0)
-            sampled_actions = dist.sample(seed=actor_key)
+            _, sampled_actions = self.actor.apply({"params": actor_params}, actor_key, batch.observations)
             sampled_q1, sampled_q2 = self.critic.apply(
                 {"params": critic_params}, batch.observations, jax.lax.stop_gradient(sampled_actions))
             v = jnp.minimum(sampled_q1, sampled_q2)
-            logp = dist.log_prob(batch.actions)
+            logp = self.actor.apply({"params": actor_params},
+                                    batch.observations,
+                                    batch.actions,
+                                    method=Actor.get_logp)
             actor_loss = -jax.nn.softmax((q - v)/2.0) * logp
 
-            return actor_loss.mean(), {
-                "actor_loss": actor_loss.mean(),
-                "actor_loss_max": actor_loss.max(),
-                "actor_loss_min": actor_loss.min(),
+            return actor_loss.sum(), {
+                "actor_loss": actor_loss.sum(),
                 "logp": logp.mean(),
                 "logp_max": logp.max(),
                 "logp_min": logp.min(),
@@ -183,8 +200,7 @@ class AWACAgent:
                           actor_params: FrozenDict,
                           critic_target_params: FrozenDict):
 
-        dist = self.actor.apply({"params": actor_params}, batch.next_observations)
-        next_actions = dist.sample(seed=critic_key)
+        _, next_actions = self.actor.apply({"params": actor_params}, critic_key, batch.next_observations)
         next_q1, next_q2 = self.critic.apply(
             {"params": critic_target_params}, batch.next_observations, next_actions)
         next_q = jnp.minimum(next_q1, next_q2)
@@ -192,9 +208,9 @@ class AWACAgent:
 
         def loss_fn(params: FrozenDict):
             q1, q2 = self.critic.apply({"params": params}, batch.observations, batch.actions)
-            critic_loss = (q1 - target_q)**2 + (q2 - target_q)**2
-            return critic_loss.mean(), {
-                "critic_loss": critic_loss.mean(), "critic_loss_max": critic_loss.max(), "critic_loss_min": critic_loss.min(),
+            critic_loss = ((q1 - target_q)**2 + (q2 - target_q)**2).mean()
+            return critic_loss, {
+                "critic_loss": critic_loss.mean(), 
                 "q1": q1.mean(), "q1_max": q1.max(), "q1_min": q1.min(),
             }
         (_, critic_info), critic_grads = jax.value_and_grad(loss_fn, has_aux=True)(critic_state.params)
