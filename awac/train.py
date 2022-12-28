@@ -30,6 +30,7 @@ def eval_policy(agent: AWACAgent,
     d4rl_score = env.get_normalized_score(avg_reward) * 100
     return d4rl_score, time.time() - t1
 
+
 def train_and_evaluate(configs: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
@@ -70,8 +71,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
         log_info = agent.update(batch)
 
         # Save every 1e5 steps & last 5 checkpoints
-        if (t % 100000 == 0) or (t >= int(9.8e5) and t % configs.eval_freq == 0):
-            agent.save(f"{ckpt_dir}", t // configs.eval_freq)
+        # if (t % 100000 == 0) or (t >= int(9.8e5) and t % configs.eval_freq == 0):
+        #     agent.save(f"{ckpt_dir}", t // configs.eval_freq)
 
         # save some evaluate time
         if (t>int(9.5e5) and (t % configs.eval_freq == 0)) or (t<=int(9.5e5) and t % (2*configs.eval_freq) == 0):
@@ -81,24 +82,29 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
             logger.info(
                 f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
 
-                f"\tcritic_loss1: {log_info['critic_loss1']:.3f}, critic_loss1_max: {log_info['critic_loss1_max']:.3f}, critic_loss1_min: {log_info['critic_loss1_min']:.3f}, critic_loss1_std: {log_info['critic_loss1_std']:.3f}\n"
-                f"\tcritic_loss2: {log_info['critic_loss2']:.3f}, critic_loss2_max: {log_info['critic_loss2_max']:.3f}, critic_loss2_min: {log_info['critic_loss2_min']:.3f}, critic_loss2_std: {log_info['critic_loss2_std']:.3f}\n"
-
                 f"\tactor_loss: {log_info['actor_loss']:.3f}, actor_loss_max: {log_info['actor_loss_max']:.3f}, actor_loss_min: {log_info['actor_loss_min']:.3f}, actor_loss_std: {log_info['actor_loss_std']:.3f}\n"
 
-                f"\tq1: {log_info['q1']:.3f}, q1_max: {log_info['q1_max']:.3f}, q1_min: {log_info['q1_min']:.3f}, q1_std: {log_info['q1_std']:.3f}\n"
-                f"\tq2: {log_info['q2']:.3f}, q2_max: {log_info['q2_max']:.3f}, q2_min: {log_info['q2_min']:.3f}, q2_std: {log_info['q2_std']:.3f}\n"
-                f"\ttarget_q: {log_info['target_q']:.3f}, target_q_max: {log_info['target_q_max']:.3f}, target_q_min: {log_info['target_q_min']:.3f}, target_q_std: {log_info['target_q_std']:.3f}\n"
+                f"\tcritic_loss1: {log_info['critic_loss1']:.3f}, critic_loss1_max: {log_info['critic_loss1_max']:.3f}, critic_loss1_min: {log_info['critic_loss1_min']:.3f}\n"
 
-                f"\tlogp: {log_info['logp']:.3f}, exp_a: {log_info['exp_a']:.3f}, v: {log_info['v']:.3f}\n"
-                f"\tcritic_param_norm: {log_info['critic_param_norm']:.3f}, actor_param_norm: {log_info['actor_param_norm']:.3f}\n"
+                f"\tcritic_loss2: {log_info['critic_loss2']:.3f}, critic_loss2_max: {log_info['critic_loss2_max']:.3f}, critic_loss2_min: {log_info['critic_loss2_min']:.3f}\n"
+
+                f"\tactor_loss: {log_info['actor_loss']:.3f}, actor_loss_max: {log_info['actor_loss_max']:.3f}, actor_loss_min: {log_info['actor_loss_min']:.3f}\n"
+
+                f"\tv: {log_info['v']:.3f}, v_max: {log_info['v_max']:.3f}, v_min: {log_info['v_min']:.3f}\n"
+                f"\texp_a: {log_info['exp_a']:.3f}, exp_a_max: {log_info['exp_a_max']:.3f}, exp_a_min: {log_info['exp_a_min']:.3f}\n"
+                f"\tlogp: {log_info['logp']:.3f}, logp_max: {log_info['logp_max']:.3f}, logp_min: {log_info['logp_min']:.3f}\n"
+
+                f"\tq1: {log_info['q1']:.3f}, q1_max: {log_info['q1_max']:.3f}, q1_min: {log_info['q1_min']:.3f} \n"
+                f"\tq2: {log_info['q2']:.3f}, q2_max: {log_info['q2_max']:.3f}, q2_min: {log_info['q2_min']:.3f} \n"
+                f"\ttarget_q: {log_info['target_q']:.3f}, target_q_max: {log_info['target_q_max']:.3f}, target_q_min: {log_info['target_q_min']:.3f}\n"
+
             )
 
         # Save checkpoints
-        if t % configs.ckpt_freq == 0:
-            agent.save(f"{ckpt_dir}", t // configs.ckpt_freq)
+        # if t % configs.ckpt_freq == 0:
+        #     agent.save(f"{ckpt_dir}", t // configs.ckpt_freq)
 
     # Save logs
-    log_df = pd.DataFrame(logs)
-    log_df.to_csv(
-        f"{configs.log_dir}/{configs.env_name.lower()}/{exp_name}.csv")
+    # log_df = pd.DataFrame(logs)
+    # log_df.to_csv(
+    #     f"{configs.log_dir}/{configs.env_name.lower()}/{exp_name}.csv")

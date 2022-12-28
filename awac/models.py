@@ -14,10 +14,6 @@ LOG_STD_MAX = 2.
 LOG_STD_MIN = -10.
 
 
-def tree_norm(tree):
-    return jnp.sqrt(sum((x**2).sum() for x in jax.tree_util.tree_leaves(tree)))
-
-
 def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
     if initializer == "orthogonal":
         return nn.initializers.orthogonal(gain)
@@ -53,21 +49,16 @@ class Critic(nn.Module):
     initializer: str = "glorot_uniform"
 
     def setup(self):
-        self.net = MLP(self.hidden_dims,
-                       init_fn=init_fn(self.initializer),
-                       activate_final=True)
-        self.out_layer = nn.Dense(1,
-                                  kernel_init=init_fn(self.initializer, 1.0))
+        self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
+        self.out_layer = nn.Dense(1, kernel_init=init_fn(self.initializer, 1.0))
 
-    def __call__(self, observations: jnp.ndarray,
-                 actions: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observations, actions], axis=-1)
         x = self.net(x)
         q = self.out_layer(x)
         return q.squeeze(-1)
 
-    def encode(self, observations: jnp.ndarray,
-               actions: jnp.ndarray) -> jnp.ndarray:
+    def encode(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observations, actions], axis=-1)
         x = self.net(x)
         return x
@@ -75,21 +66,18 @@ class Critic(nn.Module):
 
 class DoubleCritic(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
-    # initializer: str = "glorot_uniform"
-    initializer: str = "orthogonal"
+    initializer: str = "glorot_uniform"
 
     def setup(self):
         self.critic1 = Critic(self.hidden_dims, initializer=self.initializer)
         self.critic2 = Critic(self.hidden_dims, initializer=self.initializer)
 
-    def __call__(self, observations: jnp.ndarray,
-                 actions: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         q1 = self.critic1(observations, actions)
         q2 = self.critic2(observations, actions)
         return q1, q2
 
-    def Q1(self, observations: jnp.ndarray,
-           actions: jnp.ndarray) -> jnp.ndarray:
+    def Q1(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         q1 = self.critic1(observations, actions)
         return q1
 
@@ -97,63 +85,38 @@ class DoubleCritic(nn.Module):
 class Actor(nn.Module):
     act_dim: int
     max_action: float = 1.0
+    temperature: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
-    # initializer: str = "glorot_uniform"
     initializer: str = "orthogonal"
 
     def setup(self):
-        self.net = MLP(self.hidden_dims,
-                       init_fn=init_fn(self.initializer),
-                       activate_final=True)
-        self.mu_layer = nn.Dense(self.act_dim,
-                                 kernel_init=init_fn(
-                                     self.initializer,
-                                     5/3))  # only affect orthogonal init
-        self.std_layer = nn.Dense(self.act_dim,
-                                  kernel_init=init_fn(self.initializer, 1.0))
+        self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
+        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
+        self.log_std = self.param('log_std', nn.initializers.zeros, (self.act_dim,))
 
-    def __call__(self, rng: Any, observation: jnp.ndarray):
-        x = self.net(observation)
-        mu = self.mu_layer(x)
-        log_std = self.std_layer(x)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+    def __call__(self, rng: Any, observations: jnp.ndarray) -> jnp.ndarray:
+        x = self.net(observations)
+        x = self.mu_layer(x)
+        log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
         std = jnp.exp(log_std)
+        mean_action = nn.tanh(x) * self.max_action
+        action_distribution = distrax.MultivariateNormalDiag(mean_action, std*self.temperature)
+        sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
+        return mean_action, sampled_action, logp
 
-        mean_action = nn.tanh(mu)
-        action_distribution = distrax.Transformed(
-            distrax.MultivariateNormalDiag(mu, std),
-            distrax.Block(distrax.Tanh(), ndims=1))
-        sampled_action, logp = action_distribution.sample_and_log_prob(
-            seed=rng)
-        return mean_action * self.max_action, sampled_action * self.max_action, logp
-
-    def get_logp(self, observation: jnp.ndarray,
-                 action: jnp.ndarray) -> jnp.ndarray:
-        x = self.net(observation)
-        mu = self.mu_layer(x)
-        log_std = self.std_layer(x)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+    # without tanh
+    def get_logp(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        x = self.net(observations)
+        x = self.mu_layer(x)
+        log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
         std = jnp.exp(log_std)
-        action_distribution = distrax.Normal(mu, std)
-        raw_action = atanh(action)
-        logp = action_distribution.log_prob(raw_action).sum(-1)
-        logp -= 2 * (jnp.log(2) - raw_action -
-                     jax.nn.softplus(-2 * raw_action)).sum(-1)
-        return logp
-
-
-class Scalar(nn.Module):
-    init_value: float
-
-    def setup(self):
-        self.value = self.param("value", lambda x: self.init_value)
-
-    def __call__(self):
-        return self.value
+        mean_action = nn.tanh(x) * self.max_action
+        action_distribution = distrax.MultivariateNormalDiag(mean_action, std*self.temperature)
+        log_prob = action_distribution.log_prob(actions)
+        return log_prob
 
 
 class AWACAgent:
-
     def __init__(self,
                  obs_dim: int,
                  act_dim: int,
@@ -162,7 +125,7 @@ class AWACAgent:
                  tau: float = 0.005,
                  gamma: float = 0.99,
                  lr: float = 3e-4,
-                 temperature: float = 1.0,
+                 temperature: float = 0.5,
                  hidden_dims: Sequence[int] = (256, 256),
                  initializer: str = "glorot_uniform"):
 
@@ -205,131 +168,119 @@ class AWACAgent:
         sampled_action = np.asarray(sampled_action)
         return rng, sampled_action.clip(-1.0, 1.0)
 
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def train_step(self,
-                   batch: Batch,
-                   key: Any,
-                   actor_state: train_state.TrainState,
-                   critic_state: train_state.TrainState,
-                   critic_target_params: FrozenDict):
+    def actor_train_step(self,
+                         batch: Batch,
+                         actor_key: Any,
+                         actor_state: train_state.TrainState,
+                         critic_params: FrozenDict):
+        q1, q2 = self.critic.apply({"params": critic_params}, batch.observations, batch.actions)
+        q = jnp.minimum(q1, q2)
 
-        # For use in loss_fn without apply gradients
-        frozen_actor_params = actor_state.params
-        frozen_critic_params = critic_state.params
+        def loss_fn(actor_params: FrozenDict):
+            _, sampled_actions, _ = self.actor.apply({"params": actor_params}, actor_key, batch.observations)
+            sampled_q1, sampled_q2 = self.critic.apply(
+                {"params": critic_params}, batch.observations, sampled_actions)
+            v = jnp.minimum(sampled_q1, sampled_q2)
 
-        def loss_fn(actor_params: FrozenDict,
-                    critic_params: FrozenDict,
-                    rng: Any,
-                    observation: jnp.ndarray,
-                    action: jnp.ndarray,
-                    reward: jnp.ndarray,
-                    next_observation: jnp.ndarray,
-                    discount: jnp.ndarray):
-            """compute loss for a single transition"""
-            rng1, rng2 = jax.random.split(rng, 2)
+            logp = self.actor.apply({"params": actor_params},
+                                    batch.observations,
+                                    batch.actions,
+                                    method=Actor.get_logp)
+            exp_a = jnp.exp((q - v) * self.temperature)
+            exp_a = jnp.minimum(exp_a, 100.0)
 
-            # Critic loss
-            q1, q2 = self.critic.apply(
-                {"params": critic_params}, observation, action)
+            # actor_loss = -exp_a * logp
 
-            # Use frozen_actor_params to avoid affect Actor parameters
-            _, next_action, logp_next_action = self.actor.apply(
-                {"params": frozen_actor_params}, rng2, next_observation)
+            actor_loss = -jax.nn.softmax((q - v)/2.0) * logp
+
+            log_info = {
+                "actor_loss": actor_loss.sum(),
+                "actor_loss_max": actor_loss.max(),
+                "actor_loss_min": actor_loss.min(),
+                "actor_loss_std": actor_loss.std(),
+                "exp_a": exp_a.mean(),
+                "exp_a_max": exp_a.max(),
+                "exp_a_min": exp_a.min(),
+                "v": v.mean(),
+                "v_max": v.max(),
+                "v_min": v.min(),
+                "logp": logp.mean(),
+                "logp_max": logp.max(),
+                "logp_min": logp.min(),
+            }
+            return actor_loss.sum(), log_info
+
+        (_, log_info), actor_grads = jax.value_and_grad(loss_fn, has_aux=True)(actor_state.params)
+        new_actor_state = actor_state.apply_gradients(grads=actor_grads)
+        return log_info, new_actor_state
+
+    def critic_train_step(self,
+                          batch: Batch,
+                          critic_key: Any,
+                          critic_state: train_state.TrainState,
+                          actor_params: FrozenDict,
+                          critic_target_params: FrozenDict):
+
+        def loss_fn(critic_params: FrozenDict):
+            q1, q2 = self.critic.apply({"params": critic_params}, batch.observations, batch.actions)
+            _, next_actions, _ = self.actor.apply({"params": actor_params}, critic_key, batch.next_observations)
             next_q1, next_q2 = self.critic.apply(
-                {"params": critic_target_params}, next_observation, next_action)
+                {"params": critic_target_params}, batch.next_observations, next_actions)
             next_q = jnp.minimum(next_q1, next_q2)
-            target_q = reward + self.gamma * discount * next_q
+            target_q = batch.rewards + self.gamma * batch.discounts * next_q
             critic_loss1 = (q1 - target_q)**2
             critic_loss2 = (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
 
-            # Actor loss
-            _, sampled_action, logp = self.actor.apply(
-                {"params": actor_params}, rng1, observation)
-
-            # We use frozen_params so that gradients can flow back to the actor without being used to update the critic.
-            sampled_q1, sampled_q2 = self.critic.apply(
-                {"params": frozen_critic_params}, observation, sampled_action)
-            v = jnp.minimum(sampled_q1, sampled_q2)
-
-            # Stop gradient
-            q = jax.lax.stop_gradient(jnp.minimum(q1, q2))
-            exp_a = jnp.exp((q - v) * self.temperature)
-            exp_a = jnp.minimum(exp_a, 100.0)
-
-            # Actor loss
-            actor_loss = -exp_a * logp
-
             # Total loss
-            total_loss = critic_loss + actor_loss
             log_info = {
-                "critic_loss1": critic_loss1,
-                "critic_loss2": critic_loss2,
-                "critic_loss": critic_loss,
-                "actor_loss": actor_loss,
-                "q1": q1,
-                "q2": q2,
-                "target_q": target_q,
-                "logp": logp,
-                "v": v,
-                "exp_a": exp_a,
+                "critic_loss1": critic_loss1.mean(),
+                "critic_loss1_min": critic_loss1.min(),
+                "critic_loss1_max": critic_loss1.max(),
+                "critic_loss2": critic_loss2.mean(),
+                "critic_loss2_min": critic_loss2.min(),
+                "critic_loss2_max": critic_loss2.max(),
+                "critic_loss": critic_loss.mean(),
+                "critic_loss_min": critic_loss.min(),
+                "critic_loss_max": critic_loss.max(),
+                "q1": q1.mean(),
+                "q1_min": q1.min(),
+                "q1_max": q1.max(),
+                "q2": q2.mean(),
+                "q2_min": q2.min(),
+                "q2_max": q2.max(),
+                "target_q": target_q.mean(),
+                "target_q_min": target_q.min(),
+                "target_q_max": target_q.max(),
             }
+            return critic_loss.mean(), log_info
 
-            return total_loss, log_info
-
-        grad_fn = jax.vmap(jax.value_and_grad(loss_fn, argnums=(0, 1), has_aux=True),
-                           in_axes=(None, None, 0, 0, 0, 0, 0, 0))
-        keys = jnp.stack(jax.random.split(key, num=batch.actions.shape[0]))
-
-        (_, log_info), grads = grad_fn(actor_state.params,
-                                       critic_state.params,
-                                       keys,
-                                       batch.observations,
-                                       batch.actions,
-                                       batch.rewards,
-                                       batch.next_observations,
-                                       batch.discounts)
-        grads = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), grads)
-        extra_log_info = {
-            'critic_loss1_min': log_info['critic_loss1'].min(),
-            'critic_loss1_max': log_info['critic_loss1'].max(),
-            'critic_loss1_std': log_info['critic_loss1'].std(),
-            'critic_loss2_min': log_info['critic_loss2'].min(),
-            'critic_loss2_max': log_info['critic_loss2'].max(),
-            'critic_loss2_std': log_info['critic_loss2'].std(),
-            'actor_loss_min': log_info['actor_loss'].min(),
-            'actor_loss_max': log_info['actor_loss'].max(),
-            'actor_loss_std': log_info['actor_loss'].std(),
-            'q1_min': log_info['q1'].min(),
-            'q1_max': log_info['q1'].max(),
-            'q1_std': log_info['q1'].std(),
-            'q2_min': log_info['q2'].min(),
-            'q2_max': log_info['q2'].max(),
-            'q2_std': log_info['q2'].std(),
-            'target_q_min': log_info['target_q'].min(),
-            'target_q_max': log_info['target_q'].max(),
-            'target_q_std': log_info['target_q'].std(),
-        }
-        log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
-
-        # Update TrainState
-        actor_grads, critic_grads = grads
-        new_actor_state = actor_state.apply_gradients(grads=actor_grads)
+        (_, log_info), critic_grads = jax.value_and_grad(loss_fn, has_aux=True)(critic_state.params)
         new_critic_state = critic_state.apply_gradients(grads=critic_grads)
-        new_critic_target_params = target_update(new_critic_state.params,
-                                                 critic_target_params,
-                                                 self.tau)
+        return log_info, new_critic_state
 
-        # Update log info
-        extra_log_info['critic_param_norm'] = tree_norm(new_critic_state.params)
-        extra_log_info['actor_param_norm'] = tree_norm(new_actor_state.params)
-        log_info.update(extra_log_info)
-        return new_actor_state, new_critic_state, new_critic_target_params, log_info
+    @functools.partial(jax.jit, static_argnames=("self"))
+    def train_step(self,
+                   batch: Batch,
+                   actor_key: Any,
+                   critic_key: Any,
+                   actor_state: train_state.TrainState,
+                   critic_state: train_state.TrainState,
+                   critic_target_params: FrozenDict):
+        actor_info, new_actor_state = self.actor_train_step(
+            batch, actor_key, actor_state, critic_state.params)
+        critic_info, new_critic_state = self.critic_train_step(
+            batch, critic_key, critic_state, actor_state.params, critic_target_params)
+        new_critic_target_params = target_update(new_critic_state.params, critic_target_params, self.tau)
+        return new_actor_state, new_critic_state, new_critic_target_params, {**actor_info, **critic_info}
+        # critic_info = {}
+        # return new_actor_state, critic_state, critic_target_params, {**actor_info, **critic_info}
 
     def update(self, batch: Batch):
-        self.rng, key = jax.random.split(self.rng)
+        self.rng, actor_key, critic_key = jax.random.split(self.rng, 3)
         self.actor_state, self.critic_state, self.critic_target_params, log_info = self.train_step(
-            batch, key, self.actor_state, self.critic_state, self.critic_target_params)
+            batch, actor_key, critic_key, self.actor_state,
+            self.critic_state, self.critic_target_params)
         return log_info
 
     def save(self, fname: str, cnt: int):
