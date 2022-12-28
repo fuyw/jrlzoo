@@ -83,20 +83,18 @@ class Critic(nn.Module):
 
 class DoubleCritic(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "glorot_uniform"
+    num_qs: int = 2
 
-    def setup(self):
-        self.critic1 = Critic(self.hidden_dims, initializer=self.initializer)
-        self.critic2 = Critic(self.hidden_dims, initializer=self.initializer)
-
-    def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        q1 = self.critic1(observations, actions)
-        q2 = self.critic2(observations, actions)
-        return q1, q2
-
-    def Q1(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        q1 = self.critic1(observations, actions)
-        return q1
+    @nn.compact
+    def __call__(self, states, actions):
+        VmapCritic = nn.vmap(Critic,
+                             variable_axes={"params": 0},
+                             split_rngs={"params": True},
+                             in_axes=None,
+                             out_axes=0,
+                             axis_size=self.num_qs)
+        qs = VmapCritic(self.hidden_dims)(states, actions)
+        return qs
 
 
 class AWACAgent:
@@ -130,10 +128,10 @@ class AWACAgent:
                                                          tx=optax.adam(learning_rate=lr))
 
         # Initialize the critic
-        self.critic = DoubleCritic(hidden_dims=hidden_dims, initializer=initializer)
+        self.critic = DoubleCritic(hidden_dims=hidden_dims)
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]
         self.critic_target_params = critic_params
-        self.critic_state = train_state.TrainState.create(apply_fn=DoubleCritic.apply,
+        self.critic_state = train_state.TrainState.create(apply_fn=Critic.apply,
                                                           params=critic_params,
                                                           tx=optax.adam(learning_rate=lr))
 
@@ -170,9 +168,6 @@ class AWACAgent:
                 "actor_loss": actor_loss.mean(),
                 "actor_loss_max": actor_loss.max(),
                 "actor_loss_min": actor_loss.min(),
-                "v": v.mean(),
-                "v_max": v.max(),
-                "v_min": v.min(),
                 "logp": logp.mean(),
                 "logp_max": logp.max(),
                 "logp_min": logp.min(),
@@ -223,10 +218,6 @@ class AWACAgent:
         actor_info, new_actor_state = self.actor_train_step(
             batch, actor_key, actor_state, new_critic_state.params)
         return new_actor_state, new_critic_state, new_critic_target_params, {**actor_info, **critic_info}
-
-        # actor_info, new_actor_state = self.actor_train_step(
-        #     batch, actor_key, actor_state, critic_state.params)
-        # return new_actor_state, critic_state, critic_target_params, actor_info
 
     def update(self, batch: Batch):
         self.rng, actor_key, critic_key = jax.random.split(self.rng, 3)
