@@ -175,6 +175,7 @@ class IQLAgent:
         self.temperature = temperature
         self.gamma = gamma
         self.tau = tau
+        self.max_action = max_action
 
         rng = jax.random.PRNGKey(seed)
         actor_key, critic_key, value_key = jax.random.split(rng, 3)
@@ -216,7 +217,7 @@ class IQLAgent:
     def sample_action(self, params: FrozenDict, observation: np.ndarray) -> np.ndarray:
         sampled_action = self._sample_action(params, observation)
         sampled_action = np.asarray(sampled_action)
-        return sampled_action.clip(-1.0, 1.0)
+        return sampled_action.clip(-self.max_action, self.max_action)
 
     def value_train_step(self,
                          batch: Batch,
