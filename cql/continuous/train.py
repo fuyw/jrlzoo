@@ -24,7 +24,7 @@ def eval_policy(agent, eval_env, eval_episodes: int = 10) -> Tuple[float, float]
     for _ in range(eval_episodes):
         obs, done = eval_env.reset(), False
         while not done:
-            _, action = agent.select_action(agent.actor_state.params, agent.rng, obs, True)
+            action = agent.sample_action(obs, True)
             action = np.asarray(action)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
@@ -96,29 +96,10 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
             logs.append(log_info)
             logger.info(
                 f"\n[# Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
-                f"\talpha_loss: {log_info['alpha_loss']:.2f}, alpha: {log_info['alpha']:.2f}, logp: {log_info['logp']:.2f}, " 
-                f"actor_loss: {log_info['actor_loss']:.2f}, sampled_q: {log_info['sampled_q']:.2f}\n" 
-                f"\tcql_alpha_loss: {log_info['cql_alpha_loss'] if configs.with_lagrange else 0:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}, "
-                f"cql_diff1: {log_info['cql_diff1']:.2f}, cql_diff2: {log_info['cql_diff2']:.2f}\n" 
-                f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, " 
-                f"critic_loss_max: {log_info['critic_loss_max']:.2f}, critic_loss_std: {log_info['critic_loss_std']:.2f}\n" 
-                f"\tcritic_loss1: {log_info['critic_loss1']:.2f}, critic_loss1_min: {log_info['critic_loss1_min']:.2f}, " 
-                f"critic_loss1_max: {log_info['critic_loss1_max']:.2f}, critic_loss1_std: {log_info['critic_loss1_std']:.2f}\n" 
-                f"\tcritic_loss2: {log_info['critic_loss2']:.2f}, critic_loss2_min: {log_info['critic_loss2_min']:.2f}, " 
-                f"critic_loss2_max: {log_info['critic_loss2_max']:.2f}, critic_loss2_std: {log_info['critic_loss2_std']:.2f}\n" 
-                f"\tcql_loss1: {log_info['cql_loss1']:.2f}, cql_loss1_min: {log_info['cql_loss1_min']:.2f} " 
-                f"cql_loss1_max: {log_info['cql_loss1_max']:.2f}, cql_loss1_std: {log_info['cql_loss1_std']:.2f}\n" 
-                f"\tcql_loss2: {log_info['cql_loss2']:.2f}, cql_loss2_min: {log_info['cql_loss2_min']:.2f} " 
-                f"cql_loss2_max: {log_info['cql_loss2_max']:.2f}, cql_loss2_std: {log_info['cql_loss2_std']:.2f}\n" 
-                f"\ttarget_q: {log_info['target_q']:.2f}, target_q_min: {log_info['target_q_min']:.2f} " 
-                f"target_q_max: {log_info['target_q_max']:.2f}, target_q_std: {log_info['target_q_std']:.2f}\n" 
-                f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}, q1_std: {log_info['q1_std']:.2f}\n" 
-                f"\tq2: {log_info['q2']:.2f}, q2_min: {log_info['q2_min']:.2f}, q2_max: {log_info['q2_max']:.2f}, q2_std: {log_info['q2_std']:.2f}\n" 
-                f"\tood_q1: {log_info['ood_q1']:.2f}, ood_q1_min: {log_info['ood_q1_min']:.2f}, " 
-                f"ood_q1_max: {log_info['ood_q1_max']:.2f}, ood_q1_std: {log_info['ood_q1_std']:.2f}\n" 
-                f"\tood_q2: {log_info['ood_q2']:.2f}, ood_q2_min: {log_info['ood_q2_min']:.2f}, " 
-                f"ood_q2_max: {log_info['ood_q2_max']:.2f}, ood_q2_std: {log_info['ood_q2_std']:.2f}\n" 
-                f"\trandom_q1: {log_info['random_q1']:.2f}, random_q2: {log_info['random_q2']:.2f}, logp_next_action: {log_info['logp_next_action']:.2f}\n" 
+                f"\tactor_loss: {log_info['actor_loss']:.2f}, critic_loss: {log_info['critic_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}\n"
+                f"\tcql_loss1: {log_info['cql_loss1']:.2f}, cql_alpha_loss: {log_info['cql_alpha_loss'] if configs.with_lagrange else 0:.2f}\n"
+                f"\tq1: {log_info['q1']:.2f}, target_q: {log_info['target_q']:.2f}, ood_q1: {log_info['ood_q1']:.2f}, random_q1: {log_info['random_q1']:.2f}\n"
+                f"\tlogp: {log_info['logp']:.2f}, alpha: {log_info['alpha']:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}\n"
             )
 
     log_df = pd.DataFrame(logs)

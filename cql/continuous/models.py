@@ -183,7 +183,7 @@ class CQLAgent:
                            hidden_dims=actor_hidden_dims, initializer=initializer)
         actor_params = self.actor.init(actor_key, actor_key, dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(
-            apply_fn=Actor.apply,
+            apply_fn=self.actor.apply,
             params=actor_params,
             tx=optax.adam(learning_rate=lr_actor))
 
@@ -222,11 +222,20 @@ class CQLAgent:
                 tx=optax.adam(lr_actor)
             )
 
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def select_action(self, params: FrozenDict, rng: Any, observation: np.ndarray, eval_mode: bool = False) -> jnp.ndarray:
-        rng, sample_rng = jax.random.split(rng)
-        mean_action, sampled_action, _ = self.actor.apply({"params": params}, sample_rng, observation)
-        return rng, jnp.where(eval_mode, mean_action, sampled_action)
+    @functools.partial(jax.jit, static_argnames=("self", "eval_mode"))
+    def _sample_action(self,
+                       params: FrozenDict,
+                       rng: Any,
+                       observation: np.ndarray,
+                       eval_mode: bool = False) -> jnp.ndarray:
+        mean_action, sampled_action, _ = self.actor.apply({"params": params}, rng, observation)
+        return jnp.where(eval_mode, mean_action, sampled_action)
+
+    def sample_action(self, observation: np.ndarray, eval_mode: bool = False) -> np.ndarray:
+        self.rng, sample_rng = jax.random.split(self.rng)
+        sampled_action = self._sample_action(self.actor_state.params, sample_rng, observation, eval_mode)
+        sampled_action = np.asarray(sampled_action)
+        return sampled_action.clip(-self.max_action, self.max_action)
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def lagrange_train_step(self,
@@ -348,8 +357,6 @@ class CQLAgent:
             # Loss weight form Dopamine
             total_loss = critic_loss + actor_loss + alpha_loss + cql_loss1 + cql_loss2
             log_info = {
-                "critic_loss1": critic_loss1,
-                "critic_loss2": critic_loss2,
                 "critic_loss": critic_loss,
                 "actor_loss": actor_loss,
                 "alpha_loss": alpha_loss,
@@ -389,40 +396,7 @@ class CQLAgent:
                                        batch.next_observations,
                                        batch.discounts)
         grads = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), grads)
-        extra_log_info = {
-            'q1_min': log_info['q1'].min(),
-            'q1_max': log_info['q1'].max(),
-            'q1_std': log_info['q1'].std(),
-            'q2_min': log_info['q2'].min(),
-            'q2_max': log_info['q2'].max(),
-            'q2_std': log_info['q2'].std(),
-            'target_q_min': log_info['target_q'].min(),
-            'target_q_max': log_info['target_q'].max(),
-            'target_q_std': log_info['target_q'].std(),
-            'ood_q1_min': log_info['ood_q1'].min(),
-            'ood_q1_max': log_info['ood_q1'].max(),
-            'ood_q1_std': log_info['ood_q1'].std(),
-            'ood_q2_min': log_info['ood_q2'].min(),
-            'ood_q2_max': log_info['ood_q2'].max(),
-            'ood_q2_std': log_info['ood_q2'].std(),
-            'critic_loss_min': log_info['critic_loss'].min(),
-            'critic_loss_max': log_info['critic_loss'].max(),
-            'critic_loss_std': log_info['critic_loss'].std(),
-            'critic_loss1_min': log_info['critic_loss1'].min(),
-            'critic_loss1_max': log_info['critic_loss1'].max(),
-            'critic_loss1_std': log_info['critic_loss1'].std(),
-            'critic_loss2_min': log_info['critic_loss2'].min(),
-            'critic_loss2_max': log_info['critic_loss2'].max(),
-            'critic_loss2_std': log_info['critic_loss2'].std(),
-            'cql_loss1_min': log_info['cql_loss1'].min(),
-            'cql_loss1_max': log_info['cql_loss1'].max(),
-            'cql_loss1_std': log_info['cql_loss1'].std(),
-            'cql_loss2_min': log_info['cql_loss2'].min(),
-            'cql_loss2_max': log_info['cql_loss2'].max(),
-            'cql_loss2_std': log_info['cql_loss2'].std(),
-        }
         log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
-        log_info.update(extra_log_info)
         alpha_grads, actor_grads, critic_grads = grads
 
         new_alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
@@ -449,7 +423,6 @@ class CQLAgent:
         checkpoints.save_checkpoint(fname, self.critic_state, cnt, prefix="critic_", keep=20, overwrite=True)
 
     def load(self, ckpt_dir, step):
-        # ckpt_dir=f"saved_models/antmaze-large-play-v0/cql_s0_L2/"
         self.actor_state = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=self.actor_state,
                                                           step=step, prefix="actor_")
         self.critic_state = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=self.critic_state,
