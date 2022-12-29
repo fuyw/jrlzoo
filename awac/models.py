@@ -181,14 +181,16 @@ class AWACAgent:
                                     batch.observations,
                                     batch.actions,
                                     method=Actor.get_logp)
-            actor_loss = -jax.nn.softmax((q - v)/2.0) * logp
-
-            return actor_loss.sum(), {
-                "actor_loss": actor_loss.sum(),
+            exp_a = jnp.exp((q-v)/2.0)
+            exp_a = jnp.minimum(exp_a, 100.0)
+            actor_loss = (-exp_a * logp).mean()
+            log_info = {
+                "actor_loss": actor_loss,
                 "logp": logp.mean(),
                 "logp_max": logp.max(),
                 "logp_min": logp.min(),
             }
+            return actor_loss, log_info
         (_, actor_info), actor_grads = jax.value_and_grad(loss_fn, has_aux=True)(actor_state.params)
         actor_state = actor_state.apply_gradients(grads=actor_grads)
         return actor_info, actor_state
@@ -209,10 +211,13 @@ class AWACAgent:
         def loss_fn(params: FrozenDict):
             q1, q2 = self.critic.apply({"params": params}, batch.observations, batch.actions)
             critic_loss = ((q1 - target_q)**2 + (q2 - target_q)**2).mean()
-            return critic_loss, {
+            log_info = {
                 "critic_loss": critic_loss.mean(), 
-                "q1": q1.mean(), "q1_max": q1.max(), "q1_min": q1.min(),
+                "q1": q1.mean(),
+                "q1_max": q1.max(),
+                "q1_min": q1.min(),
             }
+            return critic_loss, log_info
         (_, critic_info), critic_grads = jax.value_and_grad(loss_fn, has_aux=True)(critic_state.params)
         critic_state = critic_state.apply_gradients(grads=critic_grads)
         return critic_info, critic_state
