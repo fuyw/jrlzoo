@@ -190,7 +190,7 @@ class IQLAgent:
         actor_params = self.actor.init(actor_key, dummy_obs)["params"]
         schedule_fn = optax.cosine_decay_schedule(-lr, max_timesteps)
         self.actor_state = train_state.TrainState.create(
-            apply_fn=Actor.apply,
+            apply_fn=self.actor.apply,
             params=actor_params,
             tx=optax.chain(optax.scale_by_adam(), optax.scale_by_schedule(schedule_fn)))
 
@@ -198,14 +198,14 @@ class IQLAgent:
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]
         self.critic_target_params = critic_params
         self.critic_state = train_state.TrainState.create(
-            apply_fn=DoubleCritic.apply,
+            apply_fn=self.critic.apply,
             params=critic_params,
             tx=optax.adam(learning_rate=lr))
 
         self.value = ValueCritic(hidden_dims, initializer=initializer)
         value_params = self.value.init(value_key, dummy_obs)["params"]
         self.value_state = train_state.TrainState.create(
-            apply_fn=ValueCritic.apply,
+            apply_fn=self.value.apply,
             params=value_params,
             tx=optax.adam(learning_rate=lr))
 
@@ -214,8 +214,8 @@ class IQLAgent:
         sampled_action = self.actor.apply({"params": params}, observation)
         return sampled_action
 
-    def sample_action(self, params: FrozenDict, observation: np.ndarray) -> np.ndarray:
-        sampled_action = self._sample_action(params, observation)
+    def sample_action(self, observation: np.ndarray) -> np.ndarray:
+        sampled_action = self._sample_action(self.actor_state.params, observation)
         sampled_action = np.asarray(sampled_action)
         return sampled_action.clip(-self.max_action, self.max_action)
 
@@ -231,9 +231,9 @@ class IQLAgent:
             value_loss = weight * jnp.square(q-v)
             avg_value_loss = value_loss.mean()
             return avg_value_loss, {
-                "value_loss": avg_value_loss, "max_value_loss": value_loss.max(), "min_value_loss": value_loss.min(),
-                "weight": weight.mean(), "max_weight": weight.max(), "min_weight": weight.min(),
-                "v": v.mean(), "max_v": v.max(), "min_v": v.min()
+                "value_loss": avg_value_loss,
+                "weight": weight.mean(), 
+                "v": v.mean(), 
             }
         (_, value_info), value_grads = jax.value_and_grad(loss_fn, has_aux=True)(value_state.params)
         value_state = value_state.apply_gradients(grads=value_grads)
@@ -259,17 +259,9 @@ class IQLAgent:
             avg_actor_loss = actor_loss.mean()
             return avg_actor_loss, {
                 "actor_loss": avg_actor_loss,
-                "max_actor_loss": actor_loss.max(),
-                "min_actor_loss": actor_loss.min(),
                 "exp_a": exp_a.mean(),
-                "max_exp_a": exp_a.max(),
-                "min_exp_a": exp_a.min(),
                 "adv": (q-v).mean(),
-                "max_adv": (q-v).max(),
-                "min_adv": (q-v).min(),
                 "log_prob": log_prob.mean(),
-                "max_log_prob": log_prob.max(),
-                "min_log_prob": log_prob.min(),
             }
         (_, actor_info), actor_grads = jax.value_and_grad(loss_fn, has_aux=True)(actor_state.params)
         actor_state = actor_state.apply_gradients(grads=actor_grads)
@@ -287,11 +279,9 @@ class IQLAgent:
             avg_critic_loss = critic_loss.mean()
             return avg_critic_loss, {
                 "critic_loss": avg_critic_loss,
-                "max_critic_loss": critic_loss.max(),
-                "min_critic_loss": critic_loss.min(),
-                "q1": q1.mean(), "max_q1": q1.max(), "min_q1": q1.min(),
-                "q2": q2.mean(), "max_q2": q2.max(), "min_q2": q2.min(),
-                "target_q": target_q.mean(), "max_target_q": target_q.max(), "min_target_q": target_q.min(),
+                "q1": q1.mean(),
+                "q2": q2.mean(),
+                "target_q": target_q.mean(),
             }
         (_, critic_info), critic_grads = jax.value_and_grad(loss_fn, has_aux=True)(critic_state.params)
         critic_state = critic_state.apply_gradients(grads=critic_grads)

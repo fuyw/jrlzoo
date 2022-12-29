@@ -5,7 +5,6 @@ def get_config():
     config = ml_collections.ConfigDict()
     config.env_name = "halfcheetah-medium-expert-v2"
     config.log_dir = "logs"
-    config.algo = "iql"
     config.model_dir = "saved_models"
     config.initializer = "orthogonal"
     config.hidden_dims = (256, 256)

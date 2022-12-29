@@ -20,7 +20,7 @@ antmaze_envs=(
     "antmaze-umaze-v0"
     "antmaze-umaze-diverse-v0"
 )
-for ((i=1;i<3;i+=1))
+for ((i=0;i<1;i+=1))
 do
     for env in ${mujoco_envs[*]}
     do
@@ -28,7 +28,6 @@ do
         --config=configs/mujoco.py \
         --config.env_name=$env \
         --config.seed=$i \
-        --config.algo=niql \
         --config.initializer=orthogonal
     done
 done
