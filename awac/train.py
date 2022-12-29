@@ -56,6 +56,10 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
         batch = replay_buffer.sample(configs.batch_size)
         log_info = agent.update(batch)
 
+        # Save every 1e5 steps & last 5 checkpoints
+        if (t % 100000 == 0) or (t >= int(9.8e5) and t % configs.eval_freq == 0):
+            agent.save(f"{ckpt_dir}", t // configs.eval_freq)
+
         # two-stage eval_freq to save time, only affects the `mujoco` environments
         if (t>int(9.5e5) and (t % configs.eval_freq == 0)) or (t<=int(9.5e5) and t % (2*configs.eval_freq) == 0):
             eval_reward, eval_time = eval_policy(agent, env, configs.eval_episodes)
