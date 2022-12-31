@@ -33,7 +33,7 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     exp_name = f'awac_s{configs.seed}_{timestamp}'
     exp_info = f'# Running experiment for: {exp_name}_{configs.env_name} #'
-    ckpt_dir = f"{configs.model_dir}/{configs.env_name.lower()}/s{configs.seed}"
+    ckpt_dir = f"{configs.model_dir}/{configs.env_name.lower()}/{exp_name}"
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
     logger = get_logger(f'logs/{configs.env_name.lower()}/{exp_name}.log')
@@ -57,8 +57,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
         log_info = agent.update(batch)
 
         # Save every 1e5 steps & last 5 checkpoints
-        if (t % 100000 == 0) or (t >= int(9.8e5) and t % configs.eval_freq == 0):
-            agent.save(f"{ckpt_dir}", t // configs.eval_freq)
+        if (t % 100000 == 0) or (t >= int(9.8e5) and t % 5000 == 0):
+            agent.save(f"{ckpt_dir}", t // 5000)
 
         # two-stage eval_freq to save time, only affects the `mujoco` environments
         if (t>int(9.5e5) and (t % configs.eval_freq == 0)) or (t<=int(9.5e5) and t % (2*configs.eval_freq) == 0):
@@ -68,8 +68,7 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
             logger.info(
                 f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
                 f"\tactor_loss: {log_info['actor_loss']:.3f}, critic_loss: {log_info['critic_loss']:.3f}\n"
-                f"\tq1: {log_info['q1']:.3f}, q1_max: {log_info['q1_max']:.3f}, q1_min: {log_info['q1_min']:.3f} \n"
-                f"\tlogp: {log_info['logp']:.3f}, logp_max: {log_info['logp_max']:.3f}, logp_min: {log_info['logp_min']:.3f}\n"
+                f"\tq1: {log_info['q1']:.3f}, logp: {log_info['logp']:.3f}\n"
             )
 
     log_df = pd.DataFrame(logs)

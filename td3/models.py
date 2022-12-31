@@ -60,14 +60,14 @@ class DoubleCritic(nn.Module):
     num_qs: int = 2
 
     @nn.compact
-    def __call__(self, states, actions):
+    def __call__(self, observations, actions):
         VmapCritic = nn.vmap(Critic,
                              variable_axes={"params": 0},
                              split_rngs={"params": True},
                              in_axes=None,
                              out_axes=0,
                              axis_size=self.num_qs)
-        qs = VmapCritic(self.hidden_dims, self.initializer)(states, actions)
+        qs = VmapCritic(self.hidden_dims, self.initializer)(observations, actions)
         return qs
 
 

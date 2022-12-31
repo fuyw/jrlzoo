@@ -12,11 +12,14 @@ An RL codebase in JAX which focuses on efficiency and simplicity. Each baseline 
 - TD3
 
 ## Offline RL
-- AWAC
 - COMBO
 - CQL
 - IQL
 - TD3BC
+
+## Fine-tuning Offline RL
+- AWAC
+- Off2OnRL
 
 ## Exploration
 - RND

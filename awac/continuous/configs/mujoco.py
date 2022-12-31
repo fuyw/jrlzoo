@@ -12,7 +12,7 @@ def get_config():
     config.gamma = 0.99
     config.batch_size = 256
     config.eval_episodes = 10
-    config.eval_freq = int(1e4)
+    config.eval_freq = 5000
     config.ckpt_freq = int(1e5)
     config.max_timesteps = int(1e6)
     config.hidden_dims = (256, 256)

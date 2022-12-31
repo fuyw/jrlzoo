@@ -7,9 +7,9 @@ import matplotlib.patches as mpatches
 os.makedirs('imgs', exist_ok=True)
 
 
-mujoco_tasks = ["halfcheetah-medium-v2", "halfcheetah-medium-replay-v2", "halfcheetah-medium-expert-v2",
-                "hopper-medium-v2", "hopper-medium-replay-v2", "hopper-medium-expert-v2",
-                "walker2d-medium-v2", "walker2d-medium-replay-v2", "walker2d-medium-expert-v2"]
+mujoco_tasks = ["halfcheetah-random-v2", "halfcheetah-medium-v2", "halfcheetah-medium-replay-v2", "halfcheetah-medium-expert-v2",
+                "hopper-random-v2", "hopper-medium-v2", "hopper-medium-replay-v2", "hopper-medium-expert-v2",
+                "walker2d-random-v2", "walker2d-medium-v2", "walker2d-medium-replay-v2", "walker2d-medium-expert-v2"]
 antmaze_tasks = ["antmaze-umaze-v0", "antmaze-umaze-diverse-v0",
                  "antmaze-medium-play-v0", "antmaze-medium-diverse-v0",
                  "antmaze-large-play-v0", "antmaze-large-diverse-v0"]
@@ -78,8 +78,7 @@ def plot_exps(tasks, fname="mujoco", nrows=3, ncols=3):
     _, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols*4, nrows*4))
     plt.subplots_adjust(hspace=0.2, wspace=0.15)
     for idx, env_name in enumerate(tasks):
-        # ax = axes[idx // ncols][idx % ncols]
-        ax = axes[idx]
+        ax = axes[idx // ncols][idx % ncols]
         data, rewards = read_data(log_dir='logs', env_name=env_name, window=1)
         plot_ax(ax, data, 'b', title=env_name, label=f'({np.mean(rewards):.2f}±{np.std(rewards):.2f})')
         ax.legend(fontsize=7, loc='lower right')
@@ -88,4 +87,4 @@ def plot_exps(tasks, fname="mujoco", nrows=3, ncols=3):
 
 
 if __name__ == '__main__':
-    plot_exps(medium_tasks, fname="medium_task", nrows=1, ncols=3)
+    plot_exps(mujoco_tasks, fname="mujoco", nrows=3, ncols=4)

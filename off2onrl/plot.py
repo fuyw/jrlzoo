@@ -4,16 +4,16 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+
 os.makedirs('imgs', exist_ok=True)
 
 
-mujoco_tasks = ["halfcheetah-random-v2", "halfcheetah-medium-v2", "halfcheetah-medium-replay-v2", "halfcheetah-medium-expert-v2",
-                "hopper-random-v2", "hopper-medium-v2", "hopper-medium-replay-v2", "hopper-medium-expert-v2",
-                "walker2d-random-v2", "walker2d-medium-v2", "walker2d-medium-replay-v2", "walker2d-medium-expert-v2"]
+mujoco_tasks = ["halfcheetah-medium-v2", "halfcheetah-medium-replay-v2", "halfcheetah-medium-expert-v2",
+                "hopper-medium-v2", "hopper-medium-replay-v2", "hopper-medium-expert-v2",
+                "walker2d-medium-v2", "walker2d-medium-replay-v2", "walker2d-medium-expert-v2"]
 antmaze_tasks = ["antmaze-umaze-v0", "antmaze-umaze-diverse-v0",
                  "antmaze-medium-play-v0", "antmaze-medium-diverse-v0",
                  "antmaze-large-play-v0", "antmaze-large-diverse-v0"]
-medium_tasks = ["halfcheetah-medium-v2", "hopper-medium-v2", "walker2d-medium-v2"]
 
 
 def smooth(x, window=3):
@@ -30,13 +30,9 @@ def read_data(log_dir, env_name='hopper-medium-v2', col='reward', window=1):
     for csv_file in csv_files:
         df = pd.read_csv(f'{log_dir}/{env_name}/{csv_file}', index_col=0).set_index('step')
         if 'v2' in env_name:
-            # plot_idx = range(0, 1010000, 10000)
-            # res_idx = range(955000, 1005000, 5000)      # eval every 5e3 steps
-
-            plot_idx = range(0, 1020000, 20000)
-            res_idx = range(900000, 1020000, 20000)      # eval every 5e3 steps
-
+            plot_idx = [10000 * i for i in range(101)]  # plot every 1e4 steps
             x = df.loc[plot_idx, col].values
+            res_idx = range(955000, 1005000, 5000)      # eval every 5e3 steps
             rewards.append(df.loc[res_idx, 'reward'].mean())
         else:
             x = df[col].values
@@ -72,7 +68,7 @@ def plot_ax(ax, data, fill_color, title=None, log=False, label=None):
     ax.yaxis.set_ticks_position('none')
 
 
-def plot_exps(tasks, fname="mujoco", nrows=3, ncols=3):
+def plot_exps(tasks, fname="mujoco", nrows=3, ncols=3, smooth_window=1):
     mpl.rcParams['xtick.labelsize'] = 7
     mpl.rcParams['ytick.labelsize'] = 7
     mpl.rcParams['axes.linewidth'] = 0.5
@@ -83,7 +79,7 @@ def plot_exps(tasks, fname="mujoco", nrows=3, ncols=3):
     plt.subplots_adjust(hspace=0.2, wspace=0.15)
     for idx, env_name in enumerate(tasks):
         ax = axes[idx // ncols][idx % ncols]
-        data, rewards = read_data(log_dir='logs', env_name=env_name, window=1)
+        data, rewards = read_data(log_dir='logs', env_name=env_name, window=smooth_window)
         plot_ax(ax, data, 'b', title=env_name, label=f'({np.mean(rewards):.2f}±{np.std(rewards):.2f})')
         ax.legend(fontsize=7, loc='lower right')
     plt.tight_layout()
@@ -91,4 +87,5 @@ def plot_exps(tasks, fname="mujoco", nrows=3, ncols=3):
 
 
 if __name__ == '__main__':
-    plot_exps(mujoco_tasks, fname="mujoco", nrows=3, ncols=4)
+    plot_exps(mujoco_tasks, "mujoco", nrows=3, ncols=3, smooth_window=7)
+    # plot_exps(antmaze_tasks, "antmaze", 2, 3)

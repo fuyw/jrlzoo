@@ -75,14 +75,14 @@ class DoubleCritic(nn.Module):
     num_qs: int = 2
 
     @nn.compact
-    def __call__(self, states, actions):
+    def __call__(self, observations, actions):
         VmapCritic = nn.vmap(Critic,
                              variable_axes={"params": 0},
                              split_rngs={"params": True},
                              in_axes=None,
                              out_axes=0,
                              axis_size=self.num_qs)
-        qs = VmapCritic(self.hidden_dims, self.initializer)(states, actions)
+        qs = VmapCritic(self.hidden_dims, self.initializer)(observations, actions)
         return qs
 
 
@@ -310,7 +310,7 @@ class SACAgent:
         return new_alpha_state, new_actor_state, new_critic_state, new_critic_target_params, log_info
 
     def update(self, batch: Batch):
-        self.rng, key = jax.random.split(self.rng)
+        self.rng, key = jax.random.split(self.rng, 2)
         self.alpha_state, self.actor_state, self.critic_state, self.critic_target_params, log_info = self.train_step(
             batch, key, self.alpha_state, self.actor_state, self.critic_state,
             self.critic_target_params)

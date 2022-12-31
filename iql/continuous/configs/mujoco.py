@@ -12,7 +12,6 @@ def get_config():
     config.seed = 0
     config.tau = 0.005
     config.gamma = 0.99
-    config.alpha = 5.0
     config.expectile = 0.7
     config.temperature = 3.0
     config.batch_size = 256

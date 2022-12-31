@@ -29,10 +29,12 @@ def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
         return nn.initializers.glorot_normal()
     return nn.initializers.lecun_normal()
 
+
 def atanh(x: jnp.ndarray):
     one_plus_x = jnp.clip(1 + x, a_min=1e-6)
     one_minus_x = jnp.clip(1 - x, a_min=1e-6)
     return 0.5 * jnp.log(one_plus_x / one_minus_x)
+
 
 class MLP(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
@@ -74,14 +76,14 @@ class DoubleCritic(nn.Module):
     num_qs: int = 2
 
     @nn.compact
-    def __call__(self, states, actions):
+    def __call__(self, observations, actions):
         VmapCritic = nn.vmap(Critic,
                              variable_axes={"params": 0},
                              split_rngs={"params": True},
                              in_axes=None,
                              out_axes=0,
                              axis_size=self.num_qs)
-        qs = VmapCritic(self.hidden_dims, self.initializer)(states, actions)
+        qs = VmapCritic(self.hidden_dims, self.initializer)(observations, actions)
         return qs
 
 
@@ -221,7 +223,6 @@ class DynamicsModel:
 
         # Initilaize saving settings
         self.save_dir = f"{model_dir}/{env_name}/s{seed}"
-        # self.save_dir = f"{model_dir}/{env_name}"
         self.elite_mask = np.eye(self.ensemble_num)[range(elite_num), :]
 
         # Initilaize the ensemble model
@@ -239,119 +240,6 @@ class DynamicsModel:
         # Normalize inputs
         self.obs_mean = None
         self.obs_std = None 
-
-    def load_new(self, filename):
-        step = max([int(i.split("_")[-1]) for i in os.listdir(filename) if "dynamics_model_" in i])
-        self.model_state = checkpoints.restore_checkpoint(ckpt_dir=filename,
-                                                          target=self.model_state,
-                                                          step=step,
-                                                          prefix="dynamics_model_")
-        elite_idx = np.loadtxt(f"{filename}/elite_models.txt", dtype=np.int32)[:self.elite_num]
-        self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
-        normalize_stat = np.load(f'{filename}/normalize_stat.npz')
-        self.obs_mean = normalize_stat['obs_mean']
-        self.obs_std = normalize_stat['obs_std']
-
-    def train_new(self):
-        (inputs, targets, holdout_inputs, holdout_targets, self.obs_mean, self.obs_std) = get_training_data(self.replay_buffer, self.ensemble_num, self.holdout_ratio)
-        patience, optimal_state, min_val_loss = 0, None, np.inf
-        batch_num = int(np.ceil(len(inputs) / self.batch_size))
-        res = []
-        print(f'batch_num     = {batch_num}')
-        print(f'inputs.shape  = {inputs.shape}')
-        print(f'targets.shape = {targets.shape}') 
-        print(f'holdout_inputs.shape  = {holdout_inputs.shape}')
-        print(f'holdout_targets.shape = {holdout_targets.shape}') 
-
-        # Loss functions
-        @jax.jit
-        def train_step(model_state: train_state.TrainState, batch_inputs: jnp.ndarray, batch_targets: jnp.ndarray):
-            def loss_fn(params, x, y):
-                mu, log_var = self.model.apply({"params": params}, x)  # (7, 14) ==> (7, 12)
-                inv_var = jnp.exp(-log_var)    # (7, 12)
-                mse_loss = jnp.square(mu - y)  # (7, 12)
-                train_loss = jnp.mean(mse_loss * inv_var + log_var, axis=-1).sum() 
-                delta_log_var = self.model.apply({"params": params}, method=self.model.delta_log_var)
-                train_loss += 0.01 * delta_log_var
-                return train_loss, {"mse_loss": mse_loss.mean(),
-                                    "var_loss": log_var.mean(),
-                                    "train_loss": train_loss,
-                                    "delta_log_var": delta_log_var}
-            grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True), in_axes=(None, 1, 1))
-            (_, log_info), gradients = grad_fn(model_state.params, batch_inputs, batch_targets)
-            log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
-            gradients = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), gradients)
-            new_model_state = model_state.apply_gradients(grads=gradients)
-            return new_model_state, log_info
-
-        @jax.jit
-        def eval_step(model_state: train_state.TrainState, batch_inputs: jnp.ndarray, batch_targets: jnp.ndarray):
-            def loss_fn(params, x, y):
-                mu, _ = self.model.apply({"params": params}, x)  # (7, 14) ==> (7, 12)
-                reward_loss = jnp.square(mu[:, -1] - y[:, -1]).mean()
-                state_loss = jnp.square(mu[:, :-1] - y[:, :-1]).mean()
-                mse_loss = jnp.square(mu - y)  # (7, 12) ==> (7,)
-                # mse_loss = jnp.mean(jnp.square(mu - y), axis=-1)  # (7, 12) ==> (7,)
-                # return mse_loss, {"reward_loss": reward_loss, "state_loss": state_loss, "mse_loss": mse_loss}
-                eval_loss = jnp.mean(mse_loss[:, :-1], axis=-1) + mse_loss[:, -1]
-                return eval_loss, {"reward_loss": reward_loss, "state_loss": state_loss, "mse_loss": mse_loss}
-            loss_fn = jax.vmap(loss_fn, in_axes=(None, 1, 1))
-            loss, log_info = loss_fn(model_state.params, batch_inputs, batch_targets)
-            log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
-            return loss, log_info
-
-        for epoch in trange(self.epochs):
-            shuffled_idxs = np.concatenate([np.random.permutation(np.arange(
-                inputs.shape[0])).reshape(1, -1) for _ in range(self.ensemble_num)], axis=0)  # (7, 1000000)
-            train_loss, mse_loss, var_loss, delta_log_var = [], [], [], []
-            for i in range(batch_num):
-                batch_idxs = shuffled_idxs[:, i*self.batch_size:(i+1)*self.batch_size]
-                batch_inputs = inputs[batch_idxs]    # (7, 256, 14)
-                batch_targets = targets[batch_idxs]  # (7, 256, 12)
-                self.model_state, log_info = train_step(self.model_state, batch_inputs, batch_targets)
-                train_loss.append(log_info["train_loss"].item())
-                mse_loss.append(log_info["mse_loss"].item())
-                var_loss.append(log_info["var_loss"].item())
-                delta_log_var.append(log_info["delta_log_var"].item())
-
-            val_loss, val_info = eval_step(self.model_state, holdout_inputs, holdout_targets)
-            val_loss = jnp.mean(val_loss, axis=0)  # (N, 7) ==> (7,)
-            mean_val_loss = jnp.mean(val_loss)
-            if mean_val_loss < min_val_loss:
-                optimal_state = self.model_state
-                min_val_loss = mean_val_loss
-                elite_models = jnp.argsort(val_loss)  # find elite models
-                patience = 0
-            else:
-                patience += 1
-            if epoch > 20 and patience > self.max_patience:
-                print(f"Early stopping at epoch {epoch+1}.")
-                break
-
-            res.append((epoch, sum(train_loss)/batch_num, sum(mse_loss)/batch_num, sum(var_loss)/batch_num, mean_val_loss))
-            print(f"Epoch #{epoch+1}: "
-                  f"train_loss={sum(train_loss)/batch_num:.3f}\t"
-                  f"mse_loss={sum(mse_loss)/batch_num:.3f}\t"
-                  f"var_loss={sum(var_loss)/batch_num:.3f}\t"
-                  f"delta_log_var={sum(delta_log_var)/batch_num:.3f}\t"
-                  f"val_loss={mean_val_loss:.3f}\t"
-                  f"val_rew_loss={val_info['reward_loss']:.3f}\t"
-                  f"val_state_loss={val_info['state_loss']:.3f}")
-
-            if (epoch+1) in [10, 50, 100, 150]:
-                checkpoints.save_checkpoint(f"{self.save_dir}", optimal_state, step=epoch+1, prefix="dynamics_model_", keep=10, overwrite=True)
-
-        checkpoints.save_checkpoint(f"{self.save_dir}", optimal_state, step=epoch+1, prefix="dynamics_model_", keep=10, overwrite=True)
-        res_df = pd.DataFrame(res, columns=["epoch", "train_loss", "mse_loss", "var_loss", "val_loss"])
-        res_df.to_csv(f"{self.save_dir}/train_log.csv")
-        ckpt_loss, _ = eval_step(optimal_state, holdout_inputs, holdout_targets)
-        ckpt_loss = jnp.mean(ckpt_loss, axis=0)
-        with open(f"{self.save_dir}/elite_models.txt", "w") as f:
-            for idx in elite_models:
-                f.write(f"{idx}\n")
-        elite_idx = elite_models.to_py()[:self.elite_num]
-        self.elite_mask = np.eye(self.ensemble_num)[elite_idx, :]
-        np.savez(f"{self.save_dir}/normalize_stat", obs_mean=self.obs_mean, obs_std=self.obs_std)
 
     def load(self, filename):
         with open(f"{filename}/dynamics_model.ckpt", "rb") as f:
@@ -373,10 +261,10 @@ class DynamicsModel:
         batch_num = int(np.ceil(len(inputs) / self.batch_size))
         res = []
         print(f'batch_num     = {batch_num}')
-        print(f'inputs.shape  = {inputs.shape}')
-        print(f'targets.shape = {targets.shape}') 
-        print(f'holdout_inputs.shape  = {holdout_inputs.shape}')
-        print(f'holdout_targets.shape = {holdout_targets.shape}') 
+        print(f'inputs.shape  = {inputs.shape}')    # (N, 23)
+        print(f'targets.shape = {targets.shape}')   # (N, 18)
+        print(f'holdout_inputs.shape  = {holdout_inputs.shape}')    # (7, N, 23)
+        print(f'holdout_targets.shape = {holdout_targets.shape}')   # (7, N, 18)
 
         # Loss functions
         @jax.jit

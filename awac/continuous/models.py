@@ -10,11 +10,6 @@ import numpy as np
 import optax
 from utils import target_update, Batch
 
-from tensorflow_probability.substrates import jax as tfp
-
-tfd = tfp.distributions
-tfb = tfp.bijectors
-
 LOG_STD_MIN = -10.0
 LOG_STD_MAX = 2.0
 
@@ -104,14 +99,14 @@ class DoubleCritic(nn.Module):
     num_qs: int = 2
 
     @nn.compact
-    def __call__(self, states, actions):
+    def __call__(self, observations, actions):
         VmapCritic = nn.vmap(Critic,
                              variable_axes={"params": 0},
                              split_rngs={"params": True},
                              in_axes=None,
                              out_axes=0,
                              axis_size=self.num_qs)
-        qs = VmapCritic(self.hidden_dims, self.initializer)(states, actions)
+        qs = VmapCritic(self.hidden_dims, self.initializer)(observations, actions)
         return qs
 
 
@@ -187,8 +182,6 @@ class AWACAgent:
             log_info = {
                 "actor_loss": actor_loss,
                 "logp": logp.mean(),
-                "logp_max": logp.max(),
-                "logp_min": logp.min(),
             }
             return actor_loss, log_info
         (_, actor_info), actor_grads = jax.value_and_grad(loss_fn, has_aux=True)(actor_state.params)
@@ -214,8 +207,6 @@ class AWACAgent:
             log_info = {
                 "critic_loss": critic_loss.mean(), 
                 "q1": q1.mean(),
-                "q1_max": q1.max(),
-                "q1_min": q1.min(),
             }
             return critic_loss, log_info
         (_, critic_info), critic_grads = jax.value_and_grad(loss_fn, has_aux=True)(critic_state.params)

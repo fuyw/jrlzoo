@@ -2,6 +2,9 @@
 
 # Script to reproduce results
 mujoco_envs=(
+    "halfcheetah-random-v2"
+    "hopper-random-v2"
+    "walker2d-random-v2"
     "halfcheetah-medium-v2"
     "hopper-medium-v2"
     "walker2d-medium-v2"
@@ -20,7 +23,7 @@ antmaze_envs=(
     "antmaze-umaze-v0"
     "antmaze-umaze-diverse-v0"
 )
-for ((i=0;i<1;i+=1))
+for ((i=0;i<5;i+=1))
 do
     for env in ${mujoco_envs[*]}
     do

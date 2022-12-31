@@ -75,14 +75,14 @@ class DoubleCritic(nn.Module):
     num_qs: int = 2
 
     @nn.compact
-    def __call__(self, states, actions):
+    def __call__(self, observations, actions):
         VmapCritic = nn.vmap(Critic,
                              variable_axes={"params": 0},
                              split_rngs={"params": True},
                              in_axes=None,
                              out_axes=0,
                              axis_size=self.num_qs)
-        qs = VmapCritic(self.hidden_dims, self.initializer)(states, actions)
+        qs = VmapCritic(self.hidden_dims, self.initializer)(observations, actions)
         return qs
 
 
@@ -159,15 +159,15 @@ class IQLAgent:
     def __init__(self,
                  obs_dim: int,
                  act_dim: int,
-                 max_action: float,
-                 hidden_dims: Sequence[int],
-                 seed: int,
-                 lr: float,
-                 tau: float,
-                 gamma: float,
-                 expectile: float,
-                 temperature: float,
-                 max_timesteps: int,
+                 max_action: float = 1.0,
+                 hidden_dims: Sequence[int] = (256, 256),
+                 seed: int = 42,
+                 lr: float = 3e-4,
+                 tau: float = 0.05,
+                 gamma: float = 0.99,
+                 expectile: float = 0.7,
+                 temperature: float = 3.0, 
+                 max_timesteps: int = int(1e6),
                  initializer: str = "orthogonal"):
 
         self.act_dim = act_dim
@@ -311,3 +311,11 @@ class IQLAgent:
         checkpoints.save_checkpoint(fname, self.actor_state, cnt, prefix="actor_", keep=20, overwrite=True)
         checkpoints.save_checkpoint(fname, self.critic_state, cnt, prefix="critic_", keep=20, overwrite=True)
         checkpoints.save_checkpoint(fname, self.value_state, cnt, prefix="value_", keep=20, overwrite=True)
+
+    def load(self, ckpt_dir, step):
+        self.actor_state = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=self.actor_state,
+                                                          step=step, prefix="actor_")
+        self.critic_state = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=self.critic_state,
+                                                          step=step, prefix="critic_")
+        self.value_state = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=self.value_state,
+                                                          step=step, prefix="value_")

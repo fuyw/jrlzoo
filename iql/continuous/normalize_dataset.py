@@ -13,7 +13,7 @@ def get_minmax_traj_reward(env_name):
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
 
-    # judge if it's a terminal state
+    # judge if it"s a terminal state
     dones_float = np.zeros_like(replay_buffer.rewards)
     for i in range(len(dones_float) - 1):
         if np.linalg.norm(replay_buffer.observations[i+1] -
@@ -35,12 +35,12 @@ def get_minmax_traj_reward(env_name):
     return min_traj_reward, max_traj_reward
 
 
-if __name__ == '__main__':
-    os.makedirs('configs', exist_ok=True)
+if __name__ == "__main__":
+    os.makedirs("configs", exist_ok=True)
     res = []
-    for env_name in [f'{i}-{j}-v2' for i in ['hopper', 'halfcheetah', 'walker2d'] for j in [
-            'medium', 'medium-replay', 'medium-expert']]:
+    for env_name in [f"{i}-{j}-v2" for i in ["hopper", "halfcheetah", "walker2d"] for j in [
+            "random", "medium", "medium-replay", "medium-expert"]]:
         min_traj_reward, max_traj_reward = get_minmax_traj_reward(env_name)
         res.append((env_name, min_traj_reward, max_traj_reward))
-    res_df = pd.DataFrame(res, columns=['env_name', 'min_traj_reward', 'max_traj_reward'])
-    res_df.to_csv('configs/minmax_traj_reward.csv')
+    res_df = pd.DataFrame(res, columns=["env_name", "min_traj_reward", "max_traj_reward"])
+    res_df.to_csv("configs/minmax_traj_reward.csv")
