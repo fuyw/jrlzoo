@@ -3,7 +3,7 @@ import ml_collections
 
 def get_config():
     config = ml_collections.ConfigDict()
-    config.env_name = "halfcheetah-medium-expert-v2"
+    config.env_name = "halfcheetah-medium-v2"
     config.log_dir = "logs"
     config.model_dir = "saved_models"
     config.initializer = "orthogonal"

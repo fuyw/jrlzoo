@@ -188,11 +188,10 @@ class IQLAgent:
                            hidden_dims=hidden_dims,
                            initializer=initializer)
         actor_params = self.actor.init(actor_key, dummy_obs)["params"]
-        schedule_fn = optax.cosine_decay_schedule(-lr, max_timesteps)
         self.actor_state = train_state.TrainState.create(
             apply_fn=self.actor.apply,
             params=actor_params,
-            tx=optax.chain(optax.scale_by_adam(), optax.scale_by_schedule(schedule_fn)))
+            tx=optax.adam(learning_rate=lr))
 
         self.critic = DoubleCritic(hidden_dims=hidden_dims, initializer=initializer)
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]

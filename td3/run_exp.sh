@@ -22,4 +22,4 @@ do
         --config.env_name=$env \
         --config.seed=$i
     done
-done
+done    

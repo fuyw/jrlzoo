@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from tqdm import trange
 from models import CQLAgent, Off2OnAgent
-from utils import ReplayBuffer, get_logger
+from utils import PrioritizedReplayBuffer, ReplayBuffer, get_logger
 
 
 def normalize_rewards(replay_buffer: ReplayBuffer, env_name: str):
@@ -54,25 +54,25 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
     cql_agents = []
     for cnt in [180, 200]:
         cql_agent = CQLAgent(obs_dim=obs_dim, act_dim=act_dim, max_action=max_action)
-        cql_agent.load(f"saved_models/demo", cnt)
-        
+        cql_agent.load(f"saved_models/demo", cnt) 
         cql_agents.append(cql_agent)
 
-
+    # initialize Off2OnRL agent
     agent = Off2OnAgent(obs_dim=obs_dim, act_dim=act_dim, max_action=max_action)
 
-    logger.info(f"\nThe actor architecture is:\n{jax.tree_util.tree_map(lambda x: x.shape, agent.actor_state.params)}")
-    logger.info(f"\nThe critic architecture is:\n{jax.tree_util.tree_map(lambda x: x.shape, agent.critic_state.params)}")
-
     # replay buffer
-    replay_buffer = ReplayBuffer(obs_dim, act_dim)
-    replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
+    offline_replay_buffer = ReplayBuffer(obs_dim, act_dim)
+    offline_replay_buffer.convert_D4RL(d4rl.qlearning_dataset(env))
+    online_replay_buffer = ReplayBuffer(obs_dim, act_dim)
+    replay_buffer = PrioritizedReplayBuffer(obs_dim, act_dim)
     normalize_rewards(replay_buffer, configs.env_name)
 
+    # fine-tuning
     logs = [{"step": 0, "reward": eval_policy(agent, env, configs.eval_episodes)[0]}]  # 2.38219
     for t in trange(1, configs.max_timesteps+1):
         batch = replay_buffer.sample(configs.batch_size)
         log_info = agent.update(batch)
+        replay_buffer.update_priority(batch.idx, log_info["priority"])
 
         # Save every 1e5 steps & last 5 checkpoints
         if (t % 100000 == 0) or (t >= int(9.8e5) and t % configs.eval_freq == 0):

@@ -1,6 +1,7 @@
 from typing import Tuple
 import os
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
+
 import ml_collections
 import gym
 import d4rl

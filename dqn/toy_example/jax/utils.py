@@ -9,6 +9,7 @@ Batch = collections.namedtuple(
     "Batch",
     ["observations", "actions", "rewards", "discounts", "next_observations"])
 
+
 PER_Batch = collections.namedtuple(
     "PER_Batch",
     ["observations", "actions", "rewards", "discounts", "next_observations", "idx", "weights"])
@@ -66,6 +67,7 @@ class ReplayBuffer:
                       discounts=self.discounts[idx],
                       next_observations=self.next_observations[idx])
         return batch
+
 
 #######
 # PER #

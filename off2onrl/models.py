@@ -202,7 +202,7 @@ class CQLAgent:
         self.alpha_state = train_state.TrainState.create(
             apply_fn=None,
             params=self.log_alpha.init(alpha_key)["params"],
-            tx=optax.adam(lr_actor)
+            tx=optax.adam(learning_rate=lr_actor)
         )
 
         # CQL parameters
@@ -599,7 +599,7 @@ class Off2OnAgent:
             self.target_entropy = target_entropy
 
         self.rng = jax.random.PRNGKey(seed)
-        self.rng, actor_key, critic_key = jax.random.split(self.rng, 3)
+        self.rng, actor_key, critic_key, weight_key = jax.random.split(self.rng, 4)
 
         # Dummy inputs
         dummy_obs = jnp.ones([ensemble_num, obs_dim], dtype=jnp.float32)
@@ -611,7 +611,7 @@ class Off2OnAgent:
         self.actor_state = train_state.TrainState.create(
             apply_fn=self.actor.apply,
             params=actor_params,
-            tx=optax.adam(lr)
+            tx=optax.adam(learning_rate=lr)
         )
 
         # Initialize the Critic
@@ -621,7 +621,7 @@ class Off2OnAgent:
         self.critic_state = train_state.TrainState.create(
             apply_fn=self.critic.apply,
             params=critic_params,
-            tx=optax.adam(lr)
+            tx=optax.adam(learning_rate=lr)
         )
 
         # Entropy tuning
@@ -630,12 +630,24 @@ class Off2OnAgent:
         self.alpha_state = train_state.TrainState.create(
             apply_fn=None,
             params=self.log_alpha.init(alpha_key)["params"],
-            tx=optax.adam(lr))
+            tx=optax.adam(learning_rate=lr)
+        )
+
+        # Weight network
+        self.weight_net = Critic()
+        weight_params = self.weight_net.init(weight_key, dummy_obs, dummy_act)["params"]
+        self.weight_state = train_state.TrainState.create(
+            apply_fn=self.weight.apply,
+            params=weight_params,
+            tx=optax.adam(learning_rate=lr))
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
                    batch: Batch,
+                   online_batch: Batch,
+                   offline_batch: Batch,
                    key: Any,
+                   weight_state: train_state.TrainState,
                    alpha_state: train_state.TrainState,
                    actor_state: train_state.TrainState,
                    critic_state: train_state.TrainState,
@@ -655,13 +667,27 @@ class Off2OnAgent:
         def loss_fn(alpha_params: FrozenDict,
                     actor_params: FrozenDict,
                     critic_params: FrozenDict,
+                    weight_params: FrozenDict,
                     rng: Any,
                     observation: jnp.ndarray,
                     action: jnp.ndarray,
                     reward: jnp.ndarray,
                     next_observation: jnp.ndarray,
-                    discount: jnp.ndarray):
+                    discount: jnp.ndarray,
+                    online_observation: jnp.ndarray,
+                    online_action: jnp.ndarray,
+                    offline_observation: jnp.ndarray,
+                    offline_action: jnp.ndarray):
             rng1, rng2 = jax.random.split(rng, 2)
+
+            # weight loss: maximize lower bound of JS divergence
+            offline_weight = nn.relu(self.weight_net.apply(
+                {"params": weight_params}, offline_observation, offline_action))
+            offline_f_star = -nn.log(2.0 / (offline_weight + 1) + 1e-6)
+            online_weight = nn.relu(self.weight_net.apply(
+                {"params": weight_params}, online_observation, online_action))
+            online_f_prime = nn.log(2.0 * online_weight / (online_weight + 1) + 1e-6)
+            weight_loss = offline_f_star - online_f_prime
 
             # Sample actions with Actor
             _, sampled_action, logp = self.actor.apply(
@@ -698,13 +724,16 @@ class Off2OnAgent:
             critic_loss2 = ((q2 - target_q)**2).sum(0)
             critic_loss = critic_loss1 + critic_loss2
 
-            total_loss = critic_loss + actor_loss + alpha_loss
+            total_loss = critic_loss + actor_loss + alpha_loss + weight_loss
             log_info = {
                 "critic_loss1": critic_loss1,
                 "critic_loss2": critic_loss2,
                 "critic_loss": critic_loss,
                 "actor_loss": actor_loss,
                 "alpha_loss": alpha_loss,
+                "weight_loss": weight_loss,
+                "offline_f_star": offline_f_star,
+                "online_f_prime": online_f_prime,
                 "q1": q1.mean(),
                 "q2": q2.mean(),
                 "target_q": target_q,
@@ -714,14 +743,16 @@ class Off2OnAgent:
             return total_loss, log_info
 
         grad_fn = jax.vmap(jax.value_and_grad(loss_fn,
-                                              argnums=(0, 1, 2),
+                                              argnums=(0, 1, 2, 3),
                                               has_aux=True),
-                           in_axes=(None, None, None, 0, 1, 1, 0, 1, 0))
+                           in_axes=(None, None, None, None, 0,
+                                    1, 1, 0, 1, 0, 0, 0, 0, 0))
         keys = jnp.stack(jax.random.split(key, num=batch.actions.shape[0]))
 
         (_, log_info), grads = grad_fn(alpha_state.params,
                                        actor_state.params,
                                        critic_state.params,
+                                       weight_state.params,
                                        keys,
                                        observations,
                                        actions,
@@ -729,22 +760,46 @@ class Off2OnAgent:
                                        next_observations,
                                        batch.discounts)
         grads = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), grads)
+
+
+        
         log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
 
-        alpha_grads, actor_grads, critic_grads = grads
+        alpha_grads, actor_grads, critic_grads, weight_grads = grads
+        new_weight_state = weight_state.apply_gradients(grads=weight_grads)
         new_alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
         new_actor_state = actor_state.apply_gradients(grads=actor_grads)
         new_critic_state = critic_state.apply_gradients(grads=critic_grads)
         new_critic_target_params = target_update(new_critic_state.params,
                                                  critic_target_params,
                                                  self.tau)
+        
+        new_weights = weight_state.apply({"params": weight_state.params},
+                                         batch.observations,
+                                         batch.actions)
+        new_weights = nn.relu(new_weights)
+        normalized_weights = (new_weights ** (1/5.0)) / ()
 
-        return new_alpha_state, new_actor_state, new_critic_state, new_critic_target_params, log_info
+        return new_weight_state, new_alpha_state, new_actor_state, new_critic_state, new_critic_target_params, log_info
+
+    # Updating the priority buffer
+    # """
+    # with torch.no_grad():
+    #     weight = self.w_activation(self.weight_net(obs, actions))
+
+    #     normalized_weight = (weight ** (1 / self.temperature)) / (
+    #         (offline_weight ** (1 / self.temperature)).mean() + 1e-10
+    #     )
+
+    # new_priority = normalized_weight.clamp(0.001, 1000)
 
     def update(self, batch: Batch):
         self.rng, key = jax.random.split(self.rng, 2)
-        self.alpha_state, self.actor_state, self.critic_state, self.critic_target_params, log_info = self.train_step(
-            batch, key, self.alpha_state, self.actor_state, self.critic_state, self.critic_target_params)
+        (self.weight_state, self.alpha_state,
+         self.actor_state, self.critic_state,
+         self.critic_target_params, log_info) = self.train_step(
+            batch, key, self.alpha_state, self.actor_state,
+            self.critic_state, self.critic_target_params)
         return log_info
 
     def save(self, fname: str, cnt: int):
