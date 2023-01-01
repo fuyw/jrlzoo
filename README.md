@@ -23,3 +23,8 @@ An RL codebase in JAX which focuses on efficiency and simplicity. Each baseline 
 
 ## Exploration
 - RND
+
+## Acknowledgements
+
+- [JaxRL](https://github.com/ikostrikov/jaxrl)
+- [Flax](https://github.com/google/flax)

@@ -9,3 +9,4 @@ bsuite*.csv
 case_study
 saved_models
 saved_buffers
+*wandb*
