@@ -31,6 +31,8 @@ do
         --config=configs/mujoco.py \
         --config.env_name=$env \
         --config.seed=$i \
+        --config.expectile=0.9 \
+        --config.adv_temperature=10.0 \
         --config.initializer=orthogonal
     done
 done

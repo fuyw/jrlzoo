@@ -29,7 +29,8 @@ def eval_policy(agent: IQLAgent, env: gym.Env, eval_episodes: int = 10) -> Tuple
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
-            action = agent.sample_action(obs, eval_mode=True)
+            # action = agent.sample_action(obs, eval_mode=True)
+            action = agent.sample_action(obs)
             obs, reward, done, _ = env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes

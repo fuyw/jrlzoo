@@ -112,16 +112,11 @@ class Actor(nn.Module):
         self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
         self.log_std = self.param('log_std', nn.initializers.zeros, (self.act_dim,))
 
-    def __call__(self, rng: Any, observations: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, observations: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observations)
-        mu = self.mu_layer(x)
-        log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std)
-
-        mean_action = nn.tanh(mu) * self.max_action
-        action_distribution = distrax.MultivariateNormalDiag(mean_action, self.std_temperature*std)
-        sampled_action = action_distribution.sample(seed=rng)
-        return mean_action, sampled_action
+        x = self.mu_layer(x)
+        mean_action = nn.tanh(x) * self.max_action
+        return mean_action
 
     def get_logp(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observations)
@@ -161,7 +156,7 @@ class IQLAgent:
         self.max_action = max_action
 
         self.rng = jax.random.PRNGKey(seed)
-        actor_key, critic_key, value_key = jax.random.split(self.rng, 3)
+        self.rng, actor_key, critic_key, value_key = jax.random.split(self.rng, 4)
         dummy_obs = jnp.ones([1, obs_dim], dtype=jnp.float32)
         dummy_act = jnp.ones([1, act_dim], dtype=jnp.float32)
 
@@ -170,7 +165,7 @@ class IQLAgent:
                            std_temperature=std_temperature,
                            hidden_dims=hidden_dims,
                            initializer=initializer)
-        actor_params = self.actor.init(actor_key, actor_key, dummy_obs)["params"]
+        actor_params = self.actor.init(actor_key, dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(
             apply_fn=self.actor.apply,
             params=actor_params,
@@ -192,14 +187,12 @@ class IQLAgent:
             tx=optax.adam(learning_rate=lr))
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def _sample_action(self, params: FrozenDict, rng, observation: np.ndarray) -> jnp.ndarray:
-        mean_action, sampled_action = self.actor.apply({"params": params}, rng, observation)
-        return mean_action, sampled_action
+    def _sample_action(self, params: FrozenDict, observation: np.ndarray) -> jnp.ndarray:
+        sampled_action = self.actor.apply({"params": params}, observation)
+        return sampled_action
 
-    def sample_action(self, observation: np.ndarray, eval_mode: bool = False) -> np.ndarray:
-        self.rng, sample_rng = jax.random.split(self.rng, 2)
-        mean_action, sampled_action = self._sample_action(self.actor_state.params, sample_rng, observation)
-        action = mean_action if eval_mode else sampled_action
+    def sample_action(self, observation: np.ndarray) -> np.ndarray:
+        action = self._sample_action(self.actor_state.params, observation)
         action = np.asarray(action)
         return action.clip(-self.max_action, self.max_action)
 
