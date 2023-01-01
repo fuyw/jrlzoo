@@ -103,7 +103,7 @@ class ValueCritic(nn.Module):
 class Actor(nn.Module):
     act_dim: int
     max_action: float = 1.0
-    temperature: float = 3.0
+    std_temperature: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
     initializer: str = "orthogonal"
 
@@ -112,44 +112,26 @@ class Actor(nn.Module):
         self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
         self.log_std = self.param('log_std', nn.initializers.zeros, (self.act_dim,))
 
-    def __call__(self, observations: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, rng: Any, observations: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observations)
-        x = self.mu_layer(x)
-        mean_action = nn.tanh(x) * self.max_action
-        return mean_action
-
-    # without tanh
-    def get_log_prob(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        x = self.net(observations)
-        x = self.mu_layer(x)
-        log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std)
-        mean_action = nn.tanh(x) * self.max_action
-        action_distribution = distrax.MultivariateNormalDiag(mean_action, std*self.temperature)
-        log_prob = action_distribution.log_prob(actions)
-        return log_prob
-
-    def get_log_prob_tanh(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        x = self.net(observation)
         mu = self.mu_layer(x)
         log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
         std = jnp.exp(log_std)
-        action_distribution = distrax.Normal(mu, std)
-        raw_action = atanh(action)
-        log_prob = action_distribution.log_prob(raw_action).sum(-1)
-        log_prob -= 2*(jnp.log(2) - raw_action - jax.nn.softplus(-2*raw_action)).sum(-1)
-        return log_prob
 
-    def sample(self, observations: jnp.ndarray, rng: Any) -> jnp.ndarray:
+        mean_action = nn.tanh(mu) * self.max_action
+        action_distribution = distrax.MultivariateNormalDiag(mean_action, self.std_temperature*std)
+        sampled_action = action_distribution.sample(seed=rng)
+        return mean_action, sampled_action
+
+    def get_logp(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observations)
-        x = self.mu_layer(x)
+        mu = self.mu_layer(x)
         log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
         std = jnp.exp(log_std)
-        action_distribution = distrax.Transformed(
-            distrax.MultivariateNormalDiag(x, std),
-            distrax.Block(distrax.Tanh(), ndims=1))
-        sampled_actions, log_probs = action_distribution.sample_and_log_prob(seed=rng)
-        return sampled_actions * self.max_action, log_probs
+        mean_action = nn.tanh(mu) * self.max_action
+        action_distribution = distrax.MultivariateNormalDiag(mean_action, self.std_temperature*std)
+        logp = action_distribution.log_prob(actions)
+        return logp
 
 
 #############
@@ -166,28 +148,29 @@ class IQLAgent:
                  tau: float = 0.05,
                  gamma: float = 0.99,
                  expectile: float = 0.7,
-                 temperature: float = 3.0, 
+                 adv_temperature: float = 3.0, 
+                 std_temperature: float = 1.0, 
                  max_timesteps: int = int(1e6),
                  initializer: str = "orthogonal"):
 
         self.act_dim = act_dim
         self.expectile = expectile
-        self.temperature = temperature
+        self.adv_temperature = adv_temperature
         self.gamma = gamma
         self.tau = tau
         self.max_action = max_action
 
-        rng = jax.random.PRNGKey(seed)
-        actor_key, critic_key, value_key = jax.random.split(rng, 3)
+        self.rng = jax.random.PRNGKey(seed)
+        actor_key, critic_key, value_key = jax.random.split(self.rng, 3)
         dummy_obs = jnp.ones([1, obs_dim], dtype=jnp.float32)
         dummy_act = jnp.ones([1, act_dim], dtype=jnp.float32)
 
         self.actor = Actor(act_dim=act_dim,
                            max_action=max_action,
-                           temperature=temperature,
+                           std_temperature=std_temperature,
                            hidden_dims=hidden_dims,
                            initializer=initializer)
-        actor_params = self.actor.init(actor_key, dummy_obs)["params"]
+        actor_params = self.actor.init(actor_key, actor_key, dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(
             apply_fn=self.actor.apply,
             params=actor_params,
@@ -209,14 +192,16 @@ class IQLAgent:
             tx=optax.adam(learning_rate=lr))
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def _sample_action(self, params: FrozenDict, observation: np.ndarray) -> jnp.ndarray:
-        sampled_action = self.actor.apply({"params": params}, observation)
-        return sampled_action
+    def _sample_action(self, params: FrozenDict, rng, observation: np.ndarray) -> jnp.ndarray:
+        mean_action, sampled_action = self.actor.apply({"params": params}, rng, observation)
+        return mean_action, sampled_action
 
-    def sample_action(self, observation: np.ndarray) -> np.ndarray:
-        sampled_action = self._sample_action(self.actor_state.params, observation)
-        sampled_action = np.asarray(sampled_action)
-        return sampled_action.clip(-self.max_action, self.max_action)
+    def sample_action(self, observation: np.ndarray, eval_mode: bool = False) -> np.ndarray:
+        self.rng, sample_rng = jax.random.split(self.rng, 2)
+        mean_action, sampled_action = self._sample_action(self.actor_state.params, sample_rng, observation)
+        action = mean_action if eval_mode else sampled_action
+        action = np.asarray(action)
+        return action.clip(-self.max_action, self.max_action)
 
     def value_train_step(self,
                          batch: Batch,
@@ -247,20 +232,20 @@ class IQLAgent:
         q1, q2 = self.critic.apply({"params": critic_target_params},
                                    batch.observations, batch.actions)
         q = jnp.minimum(q1, q2)
-        exp_a = jnp.exp((q - v) * self.temperature)
+        exp_a = jnp.exp((q - v) * self.adv_temperature)
         exp_a = jnp.minimum(exp_a, 100.0)
         def loss_fn(params):
-            log_prob = self.actor.apply({"params": params},
-                                        batch.observations,
-                                        batch.actions,
-                                        method=Actor.get_log_prob)
-            actor_loss = -exp_a * log_prob
+            logp = self.actor.apply({"params": params},
+                                    batch.observations,
+                                    batch.actions,
+                                    method=Actor.get_logp)
+            actor_loss = -exp_a * logp
             avg_actor_loss = actor_loss.mean()
             return avg_actor_loss, {
                 "actor_loss": avg_actor_loss,
                 "exp_a": exp_a.mean(),
                 "adv": (q-v).mean(),
-                "log_prob": log_prob.mean(),
+                "logp": logp.mean(),
             }
         (_, actor_info), actor_grads = jax.value_and_grad(loss_fn, has_aux=True)(actor_state.params)
         actor_state = actor_state.apply_gradients(grads=actor_grads)
@@ -318,3 +303,13 @@ class IQLAgent:
                                                           step=step, prefix="critic_")
         self.value_state = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=self.value_state,
                                                           step=step, prefix="value_")
+        self.critic_target_params = self.critic_state.params
+
+    def logger(self, t, logger, log_info):
+        logger.info(
+            f"\n[#Step {t}] eval_reward: {log_info['reward']:.2f}, eval_time: {log_info['eval_time']:.2f}, time: {log_info['time']:.2f}\n"
+            f"\tcritic_loss: {log_info['critic_loss']:.3f}, actor_loss: {log_info['actor_loss']:.3f}, value_loss: {log_info['value_loss']:.3f}\n"
+            f"\tq1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}, target_q: {log_info['target_q']:.3f}\n"
+            f"\tlogp: {log_info['logp']:.3f}, adv: {log_info['adv']:.3f}, exp_a: {log_info['exp_a']:.3f}\n"
+            f"\tweight: {log_info['adv']:.3f}, v: {log_info['v']:.3f}\n"
+        )

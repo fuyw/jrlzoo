@@ -9,10 +9,10 @@ FLAGS = flags.FLAGS
 
 
 def main(argv):
-    configs = FLAGS.config
-    os.makedirs(f"{configs.log_dir}/{configs.env_name}", exist_ok=True)
-    os.makedirs(f"{configs.model_dir}/{configs.env_name}", exist_ok=True)
-    train.train_and_evaluate(configs)
+    config = FLAGS.config
+    os.makedirs(f"{config.log_dir}/{config.env_name}", exist_ok=True)
+    os.makedirs(f"{config.model_dir}/{config.env_name}", exist_ok=True)
+    train.train_and_evaluate(config)
 
 
 if __name__ == '__main__':

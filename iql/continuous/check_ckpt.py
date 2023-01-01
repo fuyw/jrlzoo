@@ -16,7 +16,7 @@ def eval_policy(agent, eval_env, eval_episodes: int = 10):
     for _ in range(eval_episodes):
         obs, done = eval_env.reset(), False
         while not done:
-            action = agent.sample_action(obs)
+            action = agent.sample_action(obs, eval_mode=True)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -34,8 +34,9 @@ act_dim = env.action_space.shape[0]
 fnames = os.listdir("saved_models/halfcheetah-medium-v2")
 for fname in fnames:
     agent = IQLAgent(obs_dim, act_dim)
-    agent.load(f"saved_models/halfcheetah-medium-v2/{fname}", 200)
-    agents.append(agent)
-    score, _ = eval_policy(agent, env)
-    scores.append(score)
-
+    for cnt in [80, 100, 160, 180, 200]:
+        agent.load(f"saved_models/halfcheetah-medium-v2/{fname}", cnt)
+        agents.append(agent)
+        score, _ = eval_policy(agent, env)
+        print(f"cnt: {cnt}, score = {score:.3f}")
+        scores.append(score)
