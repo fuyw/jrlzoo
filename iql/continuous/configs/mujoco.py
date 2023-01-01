@@ -14,7 +14,6 @@ def get_config():
     config.gamma = 0.99
     config.expectile = 0.7
     config.adv_temperature = 3.0
-    config.std_temperature = 1.0
     config.batch_size = 256
     config.eval_episodes = 10
     config.num_random = 10

@@ -103,7 +103,6 @@ class ValueCritic(nn.Module):
 class Actor(nn.Module):
     act_dim: int
     max_action: float = 1.0
-    std_temperature: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
     initializer: str = "orthogonal"
 
@@ -124,7 +123,7 @@ class Actor(nn.Module):
         log_std = jnp.clip(self.log_std, LOG_STD_MIN, LOG_STD_MAX)
         std = jnp.exp(log_std)
         mean_action = nn.tanh(mu) * self.max_action
-        action_distribution = distrax.MultivariateNormalDiag(mean_action, self.std_temperature*std)
+        action_distribution = distrax.MultivariateNormalDiag(mean_action, std)
         logp = action_distribution.log_prob(actions)
         return logp
 
@@ -144,7 +143,6 @@ class IQLAgent:
                  gamma: float = 0.99,
                  expectile: float = 0.7,
                  adv_temperature: float = 3.0, 
-                 std_temperature: float = 1.0, 
                  max_timesteps: int = int(1e6),
                  initializer: str = "orthogonal"):
 
@@ -162,7 +160,6 @@ class IQLAgent:
 
         self.actor = Actor(act_dim=act_dim,
                            max_action=max_action,
-                           std_temperature=std_temperature,
                            hidden_dims=hidden_dims,
                            initializer=initializer)
         actor_params = self.actor.init(actor_key, dummy_obs)["params"]

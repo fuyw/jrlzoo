@@ -29,7 +29,6 @@ def eval_policy(agent: IQLAgent, env: gym.Env, eval_episodes: int = 10) -> Tuple
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
-            # action = agent.sample_action(obs, eval_mode=True)
             action = agent.sample_action(obs)
             obs, reward, done, _ = env.step(action)
             avg_reward += reward
@@ -65,7 +64,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                      gamma=config.gamma,
                      expectile=config.expectile,
                      adv_temperature=config.adv_temperature,
-                     std_temperature=config.std_temperature,
                      max_timesteps=config.max_timesteps,
                      initializer=config.initializer)
 

@@ -195,22 +195,20 @@ class SACAgent:
             params=self.log_alpha.init(alpha_key)["params"],
             tx=optax.adam(lr))
 
-    @functools.partial(jax.jit, static_argnames=("self", "eval_mode"))
+    @functools.partial(jax.jit, static_argnames=("self"))
     def _sample_action(self,
                        params: FrozenDict,
                        rng: Any,
-                       observation: np.ndarray,
-                       eval_mode: bool = False) -> jnp.ndarray:
+                       observation: np.ndarray) -> jnp.ndarray:
         mean_action, sampled_action, _ = self.actor.apply({"params": params}, rng, observation)
-        return jnp.where(eval_mode, mean_action, sampled_action)
+        return mean_action, sampled_action
 
-    def sample_action(self,
-                      observation: np.ndarray,
-                      eval_mode: bool = False) -> np.ndarray:
+    def sample_action(self, observation: np.ndarray, eval_mode: bool = False) -> np.ndarray:
         self.rng, sample_rng = jax.random.split(self.rng)
-        sampled_action = self._sample_action(self.actor_state.params, sample_rng, observation, eval_mode)
-        sampled_action = np.asarray(sampled_action)
-        return sampled_action.clip(-self.max_action, self.max_action)
+        mean_action, sampled_action = self._sample_action(self.actor_state.params, sample_rng, observation)
+        action = mean_action if eval_mode else sampled_action
+        action = np.asarray(action)
+        return action.clip(-self.max_action, self.max_action)
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
