@@ -100,6 +100,49 @@ class ValueCritic(nn.Module):
         return v.squeeze(-1)
 
 
+class SACActor(nn.Module):
+    act_dim: int
+    max_action: float = 1.0
+    hidden_dims: Sequence[int] = (256, 256)
+    initializer: str = "orthogonal"
+
+    def setup(self):
+        self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
+        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
+        self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1e-3))
+
+    def __call__(self, rng: Any, observation: jnp.ndarray):
+        x = self.net(observation)
+        mu = self.mu_layer(x)
+        log_std = self.std_layer(x)
+        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        std = jnp.exp(log_std)
+        mean_action = nn.tanh(mu)
+        action_distribution = distrax.Transformed(
+            distrax.MultivariateNormalDiag(mu, std),
+            distrax.Block(distrax.Tanh(), ndims=1))
+        sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
+        return mean_action * self.max_action, sampled_action * self.max_action, logp
+
+    def get_logp(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
+        x = self.net(observation)
+        mu = self.mu_layer(x)
+        log_std = self.std_layer(x)
+        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        std = jnp.exp(log_std)
+        action_distribution = distrax.Normal(mu, std)
+        raw_action = atanh(action)
+        logp = action_distribution.log_prob(raw_action).sum(-1)
+        logp -= 2 * (jnp.log(2) - raw_action - jax.nn.softplus(-2 * raw_action)).sum(-1)
+        return logp
+ 
+    def sample(self, observations: jnp.ndarray) -> jnp.ndarray:
+        x = self.net(observations)
+        x = self.mu_layer(x)
+        mean_action = nn.tanh(x) * self.max_action
+        return mean_action
+
+
 class Actor(nn.Module):
     act_dim: int
     max_action: float = 1.0
@@ -151,6 +194,7 @@ class IQLAgent:
         self.adv_temperature = adv_temperature
         self.gamma = gamma
         self.tau = tau
+        self.lr = lr
         self.max_action = max_action
 
         self.rng = jax.random.PRNGKey(seed)
@@ -163,10 +207,11 @@ class IQLAgent:
                            hidden_dims=hidden_dims,
                            initializer=initializer)
         actor_params = self.actor.init(actor_key, dummy_obs)["params"]
+        schedule_fn = optax.cosine_decay_schedule(-self.lr, max_timesteps)
         self.actor_state = train_state.TrainState.create(
             apply_fn=self.actor.apply,
             params=actor_params,
-            tx=optax.adam(learning_rate=lr))
+            tx=optax.chain(optax.scale_by_adam(), optax.scale_by_schedule(schedule_fn)))
 
         self.critic = DoubleCritic(hidden_dims=hidden_dims, initializer=initializer)
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]
@@ -174,14 +219,14 @@ class IQLAgent:
         self.critic_state = train_state.TrainState.create(
             apply_fn=self.critic.apply,
             params=critic_params,
-            tx=optax.adam(learning_rate=lr))
+            tx=optax.adam(learning_rate=self.lr))
 
         self.value = ValueCritic(hidden_dims, initializer=initializer)
         value_params = self.value.init(value_key, dummy_obs)["params"]
         self.value_state = train_state.TrainState.create(
             apply_fn=self.value.apply,
             params=value_params,
-            tx=optax.adam(learning_rate=lr))
+            tx=optax.adam(learning_rate=self.lr))
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def _sample_action(self, params: FrozenDict, observation: np.ndarray) -> jnp.ndarray:
@@ -236,6 +281,8 @@ class IQLAgent:
                 "exp_a": exp_a.mean(),
                 "adv": (q-v).mean(),
                 "logp": logp.mean(),
+                "logp_min": logp.min(),
+                "logp_max": logp.max(),
             }
         (_, actor_info), actor_grads = jax.value_and_grad(loss_fn, has_aux=True)(actor_state.params)
         actor_state = actor_state.apply_gradients(grads=actor_grads)
@@ -289,6 +336,11 @@ class IQLAgent:
     def load(self, ckpt_dir, step):
         self.actor_state = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=self.actor_state,
                                                           step=step, prefix="actor_")
+        # self.actor_state = train_state.TrainState.create(
+        #     apply_fn=self.actor.apply,
+        #     params=self.actor_state.params,
+        #     tx=optax.adam(learning_rate=self.lr))  # remove lr scheduler
+
         self.critic_state = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=self.critic_state,
                                                           step=step, prefix="critic_")
         self.value_state = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=self.value_state,
@@ -300,6 +352,6 @@ class IQLAgent:
             f"\n[#Step {t}] eval_reward: {log_info['reward']:.2f}, eval_time: {log_info['eval_time']:.2f}, time: {log_info['time']:.2f}\n"
             f"\tcritic_loss: {log_info['critic_loss']:.3f}, actor_loss: {log_info['actor_loss']:.3f}, value_loss: {log_info['value_loss']:.3f}\n"
             f"\tq1: {log_info['q1']:.3f}, q2: {log_info['q2']:.3f}, target_q: {log_info['target_q']:.3f}\n"
-            f"\tlogp: {log_info['logp']:.3f}, adv: {log_info['adv']:.3f}, exp_a: {log_info['exp_a']:.3f}\n"
-            f"\tweight: {log_info['adv']:.3f}, v: {log_info['v']:.3f}\n"
+            f"\tlogp: {log_info['logp']:.3f}, logp_min: {log_info['logp_min']:.3f}, logp_max: {log_info['logp_max']:.3f}\n"
+            f"\tadv: {log_info['adv']:.3f}, exp_a: {log_info['exp_a']:.3f}, weight: {log_info['adv']:.3f}, v: {log_info['v']:.3f}\n"
         )
