@@ -531,6 +531,7 @@ class Pointmass2(gym.Env):
             y0 = np.array([i, i]) / float(height)
             y1 = np.array([i + 1, i + 1]) / float(height)
             plt.fill_between(x, y0, y1, color="grey")
+            print(f"x, y0, y1 = {x}, {y0}, {y1}")
         plt.xlim([0, 1])
         plt.ylim([0, 1])
         plt.xticks([])
