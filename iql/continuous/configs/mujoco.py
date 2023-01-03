@@ -18,5 +18,5 @@ def get_config():
     config.eval_episodes = 10
     config.num_random = 10
     config.eval_freq = 5000
-    config.max_timesteps = 1000000
+    config.max_timesteps = int(1e6)
     return config

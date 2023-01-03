@@ -13,9 +13,9 @@ def get_config():
     config.tau = 0.005
     config.gamma = 0.99
     config.expectile = 0.9
-    config.temperature = 10.0
+    config.adv_temperature = 10.0
     config.batch_size = 256
-    config.eval_freq = 50000
+    config.eval_freq = int(5e4)
     config.eval_episodes = 100
-    config.max_timesteps = 1000000
+    config.max_timesteps = int(1e6)
     return config

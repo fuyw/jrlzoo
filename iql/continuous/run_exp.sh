@@ -17,6 +17,8 @@ mujoco_envs=(
     "walker2d-medium-v2"
     "walker2d-random-v2"
 )
+
+
 antmaze_envs=(
     "antmaze-large-play-v0"
     "antmaze-large-diverse-v0"
@@ -28,10 +30,10 @@ antmaze_envs=(
 
 for ((i=0;i<1;i+=1))
 do
-    for env in ${mujoco_envs[*]}
+    for env in ${antmaze_envs[*]}
     do
         python main.py \
-        --config=configs/mujoco.py \
+        --config=configs/antmaze.py \
         --config.env_name=$env \
         --config.seed=$i \
         --config.initializer=orthogonal
