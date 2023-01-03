@@ -45,7 +45,7 @@ class ReplayBuffer:
 
     def convert_D4RL(self, dataset):
         self.observations = dataset["observations"]
-        self.actions = dataset["actions"]
+        self.actions = np.clip(dataset["actions"], -1.0+1e-5, 1.0-1e-5)
         self.next_observations = dataset["next_observations"]
         self.rewards = dataset["rewards"].squeeze()
         self.discounts = 1. - dataset["terminals"].squeeze()
