@@ -32,7 +32,7 @@ def get_args():
     parser.add_argument("--eval_freq", type=int, default=2_000)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--plot_traj", action="store_true", default=False)
-    parser.add_argument("--new_buffer", action="store_true", default=False)
+    parser.add_argument("--new_buffer", action="store_true", default=True)
     parser.add_argument("--epsilon", type=float, default=0.2)
     args = parser.parse_args()
     return args
@@ -43,8 +43,7 @@ def get_args():
 #################
 def train_and_evaluate(args):
     t1 = time.time()
-    exp_name = f"online_{args.agent}_a{args.cql_alpha}_" +\
-        f"e{args.epsilon}_nb{int(args.new_buffer)}"
+    exp_name = f"{args.agent}_a{args.cql_alpha}"
 
     # register pointmass environments
     register_custom_envs()
@@ -81,7 +80,9 @@ def train_and_evaluate(args):
     obs, done = env.reset(), False
     logs = [{"step": 0,
              "reward": eval_policy(agent, eval_env, args.seed),
-             "fixed_Q": agent.get_qvalues(fixed_batch)}]
+             "fixed_Q": agent.get_qvalues(fixed_batch),
+             "ptr": replay_buffer.ptr}]
+
     for t in range(1, args.max_timesteps+1):
         episode_steps += 1
         if np.random.random() <= args.epsilon:
@@ -124,6 +125,7 @@ def train_and_evaluate(args):
                                  "avg_Q": log_info['avg_Q'].item(),
                                  "avg_target_Q": log_info['avg_target_Q'].item(),
                                  "avg_ood_Q": log_info['avg_ood_Q'].item(),
+                                 "ptr": replay_buffer.ptr,
                                  "fixed_Q": fixed_Q})
                 else:
                     print(f"[Step {t}]\n\treward={eval_reward:.2f}\t"
@@ -141,15 +143,18 @@ def train_and_evaluate(args):
                                  "loss": log_info['avg_loss'].item(),
                                  "avg_Q": log_info['avg_Q'].item(),
                                  "avg_target_Q": log_info['avg_target_Q'].item(),
+                                 "ptr": replay_buffer.ptr,
                                  "fixed_Q": fixed_Q})
 
         if done:
             obs, done = env.reset(), False
             episode_steps = 0
 
+        if (t % 10000 == 0):
+            agent.save(f"saved_models/online_{args.agent}/{exp_name}_{t//10000}")
+
     log_df = pd.DataFrame(logs) 
     log_df.to_csv(f"logs/online_{args.agent}/{exp_name}.csv")
-    agent.save(f"saved_models/online_{args.agent}/{exp_name}")
 
 
 if __name__ == "__main__":

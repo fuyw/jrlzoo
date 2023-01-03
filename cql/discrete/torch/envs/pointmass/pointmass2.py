@@ -456,12 +456,25 @@ class Pointmass2(gym.Env):
 
         return dist
 
-    def plot_trajectories(self, fname):
-        self.plot_walls()
+    def save_trajectories(self):
         obs_vecs = [np.array(i) for i in self.obs_queue]
+        return obs_vecs
+
+    def plot_trajectories(self, trajs1, trajs2, fname):
+        self.plot_walls()
+        obs_vecs1 = trajs1
+        obs_vecs2 = trajs2
         goal1, goal2 = self.goal1, self.goal2
-        for obs_vec in obs_vecs:
+
+        for obs_vec in obs_vecs1:
+            plt.plot(obs_vec[1:, 0], obs_vec[1:, 1], "m-o", alpha=0.05)
+
+        for obs_vec in obs_vecs2:
             plt.plot(obs_vec[1:, 0], obs_vec[1:, 1], "b-o", alpha=0.05)
+
+        plt.plot([0.09090909], [0.09090909], "m-o", label="DQN", alpha=0.3)
+        plt.plot([0.09090909], [0.09090909], "b-o", label="CQL", alpha=0.3)
+
         plt.scatter([obs_vec[0, 0]], [obs_vec[0, 1]],
                     marker="+",
                     color="red",
