@@ -24,7 +24,7 @@ def get_args():
     parser.add_argument("--env_name", default="PointmassHard-v2")
     parser.add_argument("--agent", default="cql", choices=("cql", "dqn"))
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--cql_alpha", type=float, default=3.0)
+    parser.add_argument("--cql_alpha", type=float, default=0.0)
     parser.add_argument("--hid_dim", type=int, default=64)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max_timesteps", type=int, default=100_000)
@@ -43,7 +43,7 @@ def get_args():
 #################
 def train_and_evaluate(args):
     t1 = time.time()
-    exp_name = f"{args.agent}_a{args.cql_alpha}"
+    exp_name = f"{args.agent}_a{args.cql_alpha}_s{args.seed}"
 
     # register pointmass environments
     register_custom_envs()
@@ -65,7 +65,7 @@ def train_and_evaluate(args):
                                     hid_dim=args.hid_dim,
                                     cql_alpha=args.cql_alpha)
     agent.load(f"saved_models/{args.agent}/{args.agent}_s42")
-    reward = eval_policy(agent, eval_env, args.seed)
+    reward = eval_policy(agent, eval_env)
     print(f"reward for ckpt = {reward:.0f}")
 
     # create replay buffer
@@ -79,7 +79,7 @@ def train_and_evaluate(args):
     episode_steps = 0
     obs, done = env.reset(), False
     logs = [{"step": 0,
-             "reward": eval_policy(agent, eval_env, args.seed),
+             "reward": eval_policy(agent, eval_env),
              "fixed_Q": agent.get_qvalues(fixed_batch),
              "ptr": replay_buffer.ptr}]
 
@@ -99,7 +99,7 @@ def train_and_evaluate(args):
             batch = replay_buffer.sample(args.batch_size)
             log_info = agent.update(batch)
             if t % args.eval_freq == 0:
-                eval_reward = eval_policy(agent, eval_env, args.seed)
+                eval_reward = eval_policy(agent, eval_env)
                 fixed_Q = agent.get_qvalues(fixed_batch)
                 if args.plot_traj:
                     eval_env.plot_trajectory(f"imgs/online_{args.agent}/{t//args.eval_freq}")
@@ -162,4 +162,6 @@ if __name__ == "__main__":
     os.makedirs(f"logs/online_{args.agent}", exist_ok=True)
     os.makedirs(f"imgs/online_{args.agent}", exist_ok=True)
     os.makedirs(f"saved_models/online_{args.agent}", exist_ok=True)
-    train_and_evaluate(args)
+    for seed in range(5):
+        args.seed = seed
+        train_and_evaluate(args)

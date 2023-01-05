@@ -204,8 +204,52 @@ def res():
     cbar.ax.set_ylabel(cbarlabel, rotation=-90, va="bottom")
     plt.tight_layout()
     plt.savefig("heatmap.png", dpi=360)
-     
-     
+
+
+def smooth(x, window=3):
+    y = np.ones(window)
+    z = np.ones(len(x))
+    smoothed_x = np.convolve(x, y, 'same') / np.convolve(z, y, 'same')
+    return smoothed_x.reshape(-1, 1)
+
+
+def plot_cql_dqn():
+    dqn_res, cql_res = [], []
+    for i in range(5):
+        df = pd.read_csv(f"logs/online_cql/cql_a3.0_s{i}.csv", index_col=0)
+        rewards = df["reward"].tolist()
+        rewards = np.array([rewards[0], rewards[0]] + rewards)
+        rewards = smooth(rewards, 7)
+        cql_res.append(rewards.reshape(-1, 1))
+
+    for i in range(5):
+        df = pd.read_csv(f"logs/online_cql/cql_a0.0_s{i}.csv", index_col=0)
+        rewards = df["reward"].tolist()
+        rewards = np.array([rewards[0], rewards[0]] + rewards)
+        rewards = smooth(rewards, 7)
+        dqn_res.append(rewards.reshape(-1, 1))
+
+    cql_res = np.concatenate(cql_res, axis=-1)
+    cql_mu = cql_res.mean(axis=-1)
+    cql_std = cql_res.std(axis=-1)
+
+    dqn_res = np.concatenate(dqn_res, axis=-1)
+    dqn_mu = dqn_res.mean(axis=-1)
+    dqn_std = dqn_res.std(axis=-1)
+
+    _, ax = plt.subplots()
+    idx = np.arange(0, 102000, 2000) / 1e5
+    ax.plot(idx, cql_mu, ls='solid', lw=0.6, label=f"CQL alpha=3")
+    ax.fill_between(idx, cql_mu+cql_std, cql_mu-cql_std, alpha=0.3)
+    ax.plot(idx, dqn_mu, ls='solid', lw=0.6, label=f"CQL alpha=0")
+    ax.fill_between(idx, dqn_mu+dqn_std, dqn_mu-dqn_std, alpha=0.3)
+    ax.set_ylabel("Reward")
+    ax.set_xlabel("Steps (1e5)")
+    plt.legend()
+    plt.savefig("imgs/cql_dqn.png", dpi=360)
+    plt.close()
+
+
 if __name__:
     # save_trajs()
     # plot_heatmap()
