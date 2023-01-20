@@ -15,7 +15,7 @@ from utils import ReplayBuffer, get_logger
 
 def normalize_rewards(replay_buffer: ReplayBuffer, env_name: str):
     if 'maze' in env_name:
-        replay_buffer.rewards = replay_buffer.rewards * 10.0 - 5.0
+        replay_buffer.rewards = replay_buffer.rewards - 1.0
 
 
 def eval_policy(agent, eval_env, eval_episodes: int = 10) -> Tuple[float, float]:
