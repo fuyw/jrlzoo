@@ -141,9 +141,9 @@ class TD3BCAgent:
         sampled_action = self.actor.apply({"params": params}, observation)
         return sampled_action
 
-    def sample_action(self, params: FrozenDict, observation: jnp.ndarray) -> np.ndarray:
-        sampled_action = self._sample_action(params, observation)
-        sampled_action = np.asarray(sampled_action)  # env.step with jnp.ndarray is slow
+    def sample_action(self, observation: jnp.ndarray) -> np.ndarray:
+        sampled_action = self._sample_action(self.actor_state.params, observation)
+        sampled_action = np.asarray(sampled_action)
         return sampled_action
 
     def actor_train_step(self,
@@ -226,3 +226,16 @@ class TD3BCAgent:
     def save(self, fname: str, cnt: int):
         checkpoints.save_checkpoint(fname, self.actor_state, cnt, prefix="actor_", keep=20, overwrite=True)
         checkpoints.save_checkpoint(fname, self.critic_state, cnt, prefix="critic_", keep=20, overwrite=True)
+
+    def load(self, ckpt_dir, step=200):
+        self.actor_state = checkpoints.restore_checkpoint(
+            ckpt_dir=ckpt_dir,
+            target=self.actor_state,
+            step=step,
+            prefix="actor_")
+        self.critic_state = checkpoints.restore_checkpoint(
+            ckpt_dir=ckpt_dir,
+            target=self.critic_state,
+            step=step,
+            prefix="critic_")
+        self.critic_target_params = self.critic_state.params
