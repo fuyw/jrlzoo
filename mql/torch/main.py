@@ -13,80 +13,6 @@ from misc import logger
 from algs.MQL.buffer import Buffer
 
 
-def get_args():
-    parser = argparse.ArgumentParser()
-
-    # Optim params
-    parser.add_argument('--lr', type=float, default=0.0003, help = 'Learning rate')
-    parser.add_argument('--replay_size', type=int, default = 1e6, help ='Replay buffer size int(1e6)')
-    parser.add_argument('--ptau', type=float, default=0.005 , help = 'Interpolation factor in polyak averaging')
-    parser.add_argument('--gamma', type=float, default=0.99, help = 'Discount factor [0,1]')
-    parser.add_argument("--burn_in", default=1e4, type=int, help = 'How many time steps purely random policy is run for') 
-    parser.add_argument("--total_timesteps", default=5e6, type=float, help = 'Total number of timesteps to train on')
-    parser.add_argument("--expl_noise", default=0.2, type=float, help='Std of Gaussian exploration noise')
-    parser.add_argument("--batch_size", default=256, type=int, help = 'Batch size for both actor and critic')
-    parser.add_argument("--policy_noise", default=0.3, type=float, help =' Noise added to target policy during critic update')
-    parser.add_argument("--noise_clip", default=0.5, type=float, help='Range to clip target policy noise')
-    parser.add_argument("--policy_freq", default=2, type=int, help='Frequency of delayed policy updates')
-    parser.add_argument('--hidden_sizes', nargs='+', type=int, default = [300, 300], help = 'indicates hidden size actor/critic')
-
-    # General params
-    parser.add_argument('--env_name', type=str, default='ant-goal')
-    parser.add_argument('--seed', type=int, default=1)
-    parser.add_argument('--alg_name', type=str, default='mql')
-
-    parser.add_argument('--disable_cuda', default=False, action='store_true')
-    parser.add_argument('--cuda_deterministic', default=False, action='store_true')
-    parser.add_argument("--gpu_id", default=0, type=int)
-
-    parser.add_argument('--log_id', default='empty')
-    parser.add_argument('--check_point_dir', default='./ck')
-    parser.add_argument('--log_dir', default='./log_dir')
-    parser.add_argument('--log_interval', type=int, default=10, help='log interval, one log per n updates')
-    parser.add_argument('--save_freq', type=int, default = 250)
-    parser.add_argument("--eval_freq", default=5e3, type=float, help = 'How often (time steps) we evaluate')    
-
-    # Env
-    parser.add_argument('--env_configs', default='./configs/pearl_envs.json')
-    parser.add_argument('--max_path_length', type=int, default = 200)
-    parser.add_argument('--enable_train_eval', default=False, action='store_true')
-    parser.add_argument('--enable_promp_envs', default=False, action='store_true')
-    parser.add_argument('--num_initial_steps',  type=int, default = 1000)
-    parser.add_argument('--unbounded_eval_hist', default=False, action='store_true')
-
-    #context
-    parser.add_argument('--hiddens_conext', nargs='+', type=int, default = [30], help = 'indicates hidden size of context next')
-    parser.add_argument('--enable_context', default=True, action='store_true')
-    parser.add_argument('--only_concat_context', type=int, default = 3, help =' use conext')
-    parser.add_argument('--num_tasks_sample', type=int, default = 5)
-    parser.add_argument('--num_train_steps', type=int, default = 500)
-    parser.add_argument('--min_buffer_size', type=int, default = 100000, help = 'this indicates a condition to start using num_train_steps')
-    parser.add_argument('--history_length', type=int, default = 30)
-
-    #other params
-    parser.add_argument('--beta_clip', default=1.0, type=float, help='Range to clip beta term in CSC')
-    parser.add_argument('--snapshot_size', type=int, default = 2000, help ='Snapshot size for a task')
-    parser.add_argument('--prox_coef', default=0.1, type=float, help ='Prox lambda')
-    parser.add_argument('--meta_batch_size', default=10, type=int, help ='Meta batch size: number of sampled tasks per itr')
-    parser.add_argument('--enable_adaptation', default=True, action='store_true')
-    parser.add_argument('--main_snap_iter_nums', default=100, type=int, help ='how many times adapt using train task but with csc')
-    parser.add_argument('--snap_iter_nums', default=10, type=int, help ='how many times adapt using eval task')
-    parser.add_argument('--type_of_training', default='td3', help = 'td3')
-    parser.add_argument('--lam_csc', default=0.50, type=float, help='logisitc regression reg, smaller means stronger reg')
-    parser.add_argument('--use_ess_clipping', default=False, action='store_true')
-    parser.add_argument('--enable_beta_obs_cxt', default=False, action='store_true', help='if true concat obs + context')
-    parser.add_argument('--sampling_style', default='replay', help = 'replay')
-    parser.add_argument('--sample_mult',  type=int, default = 5, help ='sample multipler of main_iter for adapt method')
-    parser.add_argument('--use_epi_len_steps', default=True, action='store_true')
-    parser.add_argument('--use_normalized_beta', default=False, action='store_true', help = 'normalized beta_score')
-    parser.add_argument('--reset_optims', default=False, action='store_true', help = 'init optimizers at the start of adaptation')
-    parser.add_argument('--lr_milestone', default = -1, type=int, help = 'reduce learning rate after this epoch')
-    parser.add_argument('--lr_gamma', default = 0.8, type=float, help = 'learning rate decay')
-
-    args = parser.parse_args()
-    return args
-
-
 def update_lr(eparams, iter_num, alg_mth):
     #######
     # initial_lr if i < reduce_lr
@@ -459,6 +385,84 @@ def adjust_number_train_iters(buffer_size, num_train_steps, bsize, min_buffer_si
             num_train_steps = temp
 
     return num_train_steps
+
+
+###################
+# Run Experiments #
+###################
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    # general params
+    parser.add_argument('--env_name', type=str, default='cheetah-dir')
+    parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--alg_name', type=str, default='mql')
+    parser.add_argument("--batch_size", default=256, type=int, help = 'Batch size for both actor and critic')
+    parser.add_argument('--hidden_sizes', nargs='+', type=int, default = [300, 300], help = 'indicates hidden size actor/critic')
+    parser.add_argument('--replay_size', type=int, default=1e6, help ='Replay buffer size int(1e6)')
+    parser.add_argument("--total_timesteps", default=5e6, type=float, help = 'Total number of timesteps to train on')
+    parser.add_argument('--gamma', type=float, default=0.99, help = 'Discount factor [0,1]')
+    parser.add_argument('--ptau', type=float, default=0.005 , help = 'Interpolation factor in polyak averaging')
+
+    # Env
+    parser.add_argument('--env_configs', default='./configs/pearl_envs.json')
+    parser.add_argument('--max_path_length', type=int, default = 200)
+    parser.add_argument('--enable_train_eval', default=False, action='store_true')
+    parser.add_argument('--enable_promp_envs', default=False, action='store_true')
+    parser.add_argument('--num_initial_steps',  type=int, default = 1000)
+    parser.add_argument('--unbounded_eval_hist', default=False, action='store_true')
+
+    # Optim params
+    parser.add_argument('--lr', type=float, default=3e-4, help = 'Learning rate')
+    parser.add_argument("--expl_noise", default=0.3, type=float, help='Std of Gaussian exploration noise')
+    parser.add_argument("--noise_clip", default=0.5, type=float, help='Range to clip target policy noise')
+    parser.add_argument("--policy_noise", default=0.3, type=float, help =' Noise added to target policy during critic update')
+    parser.add_argument("--policy_freq", default=2, type=int, help='Frequency of delayed policy updates')
+
+    parser.add_argument("--burn_in", default=1e4, type=int, help = 'How many time steps purely random policy is run for') 
+
+    # context
+    parser.add_argument('--enable_context', default=True, action='store_true')
+    parser.add_argument('--history_length', type=int, default=20)
+    parser.add_argument('--hiddens_conext', nargs='+', type=int, default = [30], help = 'indicates hidden size of context next')
+    parser.add_argument('--only_concat_context', type=int, default = 3, help =' use conext')
+    parser.add_argument('--num_tasks_sample', type=int, default = 5)
+    parser.add_argument('--num_train_steps', type=int, default = 500)
+    parser.add_argument('--min_buffer_size', type=int, default = 100000, help = 'this indicates a condition to start using num_train_steps')
+
+    parser.add_argument('--disable_cuda', default=False, action='store_true')
+    parser.add_argument('--cuda_deterministic', default=False, action='store_true')
+    parser.add_argument("--gpu_id", default=0, type=int)
+
+    parser.add_argument('--log_id', default='empty')
+    parser.add_argument('--check_point_dir', default='./ck')
+    parser.add_argument('--log_dir', default='./log_dir')
+    parser.add_argument('--log_interval', type=int, default=10, help='log interval, one log per n updates')
+    parser.add_argument('--save_freq', type=int, default = 250)
+    parser.add_argument("--eval_freq", default=5e3, type=float, help = 'How often (time steps) we evaluate')    
+
+    #other params
+    parser.add_argument('--beta_clip', default=1.5, type=float, help='Range to clip beta term in CSC')
+    parser.add_argument('--enable_adaptation', default=True, action='store_true')
+    parser.add_argument('--snapshot_size', type=int, default = 2000, help ='Snapshot size for a task')
+    parser.add_argument('--prox_coef', default=0.1, type=float, help ='Prox lambda')
+    parser.add_argument('--meta_batch_size', default=10, type=int, help ='Meta batch size: number of sampled tasks per itr')
+    parser.add_argument('--main_snap_iter_nums', default=100, type=int, help ='how many times adapt using train task but with csc')
+    parser.add_argument('--snap_iter_nums', default=10, type=int, help ='how many times adapt using eval task')
+    parser.add_argument('--type_of_training', default='td3', help = 'td3')
+    parser.add_argument('--lam_csc', default=0.50, type=float, help='logisitc regression reg, smaller means stronger reg')
+    parser.add_argument('--use_ess_clipping', default=False, action='store_true')
+    parser.add_argument('--enable_beta_obs_cxt', default=False, action='store_true', help='if true concat obs + context')
+    parser.add_argument('--sampling_style', default='replay', help = 'replay')
+    parser.add_argument('--sample_mult',  type=int, default = 5, help ='sample multipler of main_iter for adapt method')
+    parser.add_argument('--use_epi_len_steps', default=True, action='store_true')
+    parser.add_argument('--use_normalized_beta', default=False, action='store_true', help = 'normalized beta_score')
+    parser.add_argument('--reset_optims', default=False, action='store_true', help = 'init optimizers at the start of adaptation')
+    parser.add_argument('--lr_milestone', default = -1, type=int, help = 'reduce learning rate after this epoch')
+    parser.add_argument('--lr_gamma', default = 0.8, type=float, help = 'learning rate decay')
+
+    args = parser.parse_args()
+    return args
 
 
 if __name__ == "__main__":

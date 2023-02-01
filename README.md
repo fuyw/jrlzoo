@@ -22,7 +22,10 @@ An RL codebase in JAX which focuses on efficiency and simplicity. Each baseline 
 - Off2OnRL
 
 ## Meta RL
+- HypeRL
+- MAML
 - MQL
+- PEARL
 
 ## Exploration
 - RND

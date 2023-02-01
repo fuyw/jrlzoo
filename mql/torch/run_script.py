@@ -46,9 +46,6 @@ def cheetah_vel(seed, log_id, gpu_id):
 def cheetah_dir(seed, log_id, gpu_id):
 
 	cmd = " python main.py  --env_name cheetah-dir \
-	--alg_name mql \
-	--policy_freq 2 --expl_noise 0.3 --enable_context  --num_train_steps 500 \
-	--cuda_deterministic  --history_length  20  --beta_clip 1.5 --enable_adaptation  \
 	--num_initial_steps 1000 --main_snap_iter_nums 50 --snap_iter_nums 10 --hidden_sizes  300 300 \
 	--lam_csc  0.5  --snapshot_size 2000 --hiddens_conext 20  --lr  0.0003 \
 	--sampling_style replay --sample_mult 10  --use_epi_len_steps  --num_tasks_sample 1 \
