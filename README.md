@@ -21,6 +21,9 @@ An RL codebase in JAX which focuses on efficiency and simplicity. Each baseline 
 - AWAC
 - Off2OnRL
 
+## Meta RL
+- MQL
+
 ## Exploration
 - RND
 
