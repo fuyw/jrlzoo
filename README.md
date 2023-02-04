@@ -34,3 +34,4 @@ An RL codebase in JAX which focuses on efficiency and simplicity. Each baseline 
 
 - [JaxRL](https://github.com/ikostrikov/jaxrl)
 - [Flax](https://github.com/google/flax)
+- [jax-meta-learning](https://github.com/tristandeleu/jax-meta-learning)
