@@ -42,6 +42,13 @@ class ReplayBuffer:
                       next_observations=self.next_observations[idx])
         return batch
 
+    def save(self, fname: str):
+        np.savez(fname,
+                 observations=self.observations,
+                 actions=self.actions,
+                 next_observations=self.next_observations,
+                 rewards=self.rewards,
+                 discounts=self.discounts)
 
 def get_logger(fname: str) -> logging.Logger:
     logging.basicConfig(level=logging.INFO,
