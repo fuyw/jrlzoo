@@ -100,6 +100,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                 f"\tq1: {log_info['q1']:.2f}, target_q: {log_info['target_q']:.2f}, ood_q1: {log_info['ood_q1']:.2f}, random_q1: {log_info['random_q1']:.2f}\n"
                 f"\tlogp: {log_info['logp']:.2f}, alpha: {log_info['alpha']:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}\n"
             )
+        elif (t % 10000 == 0):
+            logs.append(log_info)
 
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{configs.log_dir}/{configs.env_name}/{exp_name}.csv")

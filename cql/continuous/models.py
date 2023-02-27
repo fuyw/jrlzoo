@@ -302,23 +302,29 @@ class CQLAgent:
                 actor_loss = alpha * logp - sampled_q
 
             # Repeat observations
-            repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0), repeats=self.num_random, axis=0)
-            repeat_next_observations = jnp.repeat(jnp.expand_dims(next_observation, axis=0), repeats=self.num_random, axis=0)
+            repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0),
+                                             repeats=self.num_random, axis=0)
+            repeat_next_observations = jnp.repeat(jnp.expand_dims(next_observation, axis=0),
+                                                  repeats=self.num_random, axis=0)
 
             # Critic loss
             q1, q2 = self.critic.apply({"params": critic_params}, observation, action)
 
             # Target Q value
             if self.max_target_backup:
-                _, next_actions, logp_next_actions = self.actor.apply({"params": frozen_actor_params}, rng2, repeat_next_observations)
-                next_q1s, next_q2s = self.critic.apply({"params": critic_target_params}, repeat_next_observations, next_actions)
+                _, next_actions, logp_next_actions = self.actor.apply({"params": frozen_actor_params},
+                                                                      rng2, repeat_next_observations)
+                next_q1s, next_q2s = self.critic.apply({"params": critic_target_params}, 
+                                                       repeat_next_observations, next_actions)
                 next_qs = jnp.minimum(next_q1s, next_q2s)
                 max_target_idx = jnp.argmax(next_qs, keepdims=True)
                 logp_next_action = jnp.take_along_axis(logp_next_actions, max_target_idx, 0).squeeze()
                 next_q = jnp.take_along_axis(next_qs, max_target_idx, 0).squeeze()
             else:
-                _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng2, next_observation)
-                next_q1, next_q2 = self.critic.apply({"params": critic_target_params}, next_observation, next_action)
+                _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params},
+                                                                    rng2, next_observation)
+                next_q1, next_q2 = self.critic.apply({"params": critic_target_params},
+                                                     next_observation, next_action)
                 next_q = jnp.minimum(next_q1, next_q2)
 
             if self.backup_entropy:
@@ -330,20 +336,32 @@ class CQLAgent:
 
             # CQL loss
             rng3, rng4 = jax.random.split(rng, 2)
-            cql_random_actions = jax.random.uniform(
-                rng3, shape=(self.num_random, self.act_dim), minval=-self.max_action, maxval=self.max_action)
+            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim),
+                                                    minval=-self.max_action, maxval=self.max_action)
 
-            _, cql_sampled_actions, cql_logp = self.actor.apply({"params": frozen_actor_params}, rng3, repeat_observations)
-            _, cql_next_actions, cql_logp_next_action = self.actor.apply({"params": frozen_actor_params}, rng4, repeat_next_observations)
+            _, cql_sampled_actions, cql_logp = self.actor.apply({"params": frozen_actor_params},
+                                                                rng3, repeat_observations)
+            _, cql_next_actions, cql_logp_next_action = self.actor.apply({"params": frozen_actor_params},
+                                                                         rng4, repeat_next_observations)
 
-            cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_random_actions)
-            cql_q1, cql_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_sampled_actions)
-            cql_next_q1, cql_next_q2 = self.critic.apply({"params": critic_params}, repeat_observations, cql_next_actions)
+            cql_random_q1, cql_random_q2 = self.critic.apply({"params": critic_params},
+                                                             repeat_observations,
+                                                             cql_random_actions)
+            cql_q1, cql_q2 = self.critic.apply({"params": critic_params},
+                                               repeat_observations,
+                                               cql_sampled_actions)
+            cql_next_q1, cql_next_q2 = self.critic.apply({"params": critic_params},
+                                                         repeat_observations,
+                                                         cql_next_actions)
 
             # Simulate logsumexp() for continuous actions
             random_density = jnp.log(0.5**self.act_dim)
-            cql_concat_q1 = jnp.concatenate([cql_random_q1-random_density, cql_next_q1-cql_logp_next_action, cql_q1-cql_logp])
-            cql_concat_q2 = jnp.concatenate([cql_random_q2-random_density, cql_next_q2-cql_logp_next_action, cql_q2-cql_logp])
+            cql_concat_q1 = jnp.concatenate([cql_random_q1-random_density,
+                                             cql_next_q1-cql_logp_next_action,
+                                             cql_q1-cql_logp])
+            cql_concat_q2 = jnp.concatenate([cql_random_q2-random_density,
+                                             cql_next_q2-cql_logp_next_action,
+                                             cql_q2-cql_logp])
 
             # CQL0: conservative penalty ==> dominate by the max(cql_concat_q)
             ood_q1 = jax.scipy.special.logsumexp(cql_concat_q1)
@@ -351,8 +369,13 @@ class CQLAgent:
 
             cql_diff1 = jnp.clip(ood_q1 - q1, self.cql_clip_diff_min, self.cql_clip_diff_max)
             cql_diff2 = jnp.clip(ood_q2 - q2, self.cql_clip_diff_min, self.cql_clip_diff_max)
-            cql_loss1 = cql_alpha * cql_diff1 * self.min_q_weight
-            cql_loss2 = cql_alpha * cql_diff2 * self.min_q_weight
+
+            if self.with_lagrange:
+                cql_loss1 = cql_alpha * (cql_diff1 - self.lagrange_thresh) * self.min_q_weight
+                cql_loss2 = cql_alpha * (cql_diff2 - self.lagrange_thresh) * self.min_q_weight
+            else:
+                cql_loss1 = cql_diff1 * self.min_q_weight
+                cql_loss2 = cql_diff2 * self.min_q_weight
 
             # Loss weight form Dopamine
             total_loss = critic_loss + actor_loss + alpha_loss + cql_loss1 + cql_loss2
