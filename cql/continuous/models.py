@@ -210,7 +210,8 @@ class CQLAgent:
         self.with_lagrange = with_lagrange
         self.cql_clip_diff_min = cql_clip_diff_min
         self.cql_clip_diff_max = cql_clip_diff_max
-        self.min_q_weight = 1.0 if with_lagrange else min_q_weight
+        # self.min_q_weight = 1.0 if with_lagrange else min_q_weight
+        self.min_q_weight = min_q_weight
         self.max_target_backup = max_target_backup
         if self.with_lagrange:
             self.lagrange_thresh = lagrange_thresh
@@ -371,13 +372,14 @@ class CQLAgent:
             cql_diff2 = jnp.clip(ood_q2 - q2, self.cql_clip_diff_min, self.cql_clip_diff_max)
 
             if self.with_lagrange:
-                cql_loss1 = cql_alpha * (cql_diff1 - self.lagrange_thresh) * self.min_q_weight
-                cql_loss2 = cql_alpha * (cql_diff2 - self.lagrange_thresh) * self.min_q_weight
+                # cql_loss1 = cql_alpha * (cql_diff1 - self.lagrange_thresh) * self.min_q_weight
+                # cql_loss2 = cql_alpha * (cql_diff2 - self.lagrange_thresh) * self.min_q_weight
+                cql_loss1 = cql_alpha * cql_diff1 * self.min_q_weight
+                cql_loss2 = cql_alpha * cql_diff2 * self.min_q_weight
             else:
                 cql_loss1 = cql_diff1 * self.min_q_weight
                 cql_loss2 = cql_diff2 * self.min_q_weight
 
-            # Loss weight form Dopamine
             total_loss = critic_loss + actor_loss + alpha_loss + cql_loss1 + cql_loss2
             log_info = {
                 "critic_loss": critic_loss,
