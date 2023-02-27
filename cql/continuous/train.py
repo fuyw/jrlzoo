@@ -25,7 +25,6 @@ def eval_policy(agent, eval_env, eval_episodes: int = 10) -> Tuple[float, float]
         obs, done = eval_env.reset(), False
         while not done:
             action = agent.sample_action(obs, True)
-            action = np.asarray(action)
             obs, reward, done, _ = eval_env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
@@ -68,8 +67,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                      max_target_backup=configs.max_target_backup,
                      cql_clip_diff_min=configs.cql_clip_diff_min,
                      cql_clip_diff_max=configs.cql_clip_diff_max,
-                     actor_hidden_dims=configs.hidden_dims,
-                     critic_hidden_dims=configs.hidden_dims,
+                     actor_hidden_dims=configs.actor_hidden_dims,
+                     critic_hidden_dims=configs.critic_hidden_dims,
                      initializer=configs.initializer)
 
     logger.info(f"\nThe actor architecture is:\n{jax.tree_util.tree_map(lambda x: x.shape, agent.actor_state.params)}")
