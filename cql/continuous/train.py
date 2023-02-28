@@ -103,8 +103,6 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
             )
         elif (t % 10000 == 0):
             logs.append(log_info)
-            log_df = pd.DataFrame(logs)
-            log_df.to_csv(f"{configs.log_dir}/{configs.env_name}/{exp_name}.csv")
 
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{configs.log_dir}/{configs.env_name}/{exp_name}.csv")

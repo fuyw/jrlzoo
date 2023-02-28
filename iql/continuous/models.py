@@ -55,7 +55,7 @@ class Critic(nn.Module):
 
     def setup(self):
         self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
-        self.out_layer = nn.Dense(1, kernel_init=init_fn(self.initializer, 1.0))
+        self.out_layer = nn.Dense(1, kernel_init=init_fn(self.initializer))
 
     def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observations, actions], axis=-1)
@@ -100,49 +100,6 @@ class ValueCritic(nn.Module):
         return v.squeeze(-1)
 
 
-class SACActor(nn.Module):
-    act_dim: int
-    max_action: float = 1.0
-    hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "orthogonal"
-
-    def setup(self):
-        self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
-        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
-        self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1e-3))
-
-    def __call__(self, rng: Any, observation: jnp.ndarray):
-        x = self.net(observation)
-        mu = self.mu_layer(x)
-        log_std = self.std_layer(x)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std)
-        mean_action = nn.tanh(mu)
-        action_distribution = distrax.Transformed(
-            distrax.MultivariateNormalDiag(mu, std),
-            distrax.Block(distrax.Tanh(), ndims=1))
-        sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
-        return mean_action * self.max_action, sampled_action * self.max_action, logp
-
-    def get_logp(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        x = self.net(observation)
-        mu = self.mu_layer(x)
-        log_std = self.std_layer(x)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std)
-        action_distribution = distrax.Normal(mu, std)
-        raw_action = atanh(action)
-        logp = action_distribution.log_prob(raw_action).sum(-1)
-        logp -= 2 * (jnp.log(2) - raw_action - jax.nn.softplus(-2 * raw_action)).sum(-1)
-        return logp
- 
-    def sample(self, observations: jnp.ndarray) -> jnp.ndarray:
-        x = self.net(observations)
-        x = self.mu_layer(x)
-        mean_action = nn.tanh(x) * self.max_action
-        return mean_action
-
-
 class Actor(nn.Module):
     act_dim: int
     max_action: float = 1.0
@@ -151,8 +108,8 @@ class Actor(nn.Module):
 
     def setup(self):
         self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
-        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
-        self.log_std = self.param('log_std', nn.initializers.zeros, (self.act_dim,))
+        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer))
+        self.log_std = self.param("log_std", nn.initializers.zeros, (self.act_dim,))
 
     def __call__(self, observations: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observations)

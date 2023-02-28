@@ -331,8 +331,8 @@ class CQLAgent:
             if self.backup_entropy:
                 next_q -= alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
-            critic_loss1 = 0.5 * (q1 - target_q)**2
-            critic_loss2 = 0.5 * (q2 - target_q)**2
+            critic_loss1 = (q1 - target_q)**2
+            critic_loss2 = (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
 
             # CQL loss
@@ -372,10 +372,8 @@ class CQLAgent:
             cql_diff2 = jnp.clip(ood_q2 - q2, self.cql_clip_diff_min, self.cql_clip_diff_max)
 
             if self.with_lagrange:
-                # cql_loss1 = cql_alpha * (cql_diff1 - self.lagrange_thresh) * self.min_q_weight
-                # cql_loss2 = cql_alpha * (cql_diff2 - self.lagrange_thresh) * self.min_q_weight
-                cql_loss1 = cql_alpha * cql_diff1 * self.min_q_weight
-                cql_loss2 = cql_alpha * cql_diff2 * self.min_q_weight
+                cql_loss1 = cql_alpha * (cql_diff1 - self.lagrange_thresh) * self.min_q_weight
+                cql_loss2 = cql_alpha * (cql_diff2 - self.lagrange_thresh) * self.min_q_weight
             else:
                 cql_loss1 = cql_diff1 * self.min_q_weight
                 cql_loss2 = cql_diff2 * self.min_q_weight

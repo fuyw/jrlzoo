@@ -79,11 +79,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         log_info = agent.update(batch)
 
         # Save every 1e5 steps & last 5 checkpoints
-        # if (t % 100000 == 0) or (t >= int(9.8e5) and t % 5000 == 0):
-        if (t >= int(9.8e5) and t % 5000 == 0):
-            agent.save(f"{ckpt_dir}", t // 5000)
+        # if (t % 100_000 == 0):
+        #     agent.save(f"{ckpt_dir}", t // 5000)
 
-        if t>=int(8e5) and ((t>int(9.5e5) and (t % config.eval_freq == 0)) or (t<=int(9.5e5) and t % (2*config.eval_freq) == 0)):
+        if ((t>int(9.5e5) and (t % config.eval_freq == 0)) or (t<=int(9.5e5) and t % (2*config.eval_freq) == 0)):
             eval_reward, eval_time = eval_policy(agent, env, config.eval_episodes)
             log_info.update({
                 "step": t,
