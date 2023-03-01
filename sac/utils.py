@@ -50,6 +50,7 @@ class ReplayBuffer:
                  rewards=self.rewards,
                  discounts=self.discounts)
 
+
 def get_logger(fname: str) -> logging.Logger:
     logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s - %(message)s',

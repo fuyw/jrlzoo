@@ -19,7 +19,6 @@ do
         python main.py \
         --config=configs/mujoco.py \
         --config.env_name=$env \
-        --config.save_buffer=True \
         --config.seed=$seed 
     done
 done

@@ -13,9 +13,9 @@ def get_config():
     config.batch_size = 256
     config.eval_episodes = 10
     config.start_timesteps = 10_000
-    config.eval_freq = int(2e4)
-    config.ckpt_freq = int(2e5)
-    config.max_timesteps = int(2e6)
+    config.eval_freq = int(3e4)
+    config.ckpt_freq = int(3e5)
+    config.max_timesteps = int(3e6)
     config.hidden_dims = (256, 256)
     config.initializer = "glorot_uniform"  # dopamine setting
     config.save_buffer = False

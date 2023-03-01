@@ -35,7 +35,7 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
     exp_name = f"sac_s{configs.seed}_{timestamp}"
     exp_info = f"# Running experiment for: {exp_name}_{configs.env_name} #"
     ckpt_dir = f"{configs.model_dir}/{configs.env_name.lower()}/{exp_name}"
-    print("#"*len(exp_info) + f"\n{exp_info}\n" + "#"*len(exp_info))
+    print("#" * len(exp_info) + f"\n{exp_info}\n" + "#" * len(exp_info))
 
     logger = get_logger(f"logs/{configs.env_name.lower()}/{exp_name}.log")
     logger.info(f"Exp configurations:\n{configs}")
@@ -60,7 +60,7 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                      initializer=configs.initializer)
 
     # Replay buffer
-    replay_buffer = ReplayBuffer(obs_dim, act_dim, max_size=configs.max_timesteps)
+    replay_buffer = ReplayBuffer(obs_dim, act_dim)
     logs = [{
         "step": 0,
         "reward": eval_policy(agent, eval_env, configs.eval_episodes)[0]
@@ -87,7 +87,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
             obs, done = env.reset(), False
 
         if t % configs.eval_freq == 0:
-            eval_reward, eval_time = eval_policy(agent, eval_env, configs.eval_episodes)
+            eval_reward, eval_time = eval_policy(agent, eval_env,
+                                                 configs.eval_episodes)
             if t > configs.start_timesteps:
                 log_info.update({
                     "step": t,
@@ -99,6 +100,7 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                     f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
                     f"\tactor_loss: {log_info['actor_loss']:.3f}, critic_loss: {log_info['critic_loss']:.3f}, alpha_loss: {log_info['alpha_loss']:.3f}\n"
                     f"\tq1: {log_info['q1']:.2f}, target_q: {log_info['target_q']:.2f}, logp: {log_info['logp']:.3f}, alpha: {log_info['alpha']:.3f}\n"
+                    f"\tbuffer_size: {replay_buffer.size//1000}, buffer_ptr: {replay_buffer.ptr//1000}\n"
                 )
                 logs.append(log_info)
             else:
@@ -108,9 +110,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                 )
 
         # Save checkpoints
-        if t % configs.ckpt_freq == 0:
-            agent.save(f"{ckpt_dir}", t // configs.ckpt_freq)
-        
+        # if t % configs.ckpt_freq == 0:
+        #     agent.save(f"{ckpt_dir}", t // configs.ckpt_freq)
 
     # Save logs
     log_df = pd.DataFrame(logs)
@@ -118,7 +119,7 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
         f"{configs.log_dir}/{configs.env_name.lower()}/{exp_name}.csv")
 
     # Save buffer
-    if configs.save_buffer:
-        buffer_dir = f"saved_buffers/{configs.env_name}"
-        os.makedirs(buffer_dir, exist_ok=True)
-        replay_buffer.save(f"{buffer_dir}/{configs.env_name}")
+    # if configs.save_buffer:
+    #     buffer_dir = f"saved_buffers/{configs.env_name}"
+    #     os.makedirs(buffer_dir, exist_ok=True)
+    #     replay_buffer.save(f"{buffer_dir}/{configs.env_name}")

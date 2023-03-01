@@ -71,7 +71,7 @@ class Critic(nn.Module):
 
 class DoubleCritic(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "orthogonal"
+    initializer: str = "glorot_uniform"
     num_qs: int = 2
 
     @nn.compact
@@ -82,7 +82,8 @@ class DoubleCritic(nn.Module):
                              in_axes=None,
                              out_axes=0,
                              axis_size=self.num_qs)
-        qs = VmapCritic(self.hidden_dims, self.initializer)(observations, actions)
+        qs = VmapCritic(self.hidden_dims, self.initializer)(
+            observations, actions)
         return qs
 
 
@@ -90,7 +91,7 @@ class Actor(nn.Module):
     act_dim: int
     max_action: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "orthogonal"
+    initializer: str = "glorot_uniform"
 
     def setup(self):
         self.net = MLP(self.hidden_dims,
@@ -115,8 +116,7 @@ class Actor(nn.Module):
         sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
         return mean_action * self.max_action, sampled_action * self.max_action, logp
 
-    def get_logp(self, observation: jnp.ndarray,
-                 action: jnp.ndarray) -> jnp.ndarray:
+    def get_logp(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observation)
         mu = self.mu_layer(x)
         log_std = self.std_layer(x)
@@ -174,7 +174,9 @@ class SACAgent:
                            max_action=max_action,
                            hidden_dims=hidden_dims,
                            initializer=initializer)
-        actor_params = self.actor.init(actor_key, actor_key, dummy_obs)["params"]
+        actor_params = self.actor.init(actor_key,
+                                       actor_key,
+                                       dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(apply_fn=self.actor.apply,
                                                          params=actor_params,
                                                          tx=optax.adam(lr))
@@ -184,8 +186,9 @@ class SACAgent:
                                    initializer=initializer)
         critic_params = self.critic.init(critic_key, dummy_obs, dummy_act)["params"]
         self.critic_target_params = critic_params
-        self.critic_state = train_state.TrainState.create(
-            apply_fn=self.critic.apply, params=critic_params, tx=optax.adam(lr))
+        self.critic_state = train_state.TrainState.create(apply_fn=self.critic.apply,
+                                                          params=critic_params,
+                                                          tx=optax.adam(lr))
 
         # Entropy tuning
         self.rng, alpha_key = jax.random.split(self.rng, 2)
@@ -200,45 +203,45 @@ class SACAgent:
                        params: FrozenDict,
                        rng: Any,
                        observation: np.ndarray) -> jnp.ndarray:
-        mean_action, sampled_action, _ = self.actor.apply({"params": params}, rng, observation)
+        mean_action, sampled_action, _ = self.actor.apply(
+            {"params": params}, rng, observation)
         return mean_action, sampled_action
 
-    def sample_action(self, observation: np.ndarray, eval_mode: bool = False) -> np.ndarray:
+    def sample_action(self,
+                      observation: np.ndarray,
+                      eval_mode: bool = False) -> np.ndarray:
         self.rng, sample_rng = jax.random.split(self.rng)
-        mean_action, sampled_action = self._sample_action(self.actor_state.params, sample_rng, observation)
+        mean_action, sampled_action = self._sample_action(self.actor_state.params,
+                                                          sample_rng,
+                                                          observation)
         action = mean_action if eval_mode else sampled_action
         action = np.asarray(action)
         return action.clip(-self.max_action, self.max_action)
 
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def train_step(self,
-                   batch: Batch,
-                   key: Any,
-                   alpha_state: train_state.TrainState,
-                   actor_state: train_state.TrainState,
-                   critic_state: train_state.TrainState,
-                   critic_target_params: FrozenDict):
+    def actor_alpha_train_step(self,
+                               batch: Batch,
+                               key: Any,
+                               alpha_state: train_state.TrainState,
+                               actor_state: train_state.TrainState,
+                               critic_state: train_state.TrainState):
 
-        # For use in loss_fn without apply gradients
-        frozen_actor_params = actor_state.params
         frozen_critic_params = critic_state.params
 
-        def loss_fn(alpha_params: FrozenDict, actor_params: FrozenDict,
-                    critic_params: FrozenDict, rng: Any,
-                    observation: jnp.ndarray, action: jnp.ndarray,
-                    reward: jnp.ndarray, next_observation: jnp.ndarray,
-                    discount: jnp.ndarray):
-            """compute loss for a single transition"""
-            rng1, rng2 = jax.random.split(rng, 2)
+        def loss_fn(alpha_params: FrozenDict,
+                    actor_params: FrozenDict,
+                    rng: Any,
+                    observation: jnp.ndarray):
+            # sample action with actor
+            _, sampled_action, logp = self.actor.apply({"params": actor_params},
+                                                       rng,
+                                                       observation)
 
-            # Sample actions with Actor
-            _, sampled_action, logp = self.actor.apply(
-                {"params": actor_params}, rng1, observation)
-
-            # Alpha loss: stop gradient to avoid affecting Actor parameters
+            # compute alpha loss
             log_alpha = self.log_alpha.apply({"params": alpha_params})
             alpha_loss = -log_alpha * jax.lax.stop_gradient(
                 logp + self.target_entropy)
+
+            # stop alpha gradient
             alpha = jnp.exp(log_alpha)
             alpha = jax.lax.stop_gradient(alpha)
 
@@ -250,68 +253,133 @@ class SACAgent:
             # Actor loss
             actor_loss = alpha * logp - sampled_q
 
-            # Critic loss
-            q1, q2 = self.critic.apply(
-                {"params": critic_params}, observation, action)
-
-            # Use frozen_actor_params to avoid affect Actor parameters
-            _, next_action, logp_next_action = self.actor.apply(
-                {"params": frozen_actor_params}, rng2, next_observation)
-            next_q1, next_q2 = self.critic.apply(
-                {"params": critic_target_params}, next_observation, next_action)
-            next_q = jnp.minimum(next_q1, next_q2) - alpha * logp_next_action
-            target_q = reward + self.gamma * discount * next_q
-            critic_loss1 = (q1 - target_q)**2
-            critic_loss2 = (q2 - target_q)**2
-            critic_loss = critic_loss1 + critic_loss2
-
-            # Loss weight form Dopamine
-            total_loss = critic_loss + actor_loss + alpha_loss
+            # return info
+            actor_alpha_loss = actor_loss + alpha_loss
             log_info = {
-                "critic_loss1": critic_loss1,
-                "critic_loss2": critic_loss2,
-                "critic_loss": critic_loss,
                 "actor_loss": actor_loss,
                 "alpha_loss": alpha_loss,
-                "q1": q1,
-                "q2": q2,
-                "target_q": target_q,
+                "sampled_q": sampled_q,
                 "alpha": alpha,
                 "logp": logp
             }
+            return actor_alpha_loss, log_info
 
-            return total_loss, log_info
-
+        # compute gradient with vmap
         grad_fn = jax.vmap(jax.value_and_grad(loss_fn,
-                                              argnums=(0, 1, 2),
+                                              argnums=(0, 1),
                                               has_aux=True),
-                           in_axes=(None, None, None, 0, 0, 0, 0, 0, 0))
+                           in_axes=(None, None, 0, 0))
         keys = jnp.stack(jax.random.split(key, num=batch.actions.shape[0]))
 
         (_, log_info), grads = grad_fn(alpha_state.params, actor_state.params,
-                                       critic_state.params, keys,
-                                       batch.observations, batch.actions,
-                                       batch.rewards, batch.next_observations,
-                                       batch.discounts)
-        grads = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), grads)
-        log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
+                                       keys, batch.observations)
+        grads = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0),
+                                       grads)
+        log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0),
+                                          log_info)
 
         # Update TrainState
-        alpha_grads, actor_grads, critic_grads = grads
+        alpha_grads, actor_grads = grads
         new_alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
         new_actor_state = actor_state.apply_gradients(grads=actor_grads)
-        new_critic_state = critic_state.apply_gradients(grads=critic_grads)
+        return new_alpha_state, new_actor_state, log_info
+
+    def critic_train_step(self,
+                          batch: Batch,
+                          key: Any,
+                          alpha: float,
+                          actor_state: train_state.TrainState,
+                          critic_state: train_state.TrainState,
+                          critic_target_params: FrozenDict):
+
+        frozen_actor_params = actor_state.params
+
+        def loss_fn(params: FrozenDict,
+                    rng: Any,
+                    observation: jnp.ndarray,
+                    action: jnp.ndarray,
+                    reward: jnp.ndarray,
+                    next_observation: jnp.ndarray,
+                    discount: jnp.ndarray):
+
+            # current q value
+            q1, q2 = self.critic.apply({"params": params}, observation, action)
+
+            # next q value
+            _, next_action, logp_next_action = self.actor.apply(
+                {"params": frozen_actor_params}, rng, next_observation)
+            next_q1, next_q2 = self.critic.apply(
+                {"params": critic_target_params}, next_observation, next_action)
+            next_q = jnp.minimum(next_q1, next_q2) - alpha * logp_next_action
+
+            # target q value
+            target_q = reward + self.gamma * discount * next_q
+
+            # td error
+            critic_loss1 = 0.5 * (q1 - target_q)**2
+            critic_loss2 = 0.5 * (q2 - target_q)**2
+            critic_loss = critic_loss1 + critic_loss2
+            log_info = {
+                "critic_loss": critic_loss,
+                "q1": q1,
+                "next_q": next_q,
+                "target_q": target_q,
+            }
+            return critic_loss, log_info
+
+        # compute gradient with vmap
+        grad_fn = jax.vmap(jax.value_and_grad(loss_fn, has_aux=True),
+                           in_axes=(None, 0, 0, 0, 0, 0, 0))
+        keys = jnp.stack(jax.random.split(key, num=batch.actions.shape[0]))
+
+        (_, log_info), grads = grad_fn(critic_state.params,
+                                       keys,
+                                       batch.observations,
+                                       batch.actions,
+                                       batch.rewards,
+                                       batch.next_observations,
+                                       batch.discounts)
+        grads = jax.tree_util.tree_map(
+            functools.partial(jnp.mean, axis=0), grads)
+        log_info = jax.tree_util.tree_map(
+            functools.partial(jnp.mean, axis=0), log_info)
+
+        # Update TrainState
+        new_critic_state = critic_state.apply_gradients(grads=grads)
         new_critic_target_params = target_update(new_critic_state.params,
                                                  critic_target_params,
                                                  self.tau)
+        return new_critic_state, new_critic_target_params, log_info
 
+    @functools.partial(jax.jit, static_argnames=("self"))
+    def train_step(self, batch: Batch, key: Any,
+                   alpha_state: train_state.TrainState,
+                   actor_state: train_state.TrainState,
+                   critic_state: train_state.TrainState,
+                   critic_target_params: FrozenDict):
+
+        key1, key2 = jax.random.split(key)
+        new_alpha_state, new_actor_state, actor_log_info = self.actor_alpha_train_step(
+            batch, key1, alpha_state, actor_state, critic_state)
+        alpha = actor_log_info["alpha"]
+        new_critic_state, new_critic_target_params, critic_log_info = self.critic_train_step(
+            batch, key2, alpha, actor_state, critic_state,
+            critic_target_params)
+        log_info = {**actor_log_info, **critic_log_info}
         return new_alpha_state, new_actor_state, new_critic_state, new_critic_target_params, log_info
 
     def update(self, batch: Batch):
         self.rng, key = jax.random.split(self.rng, 2)
-        self.alpha_state, self.actor_state, self.critic_state, self.critic_target_params, log_info = self.train_step(
-            batch, key, self.alpha_state, self.actor_state, self.critic_state,
-            self.critic_target_params)
+        (self.alpha_state,
+         self.actor_state,
+         self.critic_state,
+         self.critic_target_params,
+         log_info) = self.train_step(batch,
+                                     key,
+                                     self.alpha_state,
+                                     self.actor_state,
+                                     self.critic_state,
+                                     self.critic_target_params)
         return log_info
 
     def save(self, fname: str, cnt: int):
