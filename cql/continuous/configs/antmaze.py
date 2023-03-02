@@ -4,7 +4,7 @@ import numpy as np
 
 def get_config():
     config = ml_collections.ConfigDict()
-    config.env_name = "antmaze-large-diverse-v0"
+    config.env_name = "antmaze-umaze-v0"
     config.log_dir = "logs"
     config.model_dir = "saved_models"
     config.initializer = "orthogonal"
@@ -18,7 +18,7 @@ def get_config():
     config.batch_size = 256
     config.num_random = 10
     config.min_q_weight = 5.0
-    config.target_entropy = 0.0
+    config.target_entropy = None
     config.backup_entropy = False
 
     config.max_target_backup = True
