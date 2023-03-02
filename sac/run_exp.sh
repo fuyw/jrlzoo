@@ -12,7 +12,7 @@ envs=(
     "Walker2d-v2"
     "Ant-v2"
 )
-for seed in 42
+for seed in 0 1 2 3 4
 do 
     for env in ${envs[*]}
     do

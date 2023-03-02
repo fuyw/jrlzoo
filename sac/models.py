@@ -10,8 +10,9 @@ import numpy as np
 import optax
 from utils import target_update, Batch
 
-LOG_STD_MAX = 2.
-LOG_STD_MIN = -10.
+MIN_SCALE = 1e-3
+STD_MAX = np.exp(2.0)
+STD_MIN = np.exp(-10.0)
 
 
 def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
@@ -105,9 +106,9 @@ class Actor(nn.Module):
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = self.net(observation)
         mu = self.mu_layer(x)
-        log_std = self.std_layer(x)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std)
+        log = self.std_layer(x)
+        std = jax.nn.softplus(log) + MIN_SCALE
+        std = jnp.clip(std, STD_MIN, STD_MAX)
 
         mean_action = nn.tanh(mu)
         action_distribution = distrax.Transformed(
@@ -119,9 +120,12 @@ class Actor(nn.Module):
     def get_logp(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observation)
         mu = self.mu_layer(x)
-        log_std = self.std_layer(x)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std)
+        std = self.std_layer(x)
+
+        # acme implementation
+        std = jax.nn.softplus(std) + MIN_SCALE
+        std = jnp.clip(std, STD_MIN, STD_MAX)
+
         action_distribution = distrax.Normal(mu, std)
         raw_action = atanh(action)
         logp = action_distribution.log_prob(raw_action).sum(-1)

@@ -38,7 +38,7 @@ antmaze_envs=(
 #     done
 # done
 
-
+sleep 0.5h
 for ((i=0;i<1;i+=1))
 do
    for env in ${antmaze_envs[*]}
@@ -46,6 +46,8 @@ do
        python main.py \
        --config=configs/antmaze.py \
        --config.env_name=$env \
+       --config.max_target_backup=False \
+       --config.with_lagrange=False \
        --config.seed=$i
    done
 done
