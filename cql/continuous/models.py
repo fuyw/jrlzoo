@@ -457,8 +457,8 @@ class CQLAgent:
         def loss_fn(params):
             log_cql_alpha = self.log_cql_alpha.apply({"params": params})
             cql_alpha = jnp.clip(jnp.exp(log_cql_alpha), a_min=0.0, a_max=1000000.0)
-            cql_alpha_loss1 = cql_alpha * (cql_diff1 - self.lagrange_thresh)
-            cql_alpha_loss2 = cql_alpha * (cql_diff2 - self.lagrange_thresh)
+            cql_alpha_loss1 = cql_alpha * (cql_diff1 - self.lagrange_thresh) * self.min_q_weight
+            cql_alpha_loss2 = cql_alpha * (cql_diff2 - self.lagrange_thresh) * self.min_q_weight
             cql_alpha_loss = (-cql_alpha_loss1-cql_alpha_loss2) * 0.5
             return cql_alpha_loss, {"cql_alpha_loss": cql_alpha_loss}
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
@@ -472,9 +472,6 @@ class CQLAgent:
         log_cql_alpha = self.log_cql_alpha.apply({"params": self.cql_alpha_state.params}) if self.with_lagrange else 0.0
         cql_alpha = jnp.clip(jnp.exp(log_cql_alpha), a_min=0.0, a_max=1000000.0)
         self.rng, actor_key, critic_key = jax.random.split(self.rng, 3)
-
-        # self.alpha_state, self.actor_state, self.critic_state, self.critic_target_params, log_info = self.cql_train_step(
-        #     batch, key, self.alpha_state, self.actor_state, self.critic_state, self.critic_target_params, cql_alpha, bc)
 
         (self.alpha_state,
          self.actor_state,

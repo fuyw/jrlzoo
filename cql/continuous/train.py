@@ -97,11 +97,11 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
             logger.info(
                 f"\n[# Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
                 f"\tactor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}\n"
-                f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, critic_loss_max: {log_info['critic_loss_max']:.2f}"
+                f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, critic_loss_max: {log_info['critic_loss_max']:.2f}\n"
                 f"\tcql_loss1: {log_info['cql_loss1']:.2f}, cql_alpha_loss: {log_info['cql_alpha_loss'] if configs.with_lagrange else 0:.2f}, "
                 f"cql_diff1: {log_info['cql_diff1']:.2f}, cql_diff2: {log_info['cql_diff2']:.2f}\n"
-                f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f},"
-                f"\ttarget_q: {log_info['target_q']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f},"
+                f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}\n"
+                f"\ttarget_q: {log_info['target_q']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}\n"
                 f"\tood_q1: {log_info['ood_q1']:.2f}, random_q1: {log_info['random_q1']:.2f}\n"
                 f"\tlogp: {log_info['logp']:.2f}, alpha: {log_info['alpha']:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}\n"
             )
@@ -109,11 +109,11 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
             logger.info(
                 f"\n[# Step {t}]\n"
                 f"\tactor_loss: {log_info['actor_loss']:.2f}, alpha_loss: {log_info['alpha_loss']:.2f}\n"
-                f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, critic_loss_max: {log_info['critic_loss_max']:.2f}"
+                f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, critic_loss_max: {log_info['critic_loss_max']:.2f}\n"
                 f"\tcql_loss1: {log_info['cql_loss1']:.2f}, cql_alpha_loss: {log_info['cql_alpha_loss'] if configs.with_lagrange else 0:.2f}, "
                 f"cql_diff1: {log_info['cql_diff1']:.2f}, cql_diff2: {log_info['cql_diff2']:.2f}\n"
-                f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f},"
-                f"\ttarget_q: {log_info['target_q']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f},"
+                f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}\n"
+                f"\ttarget_q: {log_info['target_q']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}\n"
                 f"\tood_q1: {log_info['ood_q1']:.2f}, random_q1: {log_info['random_q1']:.2f}\n"
                 f"\tlogp: {log_info['logp']:.2f}, alpha: {log_info['alpha']:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}\n"
             )
