@@ -141,8 +141,8 @@ class TD3Agent:
         sampled_action = self.actor.apply({"params": params}, observation)
         return sampled_action
 
-    def sample_action(self, params: FrozenDict, observation: np.ndarray) -> np.ndarray:
-        sampled_action = self._sample_action(params, observation)
+    def sample_action(self, observation: np.ndarray) -> np.ndarray:
+        sampled_action = self._sample_action(self.actor_state.params, observation)
         sampled_action = np.asarray(sampled_action)
         return sampled_action.clip(-1.0, 1.0)
 

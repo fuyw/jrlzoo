@@ -7,13 +7,13 @@ mujoco_envs=(
     #"quadruped-run"
     #"hopper-hop"
 
-    "HalfCheetah-v2"
-    # "Humanoid-v3"
-    # "Walker2d-v2"
-    # "Ant-v2"
-    # "Hopper-v2"
+    "HalfCheetah-v4"
+    "Hopper-v4"
+    "Walker2d-v4"
+    "Ant-v4"
+    # "Humanoid-v4"
 )
-for i in 1 2
+for i in 0
 do
     for env in ${mujoco_envs[*]}
     do
