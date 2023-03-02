@@ -277,10 +277,8 @@ class SACAgent:
 
         (_, log_info), grads = grad_fn(alpha_state.params, actor_state.params,
                                        keys, batch.observations)
-        grads = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0),
-                                       grads)
-        log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0),
-                                          log_info)
+        grads = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), grads)
+        log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
 
         # Update TrainState
         alpha_grads, actor_grads = grads
@@ -320,8 +318,8 @@ class SACAgent:
             target_q = reward + self.gamma * discount * next_q
 
             # td error
-            critic_loss1 = 0.5 * (q1 - target_q)**2
-            critic_loss2 = 0.5 * (q2 - target_q)**2
+            critic_loss1 = (q1 - target_q)**2
+            critic_loss2 = (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
             log_info = {
                 "critic_loss": critic_loss,

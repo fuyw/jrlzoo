@@ -101,7 +101,7 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                 f"\tcql_loss1: {log_info['cql_loss1']:.2f}, cql_alpha_loss: {log_info['cql_alpha_loss'] if configs.with_lagrange else 0:.2f}, "
                 f"cql_diff1: {log_info['cql_diff1']:.2f}, cql_diff2: {log_info['cql_diff2']:.2f}\n"
                 f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}\n"
-                f"\ttarget_q: {log_info['target_q']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}\n"
+                f"\ttarget_q: {log_info['target_q']:.2f}, target_q_min: {log_info['target_q_min']:.2f}, target_q_max: {log_info['target_q_max']:.2f}\n"
                 f"\tood_q1: {log_info['ood_q1']:.2f}, random_q1: {log_info['random_q1']:.2f}\n"
                 f"\tlogp: {log_info['logp']:.2f}, alpha: {log_info['alpha']:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}\n"
             )
@@ -112,8 +112,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                 f"\tcritic_loss: {log_info['critic_loss']:.2f}, critic_loss_min: {log_info['critic_loss_min']:.2f}, critic_loss_max: {log_info['critic_loss_max']:.2f}\n"
                 f"\tcql_loss1: {log_info['cql_loss1']:.2f}, cql_alpha_loss: {log_info['cql_alpha_loss'] if configs.with_lagrange else 0:.2f}, "
                 f"cql_diff1: {log_info['cql_diff1']:.2f}, cql_diff2: {log_info['cql_diff2']:.2f}\n"
-                f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}\n"
-                f"\ttarget_q: {log_info['target_q']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}\n"
+                f"\tq1: {log_info['q1']:.2f}, q1_min: {log_info['q1_min']:.2f}, q1_max: {log_info['q1_max']:.2f}\n" 
+                f"\ttarget_q: {log_info['target_q']:.2f}, target_q_min: {log_info['target_q_min']:.2f}, target_q_max: {log_info['target_q_max']:.2f}\n"
                 f"\tood_q1: {log_info['ood_q1']:.2f}, random_q1: {log_info['random_q1']:.2f}\n"
                 f"\tlogp: {log_info['logp']:.2f}, alpha: {log_info['alpha']:.2f}, cql_alpha: {log_info['cql_alpha']:.2f}\n"
             )

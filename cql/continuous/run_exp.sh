@@ -20,11 +20,11 @@ mujoco_envs=(
 )
 antmaze_envs=(
     "antmaze-umaze-v0"
-    # "antmaze-umaze-diverse-v0"
-    # "antmaze-medium-diverse-v0"
-    # "antmaze-large-diverse-v0"
-    # "antmaze-medium-play-v0"
-    # "antmaze-large-play-v0"
+    "antmaze-umaze-diverse-v0"
+    "antmaze-medium-diverse-v0"
+    "antmaze-large-diverse-v0"
+    "antmaze-medium-play-v0"
+    "antmaze-large-play-v0"
 )
 
 # for ((i=0;i<5;i+=1))
@@ -38,7 +38,6 @@ antmaze_envs=(
 #     done
 # done
 
-sleep 0.5h
 for ((i=0;i<1;i+=1))
 do
    for env in ${antmaze_envs[*]}
@@ -46,8 +45,6 @@ do
        python main.py \
        --config=configs/antmaze.py \
        --config.env_name=$env \
-       --config.max_target_backup=False \
-       --config.with_lagrange=False \
        --config.seed=$i
    done
 done

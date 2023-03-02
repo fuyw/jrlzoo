@@ -110,8 +110,8 @@ def train_and_evaluate(configs: ml_collections.ConfigDict):
                 )
 
         # Save checkpoints
-        # if t % configs.ckpt_freq == 0:
-        #     agent.save(f"{ckpt_dir}", t // configs.ckpt_freq)
+        if t % configs.ckpt_freq == 0:
+            agent.save(f"{ckpt_dir}", t // configs.ckpt_freq)
 
     # Save logs
     log_df = pd.DataFrame(logs)
