@@ -238,41 +238,69 @@ class CQLAgent:
         sampled_action = np.asarray(sampled_action)
         return sampled_action.clip(-self.max_action, self.max_action)
 
-    @functools.partial(jax.jit, static_argnames=("self"))
-    def lagrange_train_step(self,
-                            cql_alpha_state: train_state.TrainState,
-                            cql_diff1: float,
-                            cql_diff2: float):
-        def loss_fn(params):
-            log_cql_alpha = self.log_cql_alpha.apply({"params": params})
-            cql_alpha = jnp.clip(jnp.exp(log_cql_alpha), a_min=0.0, a_max=1000000.0)
-            cql_alpha_loss1 = cql_alpha * (cql_diff1 - self.lagrange_thresh)
-            cql_alpha_loss2 = cql_alpha * (cql_diff2 - self.lagrange_thresh)
-            cql_alpha_loss = (-cql_alpha_loss1-cql_alpha_loss2) * 0.5
-            return cql_alpha_loss, {"cql_alpha_loss": cql_alpha_loss}
-        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-        (_, log_info), grads = grad_fn(cql_alpha_state.params)
-        new_cql_alpha_state = cql_alpha_state.apply_gradients(grads=grads)
-        return new_cql_alpha_state, log_info
+    def actor_alpha_train_step(self, batch, key, alpha_state, actor_state, critic_state, bc):
+        frozen_critic_params = critic_state.params
+        def loss_fn(alpha_params, actor_params, rng, observation, action):
+            _, sampled_action, logp = self.actor.apply({"params": actor_params}, rng, observation)
+            log_alpha = self.log_alpha.apply({"params": alpha_params})
+            alpha_loss = -log_alpha * jax.lax.stop_gradient(logp + self.target_entropy)
+            alpha = jnp.exp(log_alpha)
+            alpha = jax.lax.stop_gradient(alpha) 
+            sampled_q1, sampled_q2 = self.critic.apply({"params": frozen_critic_params}, observation, sampled_action)
+            sampled_q = jnp.minimum(sampled_q1, sampled_q2)
+            if bc:
+                logp_bc = self.actor.apply({"params": actor_params}, observation, action, method=Actor.get_logp)
+                actor_loss = alpha * logp - logp_bc
+            else:
+                actor_loss = alpha * logp - sampled_q
 
-    @functools.partial(jax.jit, static_argnames=("self", "bc"))
-    def cql_train_step(self,
-                       batch: Batch,
-                       key: Any,
-                       alpha_state: train_state.TrainState,
-                       actor_state: train_state.TrainState,
-                       critic_state: train_state.TrainState,
-                       critic_target_params: FrozenDict,
-                       cql_alpha: float = 1.0,
-                       bc: bool = False):
+            # return info
+            actor_alpha_loss = actor_loss + alpha_loss
+            log_info = {
+                "actor_loss": actor_loss,
+                "alpha_loss": alpha_loss,
+                "sampled_q": sampled_q,
+                "alpha": alpha,
+                "logp": logp
+            }
+            return actor_alpha_loss, log_info
+
+        # compute gradient with vmap
+        grad_fn = jax.vmap(jax.value_and_grad(loss_fn,
+                                              argnums=(0, 1),
+                                              has_aux=True),
+                           in_axes=(None, None, 0, 0, 0))
+        keys = jnp.stack(jax.random.split(key, num=batch.actions.shape[0]))
+
+        (_, log_info), grads = grad_fn(alpha_state.params,
+                                       actor_state.params,
+                                       keys,
+                                       batch.observations,
+                                       batch.actions)
+        grads = jax.tree_util.tree_map(
+            functools.partial(jnp.mean, axis=0), grads)
+        log_info = jax.tree_util.tree_map(
+            functools.partial(jnp.mean, axis=0), log_info)
+
+        # Update TrainState
+        alpha_grads, actor_grads = grads
+        new_alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
+        new_actor_state = actor_state.apply_gradients(grads=actor_grads)
+        return new_alpha_state, new_actor_state, log_info
+
+    def critic_train_step(self,
+                          batch: Batch,
+                          key: Any,
+                          actor_state: train_state.TrainState,
+                          critic_state: train_state.TrainState,
+                          critic_target_params: FrozenDict,
+                          sac_alpha: float = 1.0,
+                          cql_alpha: float = 1.0):
 
         # prepare prozen params to avoid gradient update
         frozen_actor_params = actor_state.params
-        frozen_critic_params = critic_state.params
 
-        def loss_fn(alpha_params: FrozenDict,
-                    actor_params: FrozenDict,
-                    critic_params: FrozenDict,
+        def loss_fn(critic_params: FrozenDict,
                     rng: Any,
                     observation: jnp.ndarray,
                     action: jnp.ndarray,
@@ -280,27 +308,7 @@ class CQLAgent:
                     next_observation: jnp.ndarray,
                     discount: jnp.ndarray):
             """compute loss for a single transition"""
-            rng, rng1, rng2 = jax.random.split(rng, 3)
-
-            # Sample actions with Actor
-            _, sampled_action, logp = self.actor.apply({"params": actor_params}, rng1, observation)
-
-            # Alpha loss: stop gradient to avoid affecting Actor parameters
-            log_alpha = self.log_alpha.apply({"params": alpha_params})
-            alpha_loss = -log_alpha * jax.lax.stop_gradient(logp + self.target_entropy)
-            alpha = jnp.exp(log_alpha)
-            alpha = jax.lax.stop_gradient(alpha) 
-
-            # We use frozen_params so that gradients can flow back to the actor without being used to update the critic.
-            sampled_q1, sampled_q2 = self.critic.apply({"params": frozen_critic_params}, observation, sampled_action)
-            sampled_q = jnp.minimum(sampled_q1, sampled_q2)
-
-            # Actor loss
-            if bc:
-                logp_bc = self.actor.apply({"params": actor_params}, observation, action, method=Actor.get_logp)
-                actor_loss = alpha * logp - logp_bc  # minimize KL-divergence w.r.t. behavior policy
-            else:
-                actor_loss = alpha * logp - sampled_q
+            rng1, rng2, rng3, rng4 = jax.random.split(rng, 4)
 
             # Repeat observations
             repeat_observations = jnp.repeat(jnp.expand_dims(observation, axis=0),
@@ -314,7 +322,7 @@ class CQLAgent:
             # Target Q value
             if self.max_target_backup:
                 _, next_actions, logp_next_actions = self.actor.apply({"params": frozen_actor_params},
-                                                                      rng2, repeat_next_observations)
+                                                                      rng1, repeat_next_observations)
                 next_q1s, next_q2s = self.critic.apply({"params": critic_target_params}, 
                                                        repeat_next_observations, next_actions)
                 next_qs = jnp.minimum(next_q1s, next_q2s)
@@ -323,23 +331,23 @@ class CQLAgent:
                 next_q = jnp.take_along_axis(next_qs, max_target_idx, 0).squeeze()
             else:
                 _, next_action, logp_next_action = self.actor.apply({"params": frozen_actor_params},
-                                                                    rng2, next_observation)
+                                                                    rng1, next_observation)
                 next_q1, next_q2 = self.critic.apply({"params": critic_target_params},
                                                      next_observation, next_action)
                 next_q = jnp.minimum(next_q1, next_q2)
 
             if self.backup_entropy:
-                next_q -= alpha * logp_next_action
+                next_q -= sac_alpha * logp_next_action
             target_q = reward + self.gamma * discount * next_q
             critic_loss1 = (q1 - target_q)**2
             critic_loss2 = (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
 
             # CQL loss
-            rng3, rng4 = jax.random.split(rng, 2)
-            cql_random_actions = jax.random.uniform(rng3, shape=(self.num_random, self.act_dim),
-                                                    minval=-self.max_action, maxval=self.max_action)
-
+            cql_random_actions = jax.random.uniform(key=rng2,
+                                                    shape=(self.num_random, self.act_dim),
+                                                    minval=-self.max_action,
+                                                    maxval=self.max_action)
             _, cql_sampled_actions, cql_logp = self.actor.apply({"params": frozen_actor_params},
                                                                 rng3, repeat_observations)
             _, cql_next_actions, cql_logp_next_action = self.actor.apply({"params": frozen_actor_params},
@@ -378,25 +386,20 @@ class CQLAgent:
                 cql_loss1 = cql_diff1 * self.min_q_weight
                 cql_loss2 = cql_diff2 * self.min_q_weight
 
-            total_loss = critic_loss + actor_loss + alpha_loss + cql_loss1 + cql_loss2
+            total_loss = critic_loss + cql_loss1 + cql_loss2
             log_info = {
                 "critic_loss": critic_loss,
-                "actor_loss": actor_loss,
-                "alpha_loss": alpha_loss,
                 "cql_loss1": cql_loss1,
                 "cql_loss2": cql_loss2,
                 "q1": q1,
                 "q2": q2,
                 "target_q": target_q,
-                "sampled_q": sampled_q,
                 "ood_q1": ood_q1,
                 "ood_q2": ood_q2,
                 "cql_q1": cql_q1.mean(),
                 "cql_q2": cql_q2.mean(),
                 "random_q1": cql_random_q1.mean(),
                 "random_q2": cql_random_q2.mean(),
-                "alpha": alpha,
-                "logp": logp,
                 "min_q_weight": self.min_q_weight,
                 "logp_next_action": logp_next_action,
                 "cql_diff1": cql_diff1,
@@ -406,38 +409,91 @@ class CQLAgent:
 
             return total_loss, log_info
 
-        grad_fn = jax.vmap(jax.value_and_grad(loss_fn, argnums=(0, 1, 2), has_aux=True),
-                           in_axes=(None, None, None, 0, 0, 0, 0, 0, 0))
+        grad_fn = jax.vmap(jax.value_and_grad(loss_fn, argnums=(0), has_aux=True),
+                           in_axes=(None, 0, 0, 0, 0, 0, 0))
         keys = jnp.stack(jax.random.split(key, num=batch.actions.shape[0]))
-        (_, log_info), grads = grad_fn(alpha_state.params,
-                                       actor_state.params,
-                                       critic_state.params,
+        (_, log_info), grads = grad_fn(critic_state.params,
                                        keys, 
                                        batch.observations,
                                        batch.actions,
                                        batch.rewards,
                                        batch.next_observations,
                                        batch.discounts)
+
+        extra_log_info = {
+            "q1_max": log_info["q1"].max(),
+            "q1_min": log_info["q1"].min(),
+            "target_q_max": log_info["target_q"].max(),
+            "target_q_min": log_info["target_q"].min(),
+            "critic_loss_max": log_info["critic_loss"].max(),
+            "critic_loss_min": log_info["critic_loss"].min(),
+        }
+
         grads = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), grads)
         log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
-        alpha_grads, actor_grads, critic_grads = grads
 
-        new_alpha_state = alpha_state.apply_gradients(grads=alpha_grads)
-        new_actor_state = actor_state.apply_gradients(grads=actor_grads)
-        new_critic_state = critic_state.apply_gradients(grads=critic_grads)
+        new_critic_state = critic_state.apply_gradients(grads=grads)
         new_critic_target_params = target_update(new_critic_state.params, critic_target_params, self.tau)
-        return new_alpha_state, new_actor_state, new_critic_state, new_critic_target_params, log_info
+        return new_critic_state, new_critic_target_params, {**log_info, **extra_log_info}
+
+    @functools.partial(jax.jit, static_argnames=("self", "bc"))
+    def train_step(self, batch, actor_key, critic_key, alpha_state, actor_state,
+                   critic_state, critic_target_params, cql_alpha, bc):
+        new_alpha_state, new_actor_state, actor_log_info = self.actor_alpha_train_step(
+            batch, actor_key, alpha_state, actor_state, critic_state, bc)
+        sac_alpha = actor_log_info["alpha"]
+
+        new_critic_state, new_critic_target_params, critic_log_info = self.critic_train_step(
+            batch, critic_key, actor_state, critic_state, critic_target_params, sac_alpha, cql_alpha)
+
+        return new_alpha_state, new_actor_state, new_critic_state, new_critic_target_params, {
+            **actor_log_info, **critic_log_info}
+
+    @functools.partial(jax.jit, static_argnames=("self"))
+    def lagrange_train_step(self,
+                            cql_alpha_state: train_state.TrainState,
+                            cql_diff1: float,
+                            cql_diff2: float):
+        def loss_fn(params):
+            log_cql_alpha = self.log_cql_alpha.apply({"params": params})
+            cql_alpha = jnp.clip(jnp.exp(log_cql_alpha), a_min=0.0, a_max=1000000.0)
+            cql_alpha_loss1 = cql_alpha * (cql_diff1 - self.lagrange_thresh)
+            cql_alpha_loss2 = cql_alpha * (cql_diff2 - self.lagrange_thresh)
+            cql_alpha_loss = (-cql_alpha_loss1-cql_alpha_loss2) * 0.5
+            return cql_alpha_loss, {"cql_alpha_loss": cql_alpha_loss}
+        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+        (_, log_info), grads = grad_fn(cql_alpha_state.params)
+        new_cql_alpha_state = cql_alpha_state.apply_gradients(grads=grads)
+        return new_cql_alpha_state, log_info
 
     def update(self, batch: Batch):
         self.update_step += 1
         bc = self.update_step <= self.bc_timesteps
         log_cql_alpha = self.log_cql_alpha.apply({"params": self.cql_alpha_state.params}) if self.with_lagrange else 0.0
         cql_alpha = jnp.clip(jnp.exp(log_cql_alpha), a_min=0.0, a_max=1000000.0)
-        self.rng, key = jax.random.split(self.rng)
-        self.alpha_state, self.actor_state, self.critic_state, self.critic_target_params, log_info = self.cql_train_step(
-            batch, key, self.alpha_state, self.actor_state, self.critic_state, self.critic_target_params, cql_alpha, bc)
+        self.rng, actor_key, critic_key = jax.random.split(self.rng, 3)
+
+        # self.alpha_state, self.actor_state, self.critic_state, self.critic_target_params, log_info = self.cql_train_step(
+        #     batch, key, self.alpha_state, self.actor_state, self.critic_state, self.critic_target_params, cql_alpha, bc)
+
+        (self.alpha_state,
+         self.actor_state,
+         self.critic_state,
+         self.critic_target_params,
+         log_info) = self.train_step(batch,
+                                     actor_key,
+                                     critic_key,
+                                     self.alpha_state,
+                                     self.actor_state,
+                                     self.critic_state,
+                                     self.critic_target_params,
+                                     cql_alpha,
+                                     bc)
+
         if self.with_lagrange:
-            self.cql_alpha_state, cql_log_info = self.lagrange_train_step(self.cql_alpha_state, log_info["cql_diff1"], log_info["cql_diff2"])
+            self.cql_alpha_state, cql_log_info = self.lagrange_train_step(self.cql_alpha_state,
+                                                                          log_info["cql_diff1"],
+                                                                          log_info["cql_diff2"])
             log_info.update(cql_log_info)
         return log_info
 
