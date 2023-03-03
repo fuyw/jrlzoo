@@ -5,7 +5,7 @@ import os
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 import ml_collections
-import gym
+import gymnasium as gym
 import time
 import numpy as np
 import pandas as pd
@@ -82,19 +82,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 size=act_dim)).clip(-max_action, max_action)
 
         next_obs, reward, done, truncated, info = env.step(action)
-        # done_bool = float(done) if "TimeLimit.truncated" not in info else 0
-        # done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
+        done_bool = float(done) if not truncated else 0
 
-        replay_buffer.add(obs, action, next_obs, reward, float(done))
+        replay_buffer.add(obs, action, next_obs, reward, done_bool)
         obs = next_obs
+
+        if done or truncated:
+            (obs, _), done, truncated = env.reset(), False, False
+            episode_timesteps = 0
 
         if t > config.start_timesteps:
             batch = replay_buffer.sample(config.batch_size)
             log_info = agent.update(batch)
-
-        if done:
-            (obs, _), done = env.reset(), False
-            episode_timesteps = 0
 
         if t % config.eval_freq == 0:
             eval_reward, eval_step, eval_time = eval_policy(agent, eval_env, config.eval_episodes)
