@@ -7,6 +7,7 @@ envs=(
     # "quadruped-run"
     # "hopper-hop"
     # "cartpole-balance"
+
     "HalfCheetah-v4"
     "Hopper-v4"
     "Walker2d-v4"

@@ -88,7 +88,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             batch = replay_buffer.sample(config.batch_size)
             log_info = agent.update(batch)
 
-        if t % config.eval_freq == 0:
+        if ((t>int(9.5e5) and (t % config.eval_freq == 0)) or (t<=int(9.5e5) and t % (2*config.eval_freq) == 0)):
             eval_reward, eval_step, eval_time = eval_policy(
                 agent, eval_env, config.eval_episodes)
             if t > config.start_timesteps:
