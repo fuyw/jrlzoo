@@ -5,9 +5,8 @@ import os
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 import ml_collections
+import gym
 import time
-
-import gymnasium as gym
 import numpy as np
 import pandas as pd
 from tqdm import trange
@@ -18,13 +17,13 @@ from utils import ReplayBuffer, get_logger
 
 def eval_policy(agent: TD3Agent, env: gym.Env, eval_episodes: int = 10) -> Tuple[float, float]:
     t1 = time.time()
-    avg_reward, avg_step = 0, 0
+    avg_reward, avg_step = 0., 0.
     for _ in range(eval_episodes):
         (obs, _), done, truncated = env.reset(), False, False
         while (not done and not truncated):
             avg_step += 1
             action = agent.sample_action(obs)
-            obs, reward, done, truncated, info = env.step(action)  # truncated, info
+            obs, reward, done, truncated, _ = env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
     avg_step /= eval_episodes
@@ -71,7 +70,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     logs = [{"step":0, "reward":eval_policy(agent, eval_env, config.eval_episodes)[0]}]
 
-    (obs, _) = env.reset()
+    obs, _  = env.reset()
     episode_timesteps = 0
     for t in trange(1, config.max_timesteps+1):
         episode_timesteps += 1
@@ -82,7 +81,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 0, max_action * config.expl_noise,
                 size=act_dim)).clip(-max_action, max_action)
 
-        next_obs, reward, done, _, _ = env.step(action)
+        next_obs, reward, done, truncated, info = env.step(action)
+        # done_bool = float(done) if "TimeLimit.truncated" not in info else 0
+        # done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
+
         replay_buffer.add(obs, action, next_obs, reward, float(done))
         obs = next_obs
 
@@ -105,19 +107,22 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                     "time": (time.time() - start_time) / 60
                 })
                 logger.info(
-                    f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
+                    f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, eval_step: {eval_step:.2f}, time: {log_info['time']:.2f}\n"
                     f"\tcritic_loss: {log_info['critic_loss']:.3f}, actor_loss: {log_info['actor_loss']:.3f}\n"
                     f"\tq1: {log_info['q1']:.3f}, max_q1: {log_info['max_q1']:.3f}, min_q1: {log_info['min_q1']:.3f}\n"
+                    f"\tbatch_reward: {batch.rewards.mean():.3f}, batch_reward_min: {batch.rewards.min():.3f}, batch_reward_max: {batch.rewards.max():.3f}\n"
+                    f"\tbatch_discount: {batch.discounts.mean():.3f}, batch_discount_min: {batch.discounts.min():.3f}, batch_discount_max: {batch.discounts.max():.3f}\n"
+                    f"\tbuffer_size: {replay_buffer.size//1000}, buffer_ptr: {replay_buffer.ptr//1000}\n"
                 )
                 logs.append(log_info)
             else:
-                logs.append({"step": t, "reward": eval_reward, "eval_step": eval_step})
+                logs.append({"step": t, "reward": eval_reward})
                 logger.info(
                     f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}\n")
 
         # Save checkpoints
         if t % config.ckpt_freq == 0:
-            agent.save(f"{ckpt_dir}", t // config.ckpt_freq) 
+            agent.save(f"{ckpt_dir}", t // config.ckpt_freq)
 
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{config.log_dir}/{config.env_name.lower()}/{exp_name}.csv")
