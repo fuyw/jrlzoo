@@ -17,15 +17,17 @@ from gym_utils import make_env
 
 def eval_policy(agent: TD3Agent, env: gym.Env, eval_episodes: int = 10) -> Tuple[float, float]:
     t1 = time.time()
-    avg_reward = 0.
+    avg_reward, avg_step = 0., 0.
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
+            avg_step += 1
             action = agent.sample_action(obs)
             obs, reward, done, _ = env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
-    return avg_reward, time.time() - t1
+    avg_step /= eval_episodes
+    return avg_reward, avg_step, time.time() - t1
 
 
 def train_and_evaluate(config: ml_collections.ConfigDict):
@@ -68,7 +70,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     logs = [{"step":0, "reward":eval_policy(agent, eval_env, config.eval_episodes)[0]}]
 
-    obs, done = env.reset(), False
+    obs = env.reset()
     episode_timesteps = 0
     for t in trange(1, config.max_timesteps+1):
         episode_timesteps += 1
@@ -95,18 +97,22 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             episode_timesteps = 0
 
         if t % config.eval_freq == 0:
-            eval_reward, eval_time = eval_policy(agent, eval_env, config.eval_episodes)
+            eval_reward, eval_step, eval_time = eval_policy(agent, eval_env, config.eval_episodes)
             if t > config.start_timesteps:
                 log_info.update({
                     "step": t,
                     "reward": eval_reward,
                     "eval_time": eval_time,
+                    "eval_step": eval_step,
                     "time": (time.time() - start_time) / 60
                 })
                 logger.info(
-                    f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
+                    f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, eval_step: {eval_step:.2f}, time: {log_info['time']:.2f}\n"
                     f"\tcritic_loss: {log_info['critic_loss']:.3f}, actor_loss: {log_info['actor_loss']:.3f}\n"
                     f"\tq1: {log_info['q1']:.3f}, max_q1: {log_info['max_q1']:.3f}, min_q1: {log_info['min_q1']:.3f}\n"
+                    f"\tbatch_reward: {batch.rewards.mean():.3f}, batch_reward_min: {batch.rewards.min():.3f}, batch_reward_max: {batch.rewards.max():.3f}\n"
+                    f"\tbatch_discount: {batch.discounts.mean():.3f}, batch_discount_min: {batch.discounts.min():.3f}, batch_discount_max: {batch.discounts.max():.3f}\n"
+                    f"\tbuffer_size: {replay_buffer.size//1000}, buffer_ptr: {replay_buffer.ptr//1000}\n"
                 )
                 logs.append(log_info)
             else:
