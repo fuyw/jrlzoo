@@ -21,10 +21,10 @@ def eval_policy(agent: TD3Agent, env: gym.Env, eval_episodes: int = 10) -> Tuple
     for _ in range(eval_episodes):
         (obs, _), done, truncated = env.reset(), False, False
         while (not done and not truncated):
-            avg_step += 1
             action = agent.sample_action(obs)
             obs, reward, done, truncated, _ = env.step(action)
             avg_reward += reward
+            avg_step += 1
     avg_reward /= eval_episodes
     avg_step /= eval_episodes
     return avg_reward, avg_step, time.time() - t1
@@ -44,10 +44,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     # initialize the gym/d4rl environment
     env = gym.make(config.env_name)
     eval_env = gym.make(config.env_name)
-
-    # initialize dm_control environment
-    # env = make_env(config.env_name, config.seed)
-    # eval_env = make_env(config.env_name, config.seed + 42)
 
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
@@ -71,9 +67,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     logs = [{"step":0, "reward":eval_policy(agent, eval_env, config.eval_episodes)[0]}]
 
     obs, _  = env.reset()
-    episode_timesteps = 0
     for t in trange(1, config.max_timesteps+1):
-        episode_timesteps += 1
         if t <= config.start_timesteps:
             action = env.action_space.sample()
         else:
@@ -89,14 +83,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
         if done or truncated:
             (obs, _), done, truncated = env.reset(), False, False
-            episode_timesteps = 0
 
         if t > config.start_timesteps:
             batch = replay_buffer.sample(config.batch_size)
             log_info = agent.update(batch)
 
         if t % config.eval_freq == 0:
-            eval_reward, eval_step, eval_time = eval_policy(agent, eval_env, config.eval_episodes)
+            eval_reward, eval_step, eval_time = eval_policy(
+                agent, eval_env, config.eval_episodes)
             if t > config.start_timesteps:
                 log_info.update({
                     "step": t,
