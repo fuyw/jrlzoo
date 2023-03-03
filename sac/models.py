@@ -99,7 +99,7 @@ class Actor(nn.Module):
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
         self.mu_layer = nn.Dense(self.act_dim,
-                                 kernel_init=init_fn(self.initializer, 5/3))
+                                 kernel_init=init_fn(self.initializer, 1.0))
         self.std_layer = nn.Dense(self.act_dim,
                                   kernel_init=init_fn(self.initializer, 1.0))
 
@@ -121,8 +121,6 @@ class Actor(nn.Module):
         x = self.net(observation)
         mu = self.mu_layer(x)
         std = self.std_layer(x)
-
-        # acme implementation
         std = jax.nn.softplus(std) + MIN_SCALE
         std = jnp.clip(std, STD_MIN, STD_MAX)
 
@@ -318,8 +316,8 @@ class SACAgent:
             target_q = reward + self.gamma * discount * next_q
 
             # td error
-            critic_loss1 = (q1 - target_q)**2
-            critic_loss2 = (q2 - target_q)**2
+            critic_loss1 = 0.5 * (q1 - target_q)**2
+            critic_loss2 = 0.5 * (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
             log_info = {
                 "critic_loss": critic_loss,

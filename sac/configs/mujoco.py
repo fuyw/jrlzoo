@@ -17,6 +17,6 @@ def get_config():
     config.ckpt_freq = int(3e5)
     config.max_timesteps = int(3e6)
     config.hidden_dims = (256, 256)
-    config.initializer = "glorot_uniform"  # dopamine setting
+    config.initializer = "orthogonal"  # "glorot_uniform"
     config.save_buffer = False
     return config
