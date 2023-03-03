@@ -14,7 +14,7 @@ def get_config():
     config.eval_episodes = 10
     config.start_timesteps = 25_000
     config.eval_freq = int(1e4)
-    config.ckpt_freq = int(2e5)
+    config.ckpt_freq = int(5e5)
     config.max_timesteps = int(1e6)
     config.expl_noise = 0.1
     config.policy_noise = 0.2

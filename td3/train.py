@@ -5,25 +5,25 @@ import os
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 import ml_collections
-import gym
+import gymnasium as gym
 import time
 import numpy as np
 import pandas as pd
 from tqdm import trange
 from models import TD3Agent
 from utils import ReplayBuffer, get_logger
-from gym_utils import make_env
+# from gym_utils import make_env
 
 
 def eval_policy(agent: TD3Agent, env: gym.Env, eval_episodes: int = 10) -> Tuple[float, float]:
     t1 = time.time()
     avg_reward, avg_step = 0., 0.
     for _ in range(eval_episodes):
-        obs, done = env.reset(), False
-        while not done:
+        (obs, _), done, truncated = env.reset(), False, False
+        while (not done and not truncated):
             avg_step += 1
             action = agent.sample_action(obs)
-            obs, reward, done, _ = env.step(action)
+            obs, reward, done, truncated, _ = env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
     avg_step /= eval_episodes
@@ -70,7 +70,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     logs = [{"step":0, "reward":eval_policy(agent, eval_env, config.eval_episodes)[0]}]
 
-    obs = env.reset()
+    obs, _  = env.reset()
     episode_timesteps = 0
     for t in trange(1, config.max_timesteps+1):
         episode_timesteps += 1
@@ -81,20 +81,19 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 0, max_action * config.expl_noise,
                 size=act_dim)).clip(-max_action, max_action)
 
-        next_obs, reward, done, info = env.step(action)
-        done_bool = float(done) if "TimeLimit.truncated" not in info else 0
-        # done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
+        next_obs, reward, done, truncated, info = env.step(action)
+        done_bool = float(done) if not truncated else 0
 
         replay_buffer.add(obs, action, next_obs, reward, done_bool)
         obs = next_obs
 
+        if done or truncated:
+            (obs, _), done, truncated = env.reset(), False, False
+            episode_timesteps = 0
+
         if t > config.start_timesteps:
             batch = replay_buffer.sample(config.batch_size)
             log_info = agent.update(batch)
-
-        if done:
-            obs, done = env.reset(), False
-            episode_timesteps = 0
 
         if t % config.eval_freq == 0:
             eval_reward, eval_step, eval_time = eval_policy(agent, eval_env, config.eval_episodes)
