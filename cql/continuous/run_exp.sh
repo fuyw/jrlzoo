@@ -21,10 +21,10 @@ mujoco_envs=(
 antmaze_envs=(
     "antmaze-umaze-v0"
     "antmaze-umaze-diverse-v0"
-    "antmaze-medium-diverse-v0"
     "antmaze-large-diverse-v0"
-    "antmaze-medium-play-v0"
     "antmaze-large-play-v0"
+    "antmaze-medium-diverse-v0"
+    "antmaze-medium-play-v0"
 )
 
 # for ((i=0;i<5;i+=1))
@@ -38,7 +38,7 @@ antmaze_envs=(
 #     done
 # done
 
-for ((i=0;i<1;i+=1))
+for ((i=0;i<3;i+=1))
 do
    for env in ${antmaze_envs[*]}
    do
