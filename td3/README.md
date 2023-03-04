@@ -4,7 +4,7 @@ A Jax implemenation of TD3 for continuous control tasks.
 
 ## Baselines
 
-Performance on some benchmark tasks: the average of the last 10 evaluation scores across 5 random seeds.
+Performance on some benchmark tasks: the average of the last 10 evaluation scores across 5 random seeds for 3e6 timesteps.
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|

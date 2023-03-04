@@ -40,9 +40,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     logger = get_logger(f"logs/{config.env_name.lower()}/{exp_name}.log")
     logger.info(f"Exp configurations:\n{config}")
 
-    # env = gym.make(config.env_name)
-    env = make_env(config.env_name, config.seed)
-    eval_env = make_env(config.env_name, config.seed + 42)
+    # initialize the mujoco/dm_control environment
+    if "v2" in config.env_name:
+        env = gym.make(config.env_name)
+        eval_env = gym.make(config.env_name)
+    else:
+        env = make_env(config.env_name, config.seed)
+        eval_env = make_env(config.env_name, config.seed + 42)
 
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]

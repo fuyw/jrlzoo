@@ -26,14 +26,14 @@ def read_data(logdir, col='reward', window=7):
     csv_files = [i for i in os.listdir(logdir) if '.csv' in i]
     for csv_file in csv_files:
         df = pd.read_csv(f'{logdir}/{csv_file}', index_col=0).set_index('step')
-        reward = df.iloc[-10:]["reward"].mean()
+        assert len(df) == 106
         max_step = df.index[-1]
         gap_step = max_step // 100
         plot_idx = np.arange(0, max_step+gap_step, gap_step)
         plot_df = df.loc[plot_idx]
         x = plot_df[col].values
         res_lst.append(smooth(x, window=window))
-        rewards.append(reward)
+        rewards.append(df.iloc[-10:]["reward"].mean())
     res_lst = np.concatenate(res_lst, axis=-1)
     return res_lst, rewards
 
@@ -84,6 +84,6 @@ def plot_exp(envs, exp_name):
 if __name__ == '__main__':
     os.makedirs('imgs', exist_ok=True)
     dmc_envs = ["cheetah-run", "quadruped-run", "humanoid-run", "hopper-hop"]
-    mj_envs = ['HalfCheetah-v4', 'Hopper-v4', 'Walker2d-v4', 'Ant-v4']
+    mj_envs = ['HalfCheetah-v2', 'Hopper-v2', 'Walker2d-v2', 'Ant-v2']
     # plot_exp(dmc_envs, 'dmc')
     plot_exp(mj_envs, 'mujoco')
