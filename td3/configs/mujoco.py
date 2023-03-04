@@ -3,7 +3,7 @@ import ml_collections
 
 def get_config():
     config = ml_collections.ConfigDict()
-    config.env_name = "HalfCheetah-v4"
+    config.env_name = "Walker2d-v2"
     config.log_dir = "logs"
     config.model_dir = "saved_models"
     config.lr = 3e-4

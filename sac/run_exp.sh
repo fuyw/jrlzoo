@@ -8,10 +8,10 @@ envs=(
     # "hopper-hop"
     # "cartpole-balance"
 
-    "HalfCheetah-v4"
-    "Hopper-v4"
-    "Walker2d-v4"
-    "Ant-v4"
+    "HalfCheetah-v2"
+    "Hopper-v2"
+    "Walker2d-v2"
+    "Ant-v2"
 )
 for seed in 0 1 2 3 4
 do 

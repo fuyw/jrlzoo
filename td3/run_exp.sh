@@ -7,10 +7,10 @@ mujoco_envs=(
     #"quadruped-run"
     #"hopper-hop"
 
-    "HalfCheetah-v4"
-    "Hopper-v4"
-    "Walker2d-v4"
-    "Ant-v4"
+    "HalfCheetah-v2"
+    "Hopper-v2"
+    "Walker2d-v2"
+    "Ant-v2"
     # "Humanoid-v4"
 )
 for i in 0 1 2 3 4

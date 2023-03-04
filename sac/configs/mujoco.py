@@ -3,7 +3,7 @@ import ml_collections
 
 def get_config():
     config = ml_collections.ConfigDict()
-    config.env_name = "HalfCheetah-v4"
+    config.env_name = "HalfCheetah-v2"
     config.log_dir = "logs"
     config.model_dir = "saved_models"
     config.lr = 3e-4
@@ -17,6 +17,5 @@ def get_config():
     config.ckpt_freq = int(2e5)
     config.max_timesteps = int(1e6)
     config.hidden_dims = (256, 256)
-    config.initializer = "orthogonal"  # "glorot_uniform"
-    config.save_buffer = False
+    config.initializer = "glorot_uniform"  # dopamine setting
     return config

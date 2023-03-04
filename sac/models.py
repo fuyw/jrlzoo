@@ -10,9 +10,8 @@ import numpy as np
 import optax
 from utils import target_update, Batch
 
-MIN_SCALE = 1e-3
-STD_MAX = np.exp(2.0)
-STD_MIN = np.exp(-10.0)
+LOG_STD_MAX = 2.
+LOG_STD_MIN = -10.
 
 
 def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
@@ -72,7 +71,7 @@ class Critic(nn.Module):
 
 class DoubleCritic(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "glorot_uniform"
+    initializer: str = "orthogonal"
     num_qs: int = 2
 
     @nn.compact
@@ -83,8 +82,7 @@ class DoubleCritic(nn.Module):
                              in_axes=None,
                              out_axes=0,
                              axis_size=self.num_qs)
-        qs = VmapCritic(self.hidden_dims, self.initializer)(
-            observations, actions)
+        qs = VmapCritic(self.hidden_dims, self.initializer)(observations, actions)
         return qs
 
 
@@ -92,7 +90,7 @@ class Actor(nn.Module):
     act_dim: int
     max_action: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "glorot_uniform"
+    initializer: str = "orthogonal"
 
     def setup(self):
         self.net = MLP(self.hidden_dims,
@@ -106,9 +104,9 @@ class Actor(nn.Module):
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = self.net(observation)
         mu = self.mu_layer(x)
-        std = self.std_layer(x)
-        std = jax.nn.softplus(std) + MIN_SCALE
-        std = jnp.clip(std, STD_MIN, STD_MAX)
+        log_std = self.std_layer(x)
+        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        std = jnp.exp(log_std)
 
         mean_action = nn.tanh(mu)
         action_distribution = distrax.Transformed(
@@ -117,13 +115,13 @@ class Actor(nn.Module):
         sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
         return mean_action * self.max_action, sampled_action * self.max_action, logp
 
-    def get_logp(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
+    def get_logp(self, observation: jnp.ndarray,
+                 action: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observation)
         mu = self.mu_layer(x)
-        std = self.std_layer(x)
-        std = jax.nn.softplus(std) + MIN_SCALE
-        std = jnp.clip(std, STD_MIN, STD_MAX)
-
+        log_std = self.std_layer(x)
+        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        std = jnp.exp(log_std)
         action_distribution = distrax.Normal(mu, std)
         raw_action = atanh(action)
         logp = action_distribution.log_prob(raw_action).sum(-1)
