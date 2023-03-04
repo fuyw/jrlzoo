@@ -79,7 +79,7 @@ class Actor(nn.Module):
 
     def setup(self):
         self.net = MLP(self.hidden_dims, init_fn=init_fn(self.initializer), activate_final=True)
-        self.out_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1e-2))
+        self.out_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1.0))
 
     def __call__(self, observations: jnp.ndarray) -> jnp.ndarray:
         x = self.net(observations)
