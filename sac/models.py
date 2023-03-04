@@ -106,8 +106,8 @@ class Actor(nn.Module):
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = self.net(observation)
         mu = self.mu_layer(x)
-        log = self.std_layer(x)
-        std = jax.nn.softplus(log) + MIN_SCALE
+        std = self.std_layer(x)
+        std = jax.nn.softplus(std) + MIN_SCALE
         std = jnp.clip(std, STD_MIN, STD_MAX)
 
         mean_action = nn.tanh(mu)
