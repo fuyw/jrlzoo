@@ -18,15 +18,17 @@ def eval_policy(agent: SACAgent,
                 env: gym.Env,
                 eval_episodes: int = 10) -> Tuple[float, float]:
     t1 = time.time()
-    avg_reward = 0.
+    avg_reward, avg_step = 0., 0.
     for _ in range(eval_episodes):
         obs, done = env.reset(), False
         while not done:
-            action = agent.sample_action(obs, True)
+            avg_step += 1
+            action = agent.sample_action(obs)
             obs, reward, done, _ = env.step(action)
             avg_reward += reward
     avg_reward /= eval_episodes
-    return avg_reward, time.time() - t1
+    avg_step /= eval_episodes
+    return avg_reward, avg_step, time.time() - t1
 
 
 def train_and_evaluate(config: ml_collections.ConfigDict):
@@ -92,24 +94,26 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
         if ((t>int(9.5e5) and (t % config.eval_freq == 0)) or (
                 t<=int(9.5e5) and t % (2*config.eval_freq) == 0)):
-            eval_reward, eval_time = eval_policy(agent, eval_env, config.eval_episodes)
+            eval_reward, eval_step, eval_time = eval_policy(agent, eval_env, config.eval_episodes)
             if t > config.start_timesteps:
                 log_info.update({
                     "step": t,
                     "reward": eval_reward,
                     "eval_time": eval_time,
+                    "eval_step": eval_step,
                     "time": (time.time() - start_time) / 60
                 })
                 logger.info(
-                    f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, time: {log_info['time']:.2f}\n"
+                    f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_step: {eval_step:.0f}, eval_time: {eval_time:.0f}, time: {log_info['time']:.2f}\n"
                     f"\tactor_loss: {log_info['actor_loss']:.3f}, critic_loss: {log_info['critic_loss']:.3f}, alpha_loss: {log_info['alpha_loss']:.3f}\n"
                     f"\tq1: {log_info['q1']:.2f}, target_q: {log_info['target_q']:.2f}, logp: {log_info['logp']:.3f}, alpha: {log_info['alpha']:.3f}\n"
+                    f"\tbatch_reward: {batch.rewards.mean():.2f}, batch_reward_max: {batch.rewards.max():.2f}, batch_reward_min: {batch.rewards.min():.2f}\n"
                 )
                 logs.append(log_info)
             else:
                 logs.append({"step": t, "reward": eval_reward})
                 logger.info(
-                    f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}\n"
+                    f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.0f}\n"
                 )
 
         # Save checkpoints
