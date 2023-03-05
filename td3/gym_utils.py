@@ -10,7 +10,7 @@ import wrappers
 def make_env(env_name: str,
              seed: int,
              save_folder: Optional[str] = None,
-             add_episode_monitor: bool = True,
+             add_episode_monitor: bool = False,
              action_repeat: int = 1,
              frame_stack: int = 1,
              from_pixels: bool = False,

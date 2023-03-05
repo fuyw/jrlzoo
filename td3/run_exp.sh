@@ -2,7 +2,7 @@
 
 # Script to reproduce results
 mujoco_envs=(
-    # "cheetah-run"
+    "cheetah-run"
     "humanoid-run"
     "quadruped-run"
     "hopper-hop"
@@ -13,7 +13,7 @@ mujoco_envs=(
     # "Ant-v2"
     # "Humanoid-v4"
 )
-for i in 1
+for i in 0 1 2
 do
     for env in ${mujoco_envs[*]}
     do
