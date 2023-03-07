@@ -22,9 +22,9 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
-|  cheetah-run    |   990~1010  |   780    |
-|  quadruped-run  |   730~750   |   848    | 
-|  humanoid-run   |   660~680   |   141    |
-|  hopper-hop     |   930~960   |   154    |
+|  cheetah-run    |   990~1010  |   839    |
+|  quadruped-run  |   730~750   |   773    | 
+|  humanoid-run   |   660~680   |   132    |
+|  hopper-hop     |   930~960   |   201    |
 
 ![](imgs/dmc.png)

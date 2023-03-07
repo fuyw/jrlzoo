@@ -380,17 +380,17 @@ class SACAgent:
                                      self.critic_target_params)
         return log_info
 
-    def save(self, fname: str, cnt: int):
+    def save(self, fname: str, cnt: int, prefix: str=""):
         checkpoints.save_checkpoint(fname,
                                     self.actor_state,
                                     cnt,
-                                    prefix="actor_",
+                                    prefix=f"actor{prefix}_",
                                     keep=20,
                                     overwrite=True)
         checkpoints.save_checkpoint(fname,
                                     self.critic_state,
                                     cnt,
-                                    prefix="critic_",
+                                    prefix=f"critic{prefix}_",
                                     keep=20,
                                     overwrite=True)
 

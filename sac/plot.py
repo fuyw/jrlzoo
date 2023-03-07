@@ -81,9 +81,31 @@ def plot_exp(envs, exp_name):
     plt.savefig(f'imgs/{exp_name}.png', dpi=560)
 
 
+def compare_tandem(env_name, cols):
+    fnames = [i for i in os.listdir(f"logs/{env_name}") if ".csv" in i]
+    dfs = [pd.read_csv(f"logs/{env_name}/{fname}", index_col=0).set_index("step") for fname in fnames]
+    _, axes = plt.subplots(nrows=1, ncols=len(cols), figsize=(4.5*len(cols), 4))
+    plt_idx = np.arange(0, 1010000, 10000)
+    for i, col in enumerate(cols):
+        ax = axes[i]
+        data1 = pd.concat([df.loc[plt_idx, f"{col}_1"] for df in dfs], axis=1)
+        data2 = pd.concat([df.loc[plt_idx, f"{col}_2"] for df in dfs], axis=1)
+        mu1, std1 = data1.mean(1), data1.std(1)
+        mu2, std2 = data2.mean(1), data2.std(1)
+        ax.plot(plt_idx, mu1, label="online agent")
+        ax.fill_between(plt_idx, mu1+std1, mu1-std1, alpha=0.1)
+        ax.plot(plt_idx, mu2, label="tandem agent")
+        ax.fill_between(plt_idx, mu2+std2, mu2-std2, alpha=0.1)
+        ax.set_title(col)
+        if (col == cols[-1]): ax.legend()
+    plt.tight_layout()
+    plt.savefig(f"imgs/tandem_{env_name}.png")
+
+
 if __name__ == '__main__':
     os.makedirs('imgs', exist_ok=True)
     dmc_envs = ["cheetah-run", "quadruped-run", "humanoid-run", "hopper-hop"]
     mj_envs = ['HalfCheetah-v2', 'Hopper-v2', 'Walker2d-v2', 'Ant-v2']
-    plot_exp(dmc_envs, 'dmc')
+    # plot_exp(dmc_envs, 'dmc')
     # plot_exp(mj_envs, 'mujoco')
+    compare_tandem("cheetah-run", cols=["reward", "q1", "critic_loss", "alpha_loss"])
