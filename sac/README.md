@@ -28,3 +28,29 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 |  hopper-hop     |   860~880   |   201    |
 
 ![](imgs/dmc.png)
+
+## Reset
+
+
+## Reset
+
+```python
+# physics.data.qacc_warmstart
+from dm_control import suite
+
+def create():
+    env = suite.load(domain_name='cartpole', task_name='swingup', task_kwargs={'random': 32})
+    state = np.array([1.3, 5.3, 0.1, 2.3])
+    action = np.array([0.3])
+    phys = env.physics
+    env.reset()
+    phys.set_state(state)
+    env.step(action)
+    obs1 = phys.render()
+    obs2 = phys.render()
+    h = lambda img : hash(img.data.tobytes())
+    print('>>>> should be equal', h(obs1), h(obs2))
+
+create()
+create()
+```

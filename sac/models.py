@@ -229,11 +229,10 @@ class SACAgent:
 
             # compute alpha loss
             log_alpha = self.log_alpha.apply({"params": alpha_params})
-            alpha_loss = -log_alpha * jax.lax.stop_gradient(
-                logp + self.target_entropy)
+            alpha = jnp.exp(log_alpha)
+            alpha_loss = -alpha * jax.lax.stop_gradient(logp + self.target_entropy)
 
             # stop alpha gradient
-            alpha = jnp.exp(log_alpha)
             alpha = jax.lax.stop_gradient(alpha)
 
             # We use frozen_params so that gradients can flow back to the actor without being used to update the critic.
