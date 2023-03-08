@@ -81,7 +81,7 @@ def plot_exp(envs, exp_name):
     plt.savefig(f'imgs/{exp_name}.png', dpi=560)
 
 
-def compare_tandem(env_name, cols):
+def compare_tandem_(env_name, cols):
     fnames = [i for i in os.listdir(f"logs/{env_name}") if ".csv" in i]
     dfs = [pd.read_csv(f"logs/{env_name}/{fname}", index_col=0).set_index("step") for fname in fnames]
     _, axes = plt.subplots(nrows=1, ncols=len(cols), figsize=(4.5*len(cols), 4))
@@ -102,10 +102,53 @@ def compare_tandem(env_name, cols):
     plt.savefig(f"imgs/tandem_{env_name}.png")
 
 
+def compare_tandem(env_name, cols):
+    fnames = [i for i in os.listdir(f"logs/{env_name}") if ".csv" in i]
+    dfs = [pd.read_csv(f"logs/{env_name}/{fname}", index_col=0).set_index("step") for fname in fnames]
+    # _, axes = plt.subplots(nrows=1, ncols=len(cols), figsize=(4.5*len(cols), 4))
+    _, ax = plt.subplots()
+    plt_idx = np.arange(0, 1010000, 10000)
+    for i, col in enumerate(cols):
+        # ax = axes[i]
+        data1 = pd.concat([df.loc[plt_idx, f"{col}_1"] for df in dfs], axis=1)
+        data2 = pd.concat([df.loc[plt_idx, f"{col}_2"] for df in dfs], axis=1)
+        mu1, std1 = data1.mean(1), data1.std(1)
+        mu2, std2 = data2.mean(1), data2.std(1)
+        ax.plot(plt_idx, mu1, label="online agent")
+        ax.fill_between(plt_idx, mu1+std1, mu1-std1, alpha=0.1)
+        ax.plot(plt_idx, mu2, label="tandem agent")
+        ax.fill_between(plt_idx, mu2+std2, mu2-std2, alpha=0.1)
+        ax.set_title(env_name)
+        if (col == cols[-1]): ax.legend()
+    plt.tight_layout()
+    plt.savefig(f"imgs/tandem_{env_name}.png", dpi=480)
+
+
+def plot_seeds(env_name, col="reward"):
+    fnames = [i for i in os.listdir(f"logs/{env_name}") if ".csv" in i]
+    dfs = [pd.read_csv(f"logs/{env_name}/{fname}", index_col=0).set_index("step") for fname in fnames]
+    _, axes = plt.subplots(nrows=1, ncols=2, figsize=(4.5*2, 4))
+    plt_idx = np.arange(0, 1010000, 10000)
+    ax1, ax2 = axes
+    for i, df in enumerate(dfs):
+        ax1.plot(plt_idx, df.loc[plt_idx, f"{col}_1"], label=f"seed{i}")
+        ax2.plot(plt_idx, df.loc[plt_idx, f"{col}_2"], label=f"seed{i}")
+    # ax1.set_yscale('log')
+    # ax2.set_yscale('log')
+    ax1.set_title(f"{col} of online agent on {env_name}")
+    ax2.set_title(f"{col} of tandem agent on {env_name}")
+    ax2.legend()
+    plt.tight_layout()
+    plt.savefig(f"imgs/seed_{env_name}.png", dpi=480)
+
+
 if __name__ == '__main__':
     os.makedirs('imgs', exist_ok=True)
     dmc_envs = ["cheetah-run", "quadruped-run", "humanoid-run", "hopper-hop"]
     mj_envs = ['HalfCheetah-v2', 'Hopper-v2', 'Walker2d-v2', 'Ant-v2']
     # plot_exp(dmc_envs, 'dmc')
     # plot_exp(mj_envs, 'mujoco')
-    compare_tandem("cheetah-run", cols=["reward", "q1", "critic_loss", "alpha_loss"])
+    for dmc_env in dmc_envs:
+        # compare_tandem(dmc_env, cols=["reward", "q1", "critic_loss", "alpha_loss"])
+        # compare_tandem(dmc_env, cols=["reward"])
+        plot_seeds(dmc_env, col="reward")

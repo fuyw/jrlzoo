@@ -101,6 +101,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             log_info1 = agent1.update(batch)
             log_info2 = agent2.update(batch)
             log_info = {}
+
+            log_info["cmp_q1"] = abs(log_info1["q1_arr"] - log_info2["q1_arr"]).mean()
+            log_info["cmp_next_q"] = abs(log_info1["next_q_arr"] - log_info2["next_q_arr"]).mean()
+            log_info["cmp_sampled_action"] = abs(log_info1["sampled_action_arr"] - log_info2["sampled_action_arr"]).sum(1).mean()
+            for cmp_k in ["q1_arr", "next_q_arr", "sampled_action_arr"]:
+                _ = log_info1.pop(cmp_k)
+                _ = log_info2.pop(cmp_k)
             for k,v in log_info1.items():
                 log_info[f"{k}_1"] = v
             for k,v in log_info2.items():
@@ -131,6 +138,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                     f"\tq1_1: {log_info['q1_1']:.2f}, target_q_1: {log_info['target_q_1']:.2f}, logp_1: {log_info['logp_1']:.3f}, alpha_1: {log_info['alpha_1']:.3f}\n"
                     f"\tq1_2: {log_info['q1_2']:.2f}, target_q_2: {log_info['target_q_2']:.2f}, logp_2: {log_info['logp_2']:.3f}, alpha_2: {log_info['alpha_2']:.3f}\n"
                     f"\tbatch_reward: {batch.rewards.mean():.2f}, batch_reward_max: {batch.rewards.max():.2f}, batch_reward_min: {batch.rewards.min():.2f}\n"
+                    f"\tcmp_q1: {log_info['cmp_q1']:.2f}, cmp_next_q: {log_info['cmp_next_q']:.2f}, cmp_sampled_action: {log_info['cmp_sampled_action']:.2f}\n"
                 )
                 logs.append(log_info)
             else:

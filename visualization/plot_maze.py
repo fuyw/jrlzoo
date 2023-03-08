@@ -22,7 +22,7 @@ from utils import wrap_mazeenv
 # plot snapshot by the RL agent
 def plot_snapshot_random_agent():
     mode = "rgb_array"  # human, rgb_array
-    env_name = "maze2d-large-v1"  #"antmaze-large-play-v0"
+    env_name = "antmaze-large-play-v0"  #"antmaze-large-play-v0"
     os.makedirs("imgs", exist_ok=True)
 
     # wrap_antenv(env.env._wrapped_env, 5, 4, 1.3)
@@ -31,7 +31,7 @@ def plot_snapshot_random_agent():
     env.reset()
     for t in range(100):
         action = env.action_space.sample()
-        _ = env.step(action)
+        s, _, _, _ = env.step(action)
         if (t + 1) % 10 == 0:
             frame = env.render(mode=mode)
             img = Image.fromarray(np.flipud(frame), "RGB")
