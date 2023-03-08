@@ -1,8 +1,7 @@
-from typing import Any, Callable, Sequence, Tuple
+from typing import Any, Callable, Optional, Sequence, Tuple
 from flax import linen as nn
 from flax.core import FrozenDict
 from flax.training import train_state, checkpoints
-import distrax
 import functools
 import jax
 import jax.numpy as jnp
@@ -10,8 +9,20 @@ import numpy as np
 import optax
 from utils import target_update, Batch
 
+from tensorflow_probability.substrates import jax as tfp
+
+tfd = tfp.distributions
+tfb = tfp.bijectors
+
 LOG_STD_MAX = 2.
 LOG_STD_MIN = -10.
+
+
+class _Tanh(tfb.Tanh):
+    def _inverse(self, y):
+        # We perform clipping in the _inverse function, as is done in TF-Agents.
+        y = jnp.where(jnp.less_equal(jnp.abs(y), 1.), jnp.clip(y, -0.99999997, 0.99999997), y)
+        return jnp.arctanh(y)
 
 
 def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
@@ -22,12 +33,6 @@ def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
     elif initializer == "glorot_normal":
         return nn.initializers.glorot_normal()
     return nn.initializers.lecun_normal()
-
-
-def atanh(x: jnp.ndarray):
-    one_plus_x = jnp.clip(1 + x, a_min=1e-6)
-    one_minus_x = jnp.clip(1 - x, a_min=1e-6)
-    return 0.5 * jnp.log(one_plus_x / one_minus_x)
 
 
 class MLP(nn.Module):
@@ -46,14 +51,13 @@ class MLP(nn.Module):
 
 class Critic(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "glorot_uniform"
+    initializer: str = "orthogonal"
 
     def setup(self):
         self.net = MLP(self.hidden_dims,
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
-        self.out_layer = nn.Dense(1,
-                                  kernel_init=init_fn(self.initializer, 1.0))
+        self.out_layer = nn.Dense(1, kernel_init=init_fn(self.initializer))
 
     def __call__(self, observations: jnp.ndarray,
                  actions: jnp.ndarray) -> jnp.ndarray:
@@ -61,12 +65,6 @@ class Critic(nn.Module):
         x = self.net(x)
         q = self.out_layer(x)
         return q.squeeze(-1)
-
-    def encode(self, observations: jnp.ndarray,
-               actions: jnp.ndarray) -> jnp.ndarray:
-        x = jnp.concatenate([observations, actions], axis=-1)
-        x = self.net(x)
-        return x
 
 
 class DoubleCritic(nn.Module):
@@ -91,43 +89,36 @@ class Actor(nn.Module):
     max_action: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
     initializer: str = "orthogonal"
+    log_std_min: Optional[float] = None
+    log_std_max: Optional[float] = None
 
     def setup(self):
         self.net = MLP(self.hidden_dims,
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
-        self.mu_layer = nn.Dense(self.act_dim,
-                                 kernel_init=init_fn(self.initializer, 1.0))
-        self.std_layer = nn.Dense(self.act_dim,
-                                  kernel_init=init_fn(self.initializer, 1.0))
+        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer))
+        self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1.0))
 
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = self.net(observation)
         mu = self.mu_layer(x)
         log_std = self.std_layer(x)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
+
+        # # suggested by Ilya for stability
+        log_std_min = self.log_std_min or LOG_STD_MIN
+        log_std_max = self.log_std_max or LOG_STD_MAX
+        log_std = log_std_min + (log_std_max - log_std_min) * 0.5 * (1 + nn.tanh(log_std))
+
         std = jnp.exp(log_std)
 
         mean_action = nn.tanh(mu)
-        action_distribution = distrax.Transformed(
-            distrax.MultivariateNormalDiag(mu, std),
-            distrax.Block(distrax.Tanh(), ndims=1))
-        sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
-        return mean_action * self.max_action, sampled_action * self.max_action, logp
+        action_distribution = tfd.TransformedDistribution(
+            tfd.MultivariateNormalDiag(loc=mu, scale_diag=std),
+            bijector=_Tanh())
+        sampled_action = action_distribution.sample(seed=rng)
+        logp = action_distribution.log_prob(sampled_action)
 
-    def get_logp(self, observation: jnp.ndarray,
-                 action: jnp.ndarray) -> jnp.ndarray:
-        x = self.net(observation)
-        mu = self.mu_layer(x)
-        log_std = self.std_layer(x)
-        log_std = jnp.clip(log_std, LOG_STD_MIN, LOG_STD_MAX)
-        std = jnp.exp(log_std)
-        action_distribution = distrax.Normal(mu, std)
-        raw_action = atanh(action)
-        logp = action_distribution.log_prob(raw_action).sum(-1)
-        logp -= 2 * (jnp.log(2) - raw_action -
-                     jax.nn.softplus(-2 * raw_action)).sum(-1)
-        return logp
+        return mean_action * self.max_action, sampled_action * self.max_action, logp
 
 
 class Scalar(nn.Module):

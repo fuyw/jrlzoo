@@ -25,6 +25,6 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 |  cheetah-run    |   990~1010  |   839    |
 |  quadruped-run  |   730~750   |   773    | 
 |  humanoid-run   |   660~680   |   132    |
-|  hopper-hop     |   930~960   |   201    |
+|  hopper-hop     |   860~880   |   201    |
 
 ![](imgs/dmc.png)
