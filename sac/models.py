@@ -260,8 +260,7 @@ class SACAgent:
                 "alpha_loss": alpha_loss,
                 "sampled_q": sampled_q,
                 "alpha": alpha,
-                "logp": logp,
-                "sampled_action": sampled_action,
+                "logp": logp
             }
             return actor_alpha_loss, log_info
 
@@ -274,10 +273,8 @@ class SACAgent:
 
         (_, log_info), grads = grad_fn(alpha_state.params, actor_state.params,
                                        keys, batch.observations)
-        sampled_action_arr = log_info["sampled_action"]
         grads = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), grads)
         log_info = jax.tree_util.tree_map(functools.partial(jnp.mean, axis=0), log_info)
-        log_info["sampled_action_arr"] = sampled_action_arr
 
         # Update TrainState
         alpha_grads, actor_grads = grads
@@ -340,14 +337,10 @@ class SACAgent:
                                        batch.rewards,
                                        batch.next_observations,
                                        batch.discounts)
-        next_q_arr = log_info["next_q"]
-        q1_arr = log_info["q1"]
         grads = jax.tree_util.tree_map(
             functools.partial(jnp.mean, axis=0), grads)
         log_info = jax.tree_util.tree_map(
             functools.partial(jnp.mean, axis=0), log_info)
-        log_info["q1_arr"] = q1_arr
-        log_info["next_q_arr"] = next_q_arr
 
         # Update TrainState
         new_critic_state = critic_state.apply_gradients(grads=grads)
