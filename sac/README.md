@@ -54,3 +54,12 @@ def create():
 create()
 create()
 ```
+
+## Some implementation details
+
+SAC is overall a stable baseline. However, in some tasks, the performance changes a lot even we only modify one impletation detail.
+
+- Entropy alpha loss: `log_alpha` or `alpha`.
+- Tanh normal policy: how to compute the `log_std`, use `distrax` or `tfd`.
+- Initialization: `orthogonal` or `glorut_uniform`.
+- Critic loss: times `0.5`.
