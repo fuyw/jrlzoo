@@ -1,35 +1,33 @@
-from absl import flags
-from gym_utils import make_env
-from models import SACAgent
-from ml_collections import config_flags
-import sys
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
-config_flags.DEFINE_config_file("config", default="configs/mujoco.py")
-FLAGS = flags.FLAGS
-FLAGS(sys.argv)
-configs = FLAGS.config
+fdir = "/home/yuwei/jrlzoo/sac/backup/curves/sac/max_steps_2000000_resets_False_config.updates_per_step_1"
 
-env_name = "quadruped-run"
-seed = 42
-env = make_env(configs.env_name, configs.seed)
-obs_dim = env.observation_space.shape[0]
-act_dim = env.action_space.shape[0]
-max_action = env.action_space.high[0]
+for env_name in ["hopper-hop", "cheetah-run", "humanoid-run", "quadruped-run"]:
+    res, rewards = [], []
+    for i in range(10):
+        data = [[0, 0]]
+        with open(f"{fdir}/{env_name}/{i}.txt", "r") as f:
+            for i in f:
+                data.append(i.strip().split(" "))
+        df = pd.DataFrame(data, columns=["step", "reward"])
+        df["step"] = df["step"].astype(int)
+        df["reward"] = df["reward"].astype(float)
+        df = df.set_index("step")
+        plt_idx = np.arange(0, 1010000, 10000)
+        reward_idx = np.arange(955000, 1005000, 5000)
+        rewards.append(df.loc[reward_idx, "reward"].mean())
+        res.append(df.loc[plt_idx, "reward"])
+    res_df = pd.concat(res, axis=1)
 
-# SAC agent
-agent = SACAgent(obs_dim=obs_dim,
-                 act_dim=act_dim,
-                 max_action=max_action,
-                 seed=configs.seed,
-                 tau=configs.tau,
-                 gamma=configs.gamma,
-                 lr=configs.lr,
-                 hidden_dims=configs.hidden_dims,
-                 initializer=configs.initializer)
-
-obs, done = env.reset(), False
-action = env.action_space.sample()
-next_obs, reward, done, info = env.step(action)
-
-agent.rng, action = agent.sample_action(agent.actor_state.params, agent.rng,
-                                        obs)
+    _, ax = plt.subplots()
+    mu = res_df.mean(1).values
+    std = res_df.std(1).values
+    r_mu = np.mean(rewards)
+    r_std = np.std(rewards)
+    ax.plot(res_df.index, mu)
+    ax.fill_between(res_df.index, mu+std, mu-std, alpha=0.5)
+    ax.set_title(f"{env_name}: {r_mu:.2f}({r_std:.2f})")
+    plt.savefig(f"{env_name}.png", dpi=480)

@@ -146,5 +146,5 @@ if __name__ == '__main__':
     os.makedirs('imgs', exist_ok=True)
     dmc_envs = ["cheetah-run", "quadruped-run", "humanoid-run", "hopper-hop"]
     mj_envs = ['HalfCheetah-v2', 'Hopper-v2', 'Walker2d-v2', 'Ant-v2']
-    # plot_exp(dmc_envs, 'dmc')
-    plot_exp(mj_envs, 'mujoco')
+    plot_exp(dmc_envs, 'dmc')
+    # plot_exp(mj_envs, 'mujoco')
