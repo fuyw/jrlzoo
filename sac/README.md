@@ -54,9 +54,11 @@ create()
 
 ## Some implementation details
 
-Some common implementation details:
+SAC is a well-known stable off-policy RL baseline. However, the instability issue still exists.
+Nuance implementation differences could lead to large performance gap in some tasks.
 
-- Entropy alpha loss: `log_alpha` or `alpha`.
+- Entropy alpha loss: use `log_alpha` or `alpha`.
 - Tanh normal policy: how to compute the `log_std`, use `distrax` or `tfd`.
+- If clip in the inverse function of Tanh.
 - Initialization: `orthogonal` or `glorut_uniform`.
 - Critic loss: times `0.5`.

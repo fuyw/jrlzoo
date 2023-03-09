@@ -18,13 +18,6 @@ LOG_STD_MAX = 2.
 LOG_STD_MIN = -10.
 
 
-class _Tanh(tfb.Tanh):
-    def _inverse(self, y):
-        # We perform clipping in the _inverse function, as is done in TF-Agents.
-        y = jnp.where(jnp.less_equal(jnp.abs(y), 1.), jnp.clip(y, -0.99999997, 0.99999997), y)
-        return jnp.arctanh(y)
-
-
 def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
     if initializer == "orthogonal":
         return nn.initializers.orthogonal(gain)
@@ -114,7 +107,7 @@ class Actor(nn.Module):
         mean_action = nn.tanh(mu)
         action_distribution = tfd.TransformedDistribution(
             tfd.MultivariateNormalDiag(loc=mu, scale_diag=std),
-            bijector=_Tanh())
+            bijector=tfb.Tanh())
         sampled_action = action_distribution.sample(seed=rng)
         logp = action_distribution.log_prob(sampled_action)
 
