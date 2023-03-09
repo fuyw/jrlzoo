@@ -31,9 +31,6 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 
 ## Reset
 
-
-## Reset
-
 ```python
 # physics.data.qacc_warmstart
 from dm_control import suite
@@ -57,7 +54,7 @@ create()
 
 ## Some implementation details
 
-SAC is overall a stable baseline. However, in some tasks, the performance changes a lot even we only modify one impletation detail.
+Some common implementation details:
 
 - Entropy alpha loss: `log_alpha` or `alpha`.
 - Tanh normal policy: how to compute the `log_std`, use `distrax` or `tfd`.

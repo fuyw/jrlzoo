@@ -147,8 +147,4 @@ if __name__ == '__main__':
     dmc_envs = ["cheetah-run", "quadruped-run", "humanoid-run", "hopper-hop"]
     mj_envs = ['HalfCheetah-v2', 'Hopper-v2', 'Walker2d-v2', 'Ant-v2']
     # plot_exp(dmc_envs, 'dmc')
-    # plot_exp(mj_envs, 'mujoco')
-    for dmc_env in dmc_envs:
-        # compare_tandem(dmc_env, cols=["reward", "q1", "critic_loss", "alpha_loss"])
-        # compare_tandem(dmc_env, cols=["reward"])
-        plot_seeds(dmc_env, col="reward")
+    plot_exp(mj_envs, 'mujoco')
