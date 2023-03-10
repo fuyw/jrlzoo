@@ -22,12 +22,15 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
-|  cheetah-run    |   950~970   |   839    |
-|  quadruped-run  |   730~760   |   773    | 
+|  cheetah-run    |   990~1010  |   839    |
+|  quadruped-run  |   730~750   |   773    | 
 |  humanoid-run   |   660~680   |   132    |
 |  hopper-hop     |   860~880   |   201    |
 
 ![](imgs/dmc.png)
+
+## Reset
+
 
 ## Reset
 
@@ -54,11 +57,9 @@ create()
 
 ## Some implementation details
 
-SAC is a well-known stable off-policy RL baseline. However, the instability issue still exists.
-Nuance implementation differences could lead to large performance gap in some tasks.
+SAC is overall a stable baseline. However, in some tasks, the performance changes a lot even we only modify one impletation detail.
 
-- Entropy alpha loss: use `log_alpha` or `alpha`.
+- Entropy alpha loss: `log_alpha` or `alpha`.
 - Tanh normal policy: how to compute the `log_std`, use `distrax` or `tfd`.
-- If clip in the inverse function of Tanh.
 - Initialization: `orthogonal` or `glorut_uniform`.
 - Critic loss: times `0.5`.

@@ -3,7 +3,6 @@ from flax import linen as nn
 from flax.core import FrozenDict
 from flax.training import train_state, checkpoints
 import functools
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -92,7 +91,6 @@ class Actor(nn.Module):
     initializer: str = "orthogonal"
     log_std_min: Optional[float] = None
     log_std_max: Optional[float] = None
-    min_scale: float = 1e-3
 
     def setup(self):
         self.net = MLP(self.hidden_dims,
@@ -104,31 +102,21 @@ class Actor(nn.Module):
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = self.net(observation)
         mu = self.mu_layer(x)
+        log_std = self.std_layer(x)
+
+        # # suggested by Ilya for stability
+        log_std_min = self.log_std_min or LOG_STD_MIN
+        log_std_max = self.log_std_max or LOG_STD_MAX
+        log_std = log_std_min + (log_std_max - log_std_min) * 0.5 * (1 + nn.tanh(log_std))
+
+        std = jnp.exp(log_std)
+
         mean_action = nn.tanh(mu)
-
-        scale = self.std_layer(x)
-
-        scale = jax.nn.softplus(scale) + self.min_scale
-
         action_distribution = tfd.TransformedDistribution(
-            tfd.MultivariateNormalDiag(loc=mu, scale_diag=scale),
-            bijector=tfb.Tanh())
-            # bijector=_Tanh())
+            tfd.MultivariateNormalDiag(loc=mu, scale_diag=std),
+            bijector=_Tanh())
         sampled_action = action_distribution.sample(seed=rng)
         logp = action_distribution.log_prob(sampled_action)
-    
-        # action_distribution = distrax.Transformed(
-        #     distrax.MultivariateNormalDiag(mu, std),
-        #     distrax.Block(distrax.Tanh(), ndims=1))
-        # sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
-
-        # suggested by Ilya for stability
-        # log_std_min = self.log_std_min or LOG_STD_MIN
-        # log_std_max = self.log_std_max or LOG_STD_MAX
-        # log_std = log_std_min + (log_std_max - log_std_min) * 0.5 * (1 + nn.tanh(log_std))
-
-
-
 
         return mean_action * self.max_action, sampled_action * self.max_action, logp
 
