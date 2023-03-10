@@ -101,7 +101,6 @@ class Actor(nn.Module):
         # std = jnp.exp(log_std)
 
         std = self.std_layer(x)
-        # std = jnp.exp(jnp.clip(std, LOG_STD_MIN, LOG_STD_MAX))
         std = jax.nn.softplus(std) + self.min_scale
 
         action_distribution = distrax.Transformed(
