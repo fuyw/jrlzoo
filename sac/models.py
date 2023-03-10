@@ -3,26 +3,15 @@ from flax import linen as nn
 from flax.core import FrozenDict
 from flax.training import train_state, checkpoints
 import functools
+import distrax
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 from utils import target_update, Batch
 
-from tensorflow_probability.substrates import jax as tfp
-
-tfd = tfp.distributions
-tfb = tfp.bijectors
-
 LOG_STD_MAX = 2.
 LOG_STD_MIN = -10.
-
-
-class _Tanh(tfb.Tanh):
-    def _inverse(self, y):
-        # We perform clipping in the _inverse function, as is done in TF-Agents.
-        y = jnp.where(jnp.less_equal(jnp.abs(y), 1.), jnp.clip(y, -0.99999997, 0.99999997), y)
-        return jnp.arctanh(y)
 
 
 def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
@@ -96,11 +85,13 @@ class Actor(nn.Module):
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
         self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
-        self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1.0))
+        self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
 
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = self.net(observation)
         mu = self.mu_layer(x)
+        mean_action = nn.tanh(mu)
+
         log_std = self.std_layer(x)
 
         # # suggested by Ilya for stability
@@ -110,13 +101,10 @@ class Actor(nn.Module):
 
         std = jnp.exp(log_std)
 
-        mean_action = nn.tanh(mu)
-        action_distribution = tfd.TransformedDistribution(
-            tfd.MultivariateNormalDiag(loc=mu, scale_diag=std),
-            bijector=tfb.Tanh())
-            # bijector=_Tanh())
-        sampled_action = action_distribution.sample(seed=rng)
-        logp = action_distribution.log_prob(sampled_action)
+        action_distribution = distrax.Transformed(
+            distrax.MultivariateNormalDiag(mu, std),
+            distrax.Block(distrax.Tanh(), ndims=1))
+        sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
 
         return mean_action * self.max_action, sampled_action * self.max_action, logp
 
@@ -149,7 +137,7 @@ class SACAgent:
         self.tau = tau
         self.max_action = max_action
         if target_entropy is None:
-            self.target_entropy = -act_dim / 2  # dopamine setting
+            self.target_entropy = -act_dim / 2
         else:
             self.target_entropy = target_entropy
 
@@ -304,8 +292,8 @@ class SACAgent:
             target_q = reward + self.gamma * discount * next_q
 
             # td error
-            critic_loss1 = 0.5 * (q1 - target_q)**2
-            critic_loss2 = 0.5 * (q2 - target_q)**2
+            critic_loss1 = (q1 - target_q)**2
+            critic_loss2 = (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
             log_info = {
                 "critic_loss": critic_loss,

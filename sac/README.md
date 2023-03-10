@@ -57,9 +57,13 @@ create()
 
 ## Some implementation details
 
-SAC is overall a stable baseline. However, in some tasks, the performance changes a lot even we only modify one impletation detail.
+SAC is a well-known off-policy RL baseline.
 
-- Entropy alpha loss: `log_alpha` or `alpha`.
+However, in some tasks, the performance changes significantly even if we only modify one impletation detail.
+Here is an incomplete summary of different implementation choices adopted from different popular open-sourced implementations.
+
+- Use `log_alpha` or `alpha` in the entropy alpha loss.
+- Set `0.5 * act_dim` or `act_dim` as the target entropy.
 - Tanh normal policy: how to compute the `log_std`, use `distrax` or `tfd`.
-- Initialization: `orthogonal` or `glorut_uniform`.
+- Network initialization: `orthogonal` or `glorut_uniform`.
 - Critic loss: times `0.5`.
