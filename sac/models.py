@@ -10,9 +10,6 @@ import numpy as np
 import optax
 from utils import target_update, Batch
 
-LOG_STD_MAX = 2.
-LOG_STD_MIN = -10.
-
 
 def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
     if initializer == "orthogonal":
@@ -92,13 +89,6 @@ class Actor(nn.Module):
         x = self.net(observation)
         mu = self.mu_layer(x)
         mean_action = nn.tanh(mu)
-
-        # suggested by Ilya for stability
-        # log_std = self.std_layer(x)
-        # log_std_min = self.log_std_min or LOG_STD_MIN
-        # log_std_max = self.log_std_max or LOG_STD_MAX
-        # log_std = log_std_min + (log_std_max - log_std_min) * 0.5 * (1 + nn.tanh(log_std))
-        # std = jnp.exp(log_std)
 
         std = self.std_layer(x)
         std = jax.nn.softplus(std) + self.min_scale

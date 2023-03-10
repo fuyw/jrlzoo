@@ -6,6 +6,7 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 import ml_collections
 import gym
+import random
 import time
 import numpy as np
 import pandas as pd
@@ -55,6 +56,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     act_dim = env.action_space.shape[0]
     max_action = env.action_space.high[0]
     np.random.seed(config.seed)
+    random.seed(config.seed)
 
     # SAC agent
     agent = SACAgent(obs_dim=obs_dim,

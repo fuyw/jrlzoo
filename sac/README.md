@@ -23,7 +23,7 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
 |  cheetah-run    |   920~970   |   839    |
-|  quadruped-run  |   730~750   |   773    | 
+|  quadruped-run  |   730~760   |   773    | 
 |  humanoid-run   |   660~680   |   132    |
 |  hopper-hop     |   860~900   |   201    |
 
@@ -62,14 +62,12 @@ def create():
     print('>>>> should be equal', h(obs1), h(obs2))
 
 create()
-create()
 ```
 
-## Some implementation details
+## Implementation details
 
-SAC is a well-known off-policy RL baseline.
+SAC is one of the most popular off-policy RL baselines. However, in some tasks, the performance changes significantly even if we only modify one impletation detail.
 
-However, in some tasks, the performance changes significantly even if we only modify one impletation detail.
 Here is an incomplete summary of different implementation choices adopted from different popular open-sourced implementations, i.e., Dopamine, Acme, Rlkit, JaxRL.
 
 - Use `log_alpha` or `alpha` in the entropy alpha loss.
