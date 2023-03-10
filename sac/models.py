@@ -86,23 +86,23 @@ class Actor(nn.Module):
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
         self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
-        self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
+        self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1.0))
 
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = self.net(observation)
         mu = self.mu_layer(x)
         mean_action = nn.tanh(mu)
 
-        log_std = self.std_layer(x)
+        # suggested by Ilya for stability
+        # log_std = self.std_layer(x)
+        # log_std_min = self.log_std_min or LOG_STD_MIN
+        # log_std_max = self.log_std_max or LOG_STD_MAX
+        # log_std = log_std_min + (log_std_max - log_std_min) * 0.5 * (1 + nn.tanh(log_std))
+        # std = jnp.exp(log_std)
 
-        # # suggested by Ilya for stability
-        log_std_min = self.log_std_min or LOG_STD_MIN
-        log_std_max = self.log_std_max or LOG_STD_MAX
-        log_std = log_std_min + (log_std_max - log_std_min) * 0.5 * (1 + nn.tanh(log_std))
-        std = jnp.exp(log_std)
-
-        # std = self.std_layer(x)
-        # std = jax.nn.softplus(std) + self.min_scale
+        std = self.std_layer(x)
+        # std = jnp.exp(jnp.clip(std, LOG_STD_MIN, LOG_STD_MAX))
+        std = jax.nn.softplus(std) + self.min_scale
 
         action_distribution = distrax.Transformed(
             distrax.MultivariateNormalDiag(mu, std),
@@ -295,8 +295,8 @@ class SACAgent:
             target_q = reward + self.gamma * discount * next_q
 
             # td error
-            critic_loss1 = (q1 - target_q)**2
-            critic_loss2 = (q2 - target_q)**2
+            critic_loss1 = 0.5*(q1 - target_q)**2
+            critic_loss2 = 0.5*(q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
             log_info = {
                 "critic_loss": critic_loss,
