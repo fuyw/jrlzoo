@@ -77,32 +77,26 @@ class Actor(nn.Module):
     max_action: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
     initializer: str = "orthogonal"
-    log_std_min: Optional[float] = None
-    log_std_max: Optional[float] = None
+    min_scale: float = 1e-3
+
 
     def setup(self):
         self.net = MLP(self.hidden_dims,
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
         self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
-        self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
+        self.scale_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1.0))
 
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = self.net(observation)
         mu = self.mu_layer(x)
         mean_action = nn.tanh(mu)
 
-        log_std = self.std_layer(x)
-
-        # # suggested by Ilya for stability
-        log_std_min = self.log_std_min or LOG_STD_MIN
-        log_std_max = self.log_std_max or LOG_STD_MAX
-        log_std = log_std_min + (log_std_max - log_std_min) * 0.5 * (1 + nn.tanh(log_std))
-
-        std = jnp.exp(log_std)
+        scale = self.scale_layer(x)
+        scale = jax.nn.softplus(scale) + self.min_scale
 
         action_distribution = distrax.Transformed(
-            distrax.MultivariateNormalDiag(mu, std),
+            distrax.MultivariateNormalDiag(mu, scale),
             distrax.Block(distrax.Tanh(), ndims=1))
         sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
 

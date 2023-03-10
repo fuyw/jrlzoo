@@ -60,10 +60,10 @@ create()
 SAC is a well-known off-policy RL baseline.
 
 However, in some tasks, the performance changes significantly even if we only modify one impletation detail.
-Here is an incomplete summary of different implementation choices adopted from different popular open-sourced implementations.
+Here is an incomplete summary of different implementation choices adopted from different popular open-sourced implementations, i.e., Dopamine, Acme, Rlkit, JaxRL.
 
 - Use `log_alpha` or `alpha` in the entropy alpha loss.
 - Set `0.5 * act_dim` or `act_dim` as the target entropy.
-- Tanh normal policy: how to compute the `log_std`, use `distrax` or `tfd`.
+- How to compute the `log` for the Tanh normal policy.
 - Network initialization: `orthogonal` or `glorut_uniform`.
 - Critic loss: times `0.5`.
