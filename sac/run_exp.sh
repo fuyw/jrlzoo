@@ -3,9 +3,9 @@
 # Script to reproduce results
 envs=(
     # "hopper-hop"
-    "cheetah-run"
+    # "cheetah-run"
     "humanoid-run"
-    "quadruped-run"
+    # "quadruped-run"
 
     # "HalfCheetah-v2"
     # "Hopper-v2"

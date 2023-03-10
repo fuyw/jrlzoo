@@ -294,8 +294,8 @@ class SACAgent:
             target_q = reward + self.gamma * discount * next_q
 
             # td error
-            critic_loss1 = 0.5*(q1 - target_q)**2
-            critic_loss2 = 0.5*(q2 - target_q)**2
+            critic_loss1 = (q1 - target_q)**2
+            critic_loss2 = (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
             log_info = {
                 "critic_loss": critic_loss,
