@@ -113,7 +113,8 @@ class Actor(nn.Module):
         mean_action = nn.tanh(mu)
         action_distribution = tfd.TransformedDistribution(
             tfd.MultivariateNormalDiag(loc=mu, scale_diag=std),
-            bijector=_Tanh())
+            bijector=tfb.Tanh())
+            # bijector=_Tanh())
         sampled_action = action_distribution.sample(seed=rng)
         logp = action_distribution.log_prob(sampled_action)
 
