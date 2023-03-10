@@ -57,10 +57,9 @@ class Critic(nn.Module):
         self.net = MLP(self.hidden_dims,
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
-        self.out_layer = nn.Dense(1, kernel_init=init_fn(self.initializer))
+        self.out_layer = nn.Dense(1, kernel_init=init_fn(self.initializer, 1.0))
 
-    def __call__(self, observations: jnp.ndarray,
-                 actions: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observations, actions], axis=-1)
         x = self.net(x)
         q = self.out_layer(x)
@@ -96,7 +95,7 @@ class Actor(nn.Module):
         self.net = MLP(self.hidden_dims,
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
-        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer))
+        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
         self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1.0))
 
     def __call__(self, rng: Any, observation: jnp.ndarray):
