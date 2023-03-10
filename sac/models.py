@@ -10,9 +10,6 @@ import numpy as np
 import optax
 from utils import target_update, Batch
 
-LOG_STD_MAX = 2.
-LOG_STD_MIN = -10.
-
 
 def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
     if initializer == "orthogonal":
@@ -286,8 +283,8 @@ class SACAgent:
             target_q = reward + self.gamma * discount * next_q
 
             # td error
-            critic_loss1 = (q1 - target_q)**2
-            critic_loss2 = (q2 - target_q)**2
+            critic_loss1 = 0.5*(q1 - target_q)**2
+            critic_loss2 = 0.5*(q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
             log_info = {
                 "critic_loss": critic_loss,

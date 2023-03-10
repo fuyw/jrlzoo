@@ -2,8 +2,8 @@
 
 # Script to reproduce results
 envs=(
-    # "hopper-hop"
     "cheetah-run"
+    "hopper-hop"
     "humanoid-run"
     "quadruped-run"
 
@@ -13,7 +13,7 @@ envs=(
     # "Ant-v2"
 )
 
-for seed in 0 1 2 3 4
+for seed in 0
 do 
     for env in ${envs[*]}
     do

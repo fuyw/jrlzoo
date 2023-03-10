@@ -22,15 +22,25 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
-|  cheetah-run    |   990~1010  |   839    |
+|  cheetah-run    |   940~970   |   839    |
 |  quadruped-run  |   730~750   |   773    | 
 |  humanoid-run   |   660~680   |   132    |
-|  hopper-hop     |   860~880   |   201    |
+|  hopper-hop     |   860~900   |   201    |
 
 ![](imgs/dmc.png)
 
-## Reset
+## Versions
 
+Some software versions:
+
+- gym==0.21.0
+- dm-control==1.0.10
+- mujoco-py==2.1.2.14
+- flax==0.6.1
+- distrax==0.1.2
+- optax==0.1.3
+- jax==0.4.4
+- jaxlib==0.4.4+cuda11.cudnn82
 
 ## Reset
 
