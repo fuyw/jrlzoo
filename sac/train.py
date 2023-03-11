@@ -6,12 +6,13 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 import ml_collections
 import gymnasium as gym
+import random
 import time
+import numpy as np
 import pandas as pd
 from tqdm import trange
 from models import SACAgent
 from utils import ReplayBuffer, get_logger
-# from gym_utils import make_env
 
 
 def eval_policy(agent: SACAgent,
@@ -37,17 +38,20 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     exp_name = f"sac_s{config.seed}_{timestamp}"
     exp_info = f"# Running experiment for: {exp_name}_{config.env_name} #"
     ckpt_dir = f"{config.model_dir}/{config.env_name.lower()}/{exp_name}"
-    print("#" * len(exp_info) + f"\n{exp_info}\n" + "#" * len(exp_info))
+    print("#"*len(exp_info) + f"\n{exp_info}\n" + "#"*len(exp_info))
 
     logger = get_logger(f"logs/{config.env_name.lower()}/{exp_name}.log")
     logger.info(f"Exp configurations:\n{config}")
 
+    # initialize the mujoco/dm_control environment
     env = gym.make(config.env_name)
     eval_env = gym.make(config.env_name)
 
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     max_action = env.action_space.high[0]
+    np.random.seed(config.seed)
+    random.seed(config.seed)
 
     # SAC agent
     agent = SACAgent(obs_dim=obs_dim,
@@ -95,18 +99,16 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                     "time": (time.time() - start_time) / 60
                 })
                 logger.info(
-                    f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}, eval_step: {eval_step:.2f}, time: {log_info['time']:.2f}\n"
+                    f"\n[#Step {t}] eval_reward: {eval_reward:.3f}, eval_step: {eval_step:.0f}, eval_time: {eval_time:.0f}, time: {log_info['time']:.3f}\n"
                     f"\tactor_loss: {log_info['actor_loss']:.3f}, critic_loss: {log_info['critic_loss']:.3f}, alpha_loss: {log_info['alpha_loss']:.3f}\n"
-                    f"\tq1: {log_info['q1']:.2f}, target_q: {log_info['target_q']:.2f}, logp: {log_info['logp']:.3f}, alpha: {log_info['alpha']:.3f}\n"
-                    f"\tbatch_reward: {batch.rewards.mean():.3f}, batch_reward_min: {batch.rewards.min():.3f}, batch_reward_max: {batch.rewards.max():.3f}\n"
-                    f"\tbatch_discount: {batch.discounts.mean():.3f}, batch_discount_min: {batch.discounts.min():.3f}, batch_discount_max: {batch.discounts.max():.3f}\n"
-                    f"\tbuffer_size: {replay_buffer.size//1000}, buffer_ptr: {replay_buffer.ptr//1000}\n"
+                    f"\tq1: {log_info['q1']:.3f}, target_q: {log_info['target_q']:.3f}, logp: {log_info['logp']:.3f}, alpha: {log_info['alpha']:.3f}\n"
+                    f"\tbatch_reward: {batch.rewards.mean():.3f}, batch_reward_max: {batch.rewards.max():.3f}, batch_reward_min: {batch.rewards.min():.3f}\n"
                 )
                 logs.append(log_info)
             else:
                 logs.append({"step": t, "reward": eval_reward})
                 logger.info(
-                    f"\n[#Step {t}] eval_reward: {eval_reward:.2f}, eval_time: {eval_time:.2f}\n"
+                    f"\n[#Step {t}] eval_reward: {eval_reward:.3f}, eval_time: {eval_time:.0f}\n"
                 )
 
         # Save checkpoints
@@ -117,9 +119,3 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     log_df = pd.DataFrame(logs)
     log_df.to_csv(
         f"{config.log_dir}/{config.env_name.lower()}/{exp_name}.csv")
-
-    # Save buffer
-    # if config.save_buffer:
-    #     buffer_dir = f"saved_buffers/{config.env_name}"
-    #     os.makedirs(buffer_dir, exist_ok=True)
-    #     replay_buffer.save(f"{buffer_dir}/{config.env_name}")

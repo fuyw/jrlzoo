@@ -1,18 +1,14 @@
-from typing import Any, Callable, Sequence, Tuple
+from typing import Any, Callable, Optional, Sequence, Tuple
 from flax import linen as nn
 from flax.core import FrozenDict
 from flax.training import train_state, checkpoints
-import distrax
 import functools
+import distrax
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 from utils import target_update, Batch
-
-MIN_SCALE = 1e-3
-STD_MAX = np.exp(2.0)
-STD_MIN = np.exp(-10.0)
 
 
 def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
@@ -23,12 +19,6 @@ def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
     elif initializer == "glorot_normal":
         return nn.initializers.glorot_normal()
     return nn.initializers.lecun_normal()
-
-
-def atanh(x: jnp.ndarray):
-    one_plus_x = jnp.clip(1 + x, a_min=1e-6)
-    one_minus_x = jnp.clip(1 - x, a_min=1e-6)
-    return 0.5 * jnp.log(one_plus_x / one_minus_x)
 
 
 class MLP(nn.Module):
@@ -47,32 +37,24 @@ class MLP(nn.Module):
 
 class Critic(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "glorot_uniform"
+    initializer: str = "orthogonal"
 
     def setup(self):
         self.net = MLP(self.hidden_dims,
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
-        self.out_layer = nn.Dense(1,
-                                  kernel_init=init_fn(self.initializer, 1.0))
+        self.out_layer = nn.Dense(1, kernel_init=init_fn(self.initializer, 1.0))
 
-    def __call__(self, observations: jnp.ndarray,
-                 actions: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observations, actions], axis=-1)
         x = self.net(x)
         q = self.out_layer(x)
         return q.squeeze(-1)
 
-    def encode(self, observations: jnp.ndarray,
-               actions: jnp.ndarray) -> jnp.ndarray:
-        x = jnp.concatenate([observations, actions], axis=-1)
-        x = self.net(x)
-        return x
-
 
 class DoubleCritic(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "glorot_uniform"
+    initializer: str = "orthogonal"
     num_qs: int = 2
 
     @nn.compact
@@ -83,8 +65,7 @@ class DoubleCritic(nn.Module):
                              in_axes=None,
                              out_axes=0,
                              axis_size=self.num_qs)
-        qs = VmapCritic(self.hidden_dims, self.initializer)(
-            observations, actions)
+        qs = VmapCritic(self.hidden_dims, self.initializer)(observations, actions)
         return qs
 
 
@@ -92,44 +73,32 @@ class Actor(nn.Module):
     act_dim: int
     max_action: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
-    initializer: str = "glorot_uniform"
+    initializer: str = "orthogonal"
+    log_std_min: Optional[float] = None
+    log_std_max: Optional[float] = None
+    min_scale: float = 1e-3
 
     def setup(self):
         self.net = MLP(self.hidden_dims,
                        init_fn=init_fn(self.initializer),
                        activate_final=True)
-        self.mu_layer = nn.Dense(self.act_dim,
-                                 kernel_init=init_fn(self.initializer, 1.0))
-        self.std_layer = nn.Dense(self.act_dim,
-                                  kernel_init=init_fn(self.initializer, 1.0))
+        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
+        self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1.0))
 
     def __call__(self, rng: Any, observation: jnp.ndarray):
         x = self.net(observation)
         mu = self.mu_layer(x)
-        std = self.std_layer(x)
-        std = jax.nn.softplus(std) + MIN_SCALE
-        std = jnp.clip(std, STD_MIN, STD_MAX)
-
         mean_action = nn.tanh(mu)
+
+        std = self.std_layer(x)
+        std = jax.nn.softplus(std) + self.min_scale
+
         action_distribution = distrax.Transformed(
             distrax.MultivariateNormalDiag(mu, std),
             distrax.Block(distrax.Tanh(), ndims=1))
         sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
+
         return mean_action * self.max_action, sampled_action * self.max_action, logp
-
-    def get_logp(self, observation: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        x = self.net(observation)
-        mu = self.mu_layer(x)
-        std = self.std_layer(x)
-        std = jax.nn.softplus(std) + MIN_SCALE
-        std = jnp.clip(std, STD_MIN, STD_MAX)
-
-        action_distribution = distrax.Normal(mu, std)
-        raw_action = atanh(action)
-        logp = action_distribution.log_prob(raw_action).sum(-1)
-        logp -= 2 * (jnp.log(2) - raw_action -
-                     jax.nn.softplus(-2 * raw_action)).sum(-1)
-        return logp
 
 
 class Scalar(nn.Module):
@@ -160,7 +129,7 @@ class SACAgent:
         self.tau = tau
         self.max_action = max_action
         if target_entropy is None:
-            self.target_entropy = -act_dim / 2  # dopamine setting
+            self.target_entropy = -act_dim
         else:
             self.target_entropy = target_entropy
 
@@ -240,11 +209,10 @@ class SACAgent:
 
             # compute alpha loss
             log_alpha = self.log_alpha.apply({"params": alpha_params})
-            alpha_loss = -log_alpha * jax.lax.stop_gradient(
-                logp + self.target_entropy)
+            alpha = jnp.exp(log_alpha)
+            alpha_loss = -alpha * jax.lax.stop_gradient(logp + self.target_entropy)
 
             # stop alpha gradient
-            alpha = jnp.exp(log_alpha)
             alpha = jax.lax.stop_gradient(alpha)
 
             # We use frozen_params so that gradients can flow back to the actor without being used to update the critic.
@@ -316,8 +284,8 @@ class SACAgent:
             target_q = reward + self.gamma * discount * next_q
 
             # td error
-            critic_loss1 = 0.5 * (q1 - target_q)**2
-            critic_loss2 = 0.5 * (q2 - target_q)**2
+            critic_loss1 = (q1 - target_q)**2
+            critic_loss2 = (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
             log_info = {
                 "critic_loss": critic_loss,
@@ -382,17 +350,17 @@ class SACAgent:
                                      self.critic_target_params)
         return log_info
 
-    def save(self, fname: str, cnt: int):
+    def save(self, fname: str, cnt: int, prefix: str=""):
         checkpoints.save_checkpoint(fname,
                                     self.actor_state,
                                     cnt,
-                                    prefix="actor_",
+                                    prefix=f"actor{prefix}_",
                                     keep=20,
                                     overwrite=True)
         checkpoints.save_checkpoint(fname,
                                     self.critic_state,
                                     cnt,
-                                    prefix="critic_",
+                                    prefix=f"critic{prefix}_",
                                     keep=20,
                                     overwrite=True)
 

@@ -17,6 +17,5 @@ def get_config():
     config.ckpt_freq = int(2e5)
     config.max_timesteps = int(1e6)
     config.hidden_dims = (256, 256)
-    config.initializer = "orthogonal"  # "glorot_uniform"
-    config.save_buffer = False
+    config.initializer = "orthogonal" # "glorot_uniform"
     return config
