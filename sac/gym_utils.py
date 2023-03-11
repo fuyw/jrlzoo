@@ -1,7 +1,5 @@
-from typing import Optional
-
-import gym
-from gym.wrappers import RescaleAction
+import gymnasium as gym
+from gymnasium.wrappers import RescaleAction
 from gym.wrappers.pixel_observation import PixelObservationWrapper
 
 import wrappers
@@ -9,8 +7,6 @@ import wrappers
 
 def make_env(env_name: str,
              seed: int,
-             save_folder: Optional[str] = None,
-             add_episode_monitor: bool = True,
              action_repeat: int = 1,
              frame_stack: int = 1,
              from_pixels: bool = False,
@@ -20,8 +16,7 @@ def make_env(env_name: str,
              gray_scale: bool = False,
              flatten: bool = True) -> gym.Env:
     # Check if the env is in gym.
-    all_envs = gym.envs.registry.all()
-    env_ids = [env_spec.id for env_spec in all_envs]
+    env_ids = list(gym.envs.registry.keys())
 
     if env_name in env_ids:
         env = gym.make(env_name)
@@ -34,16 +29,10 @@ def make_env(env_name: str,
     if flatten and isinstance(env.observation_space, gym.spaces.Dict):
         env = gym.wrappers.FlattenObservation(env)
 
-    if add_episode_monitor:
-        env = wrappers.EpisodeMonitor(env)
-
     if action_repeat > 1:
         env = wrappers.RepeatAction(env, action_repeat)
 
     env = RescaleAction(env, -1.0, 1.0)
-
-    if save_folder is not None:
-        env = wrappers.VideoRecorder(env, save_folder=save_folder)
 
     if from_pixels:
         if env_name in env_ids:

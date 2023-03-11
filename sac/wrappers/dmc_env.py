@@ -8,7 +8,7 @@ from typing import Dict, Optional, OrderedDict
 import numpy as np
 from dm_control import suite
 from dm_env import specs
-from gym import core, spaces
+from gymnasium import core, spaces
 
 from wrappers.common import TimeStep
 
@@ -46,10 +46,9 @@ class DMCEnv(core.Env):
                                task_name=task_name,
                                task_kwargs=task_kwargs,
                                environment_kwargs=environment_kwargs)
-        self.action_space = dmc_spec2gym_space(self._env.action_spec())
 
-        self.observation_space = dmc_spec2gym_space(
-            self._env.observation_spec())
+        self.action_space = dmc_spec2gym_space(self._env.action_spec())
+        self.observation_space = dmc_spec2gym_space(self._env.observation_spec())
 
         self.seed(seed=task_kwargs['random'])
 

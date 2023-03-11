@@ -13,8 +13,7 @@ envs=(
     "Walker2d-v4"
     "Ant-v4"
 )
-sleep 1h
-for seed in 1 2 3 4
+for seed in 0 1 2 3 4
 do 
     for env in ${envs[*]}
     do
