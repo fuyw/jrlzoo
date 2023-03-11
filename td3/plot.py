@@ -49,7 +49,7 @@ def plot_ax(ax, data, fill_color, title=None, label=None):
                 ls='solid',
                 lw=0.6,
                 label=label)
-        ax.legend()
+        ax.legend(fontsize=8.5)
     else:
         ax.plot(np.arange(len(mu))*multiple, mu, color=fill_color, ls='solid', lw=0.6)
     ax.fill_between(np.arange(len(mu))*multiple,
@@ -59,7 +59,7 @@ def plot_ax(ax, data, fill_color, title=None, label=None):
                     edgecolor=fill_color,
                     facecolor=fill_color)
     if title:
-        ax.set_title(title, fontsize=8.5, pad=4)
+        ax.set_title(title, fontsize=8.5, pad=4.5)
     ax.grid(True, alpha=0.3, lw=0.3)
 
 
@@ -85,5 +85,5 @@ if __name__ == '__main__':
     os.makedirs('imgs', exist_ok=True)
     dmc_envs = ["cheetah-run", "quadruped-run", "humanoid-run", "hopper-hop"]
     mj_envs = ['HalfCheetah-v2', 'Hopper-v2', 'Walker2d-v2', 'Ant-v2']
-    plot_exp(dmc_envs, 'dmc')
-    # plot_exp(mj_envs, 'mujoco')
+    # plot_exp(dmc_envs, 'dmc')
+    plot_exp(mj_envs, 'mujoco')
