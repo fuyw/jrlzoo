@@ -6,6 +6,7 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"
 
 import ml_collections
 import gym
+import random
 import time
 import numpy as np
 import pandas as pd
@@ -49,6 +50,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         env = make_env(config.env_name, config.seed)
         eval_env = make_env(config.env_name, config.seed + 42)
 
+    # set random seed
+    np.random.seed(config.seed)
+    random.seed(config.seed)
+    env.seed(config.seed)
+    env.action_space.seed(config.seed)
+    eval_env.seed(config.seed+42)
+    eval_env.action_space.seed(config.seed+42)
+
+    # env parameters
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     max_action = env.action_space.high[0]
@@ -81,7 +91,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
         next_obs, reward, done, info = env.step(action)
         done_bool = float(done) if "TimeLimit.truncated" not in info else 0
-        # done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
 
         replay_buffer.add(obs, action, next_obs, reward, done_bool)
         obs = next_obs
