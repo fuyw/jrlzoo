@@ -2,6 +2,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple
 from flax import linen as nn
 from flax.core import FrozenDict
 from flax.training import train_state, checkpoints
+
 import functools
 import distrax
 import jax
@@ -211,6 +212,8 @@ class SACAgent:
             log_alpha = self.log_alpha.apply({"params": alpha_params})
             alpha = jnp.exp(log_alpha)
             alpha_loss = -alpha * jax.lax.stop_gradient(logp + self.target_entropy)
+            alpha = jnp.exp(log_alpha)
+            alpha_loss = -alpha * jax.lax.stop_gradient(logp + self.target_entropy)
 
             # stop alpha gradient
             alpha = jax.lax.stop_gradient(alpha)
@@ -286,6 +289,8 @@ class SACAgent:
             # td error
             critic_loss1 = (q1 - target_q)**2
             critic_loss2 = (q2 - target_q)**2
+            critic_loss1 = (q1 - target_q)**2
+            critic_loss2 = (q2 - target_q)**2
             critic_loss = critic_loss1 + critic_loss2
             log_info = {
                 "critic_loss": critic_loss,
@@ -351,15 +356,18 @@ class SACAgent:
         return log_info
 
     def save(self, fname: str, cnt: int, prefix: str=""):
+    def save(self, fname: str, cnt: int, prefix: str=""):
         checkpoints.save_checkpoint(fname,
                                     self.actor_state,
                                     cnt,
+                                    prefix=f"actor{prefix}_",
                                     prefix=f"actor{prefix}_",
                                     keep=20,
                                     overwrite=True)
         checkpoints.save_checkpoint(fname,
                                     self.critic_state,
                                     cnt,
+                                    prefix=f"critic{prefix}_",
                                     prefix=f"critic{prefix}_",
                                     keep=20,
                                     overwrite=True)
