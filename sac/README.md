@@ -8,13 +8,12 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 
 ### MuJoCo
 
-
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
 |  HalfCheetah-v4 |  980~1050   |  10894.4 |
-|  Hopper-v4      |  990~1010   |   3313.9 |
+|  Hopper-v4      |  940~1010   |   3313.9 |
 |  Walker2d-v4    |  920~960    |   4356.5 |
-|  Ant-v4         |  770~840    |   4727.8 |
+|  Ant-v4         |  810~870    |   4727.8 |
 
 ![](imgs/mujoco.png)
 

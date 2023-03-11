@@ -108,7 +108,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 logger.info(
                     f"\n[#Step {t}] eval_reward: {eval_reward:.3f}, eval_step: {eval_step:.0f}, eval_time: {eval_time:.0f}, time: {log_info['time']:.3f}\n"
                     f"\tactor_loss: {log_info['actor_loss']:.3f}, critic_loss: {log_info['critic_loss']:.3f}, alpha_loss: {log_info['alpha_loss']:.3f}\n"
-                    f"\tq1: {log_info['q1']:.3f}, target_q: {log_info['target_q']:.3f}, logp: {log_info['logp']:.3f}, alpha: {log_info['alpha']:.3f}\n"
+                    f"\tq1: {log_info['q1']:.3f}, target_q: {log_info['target_q']:.3f}, sampled_q: {log_info['sampled_q']:.3f}, logp: {log_info['logp']:.3f}, alpha: {log_info['alpha']:.3f}\n"
                     f"\tbatch_reward: {batch.rewards.mean():.3f}, batch_reward_max: {batch.rewards.max():.3f}, batch_reward_min: {batch.rewards.min():.3f}\n"
                 )
                 logs.append(log_info)
