@@ -11,10 +11,10 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
-|  HalfCheetah-v4 |  980~1050   |  14311   |
-|  Hopper-v4      |  990~1010   |   2947   |
-|  Walker2d-v4    |  920~960    |   5447   |
-|  Ant-v4         |  730~750    |   5927   |
+|  HalfCheetah-v4 |  980~1050   |  10894.4 |
+|  Hopper-v4      |  990~1010   |   3313.9 |
+|  Walker2d-v4    |  920~960    |   4356.5 |
+|  Ant-v4         |  770~840    |   4727.8 |
 
 ![](imgs/mujoco.png)
 
@@ -22,9 +22,9 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
-|  cheetah-run    |   990~1010  |   780    |
-|  quadruped-run  |   730~750   |   848    | 
-|  humanoid-run   |   660~680   |   141    |
-|  hopper-hop     |   930~960   |   154    |
+|  cheetah-run    |   920~970   |   820.6  |
+|  quadruped-run  |   730~760   |   803.5  | 
+|  humanoid-run   |   640~690   |   143.3  |
+|  hopper-hop     |   860~920   |   144.6  |
 
 ![](imgs/dmc.png)
