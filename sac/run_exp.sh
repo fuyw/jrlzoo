@@ -8,8 +8,8 @@ envs=(
     # "hopper-hop"
     # "cartpole-balance"
 
-    "HalfCheetah-v4"
     "Hopper-v4"
+    "HalfCheetah-v4"
     "Walker2d-v4"
     "Ant-v4"
 )

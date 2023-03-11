@@ -46,12 +46,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     # initialize the mujoco/dm_control environment
     env = gym.make(config.env_name)
     eval_env = gym.make(config.env_name)
+    for env_ in [env, eval_env]:
+        env_.seed(config.seed)
+        env_.action_space.seed(config.seed+42)
+    np.random.seed(config.seed)
+    random.seed(config.seed)
 
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     max_action = env.action_space.high[0]
-    np.random.seed(config.seed)
-    random.seed(config.seed)
 
     # SAC agent
     agent = SACAgent(obs_dim=obs_dim,
