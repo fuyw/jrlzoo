@@ -129,7 +129,7 @@ class SACAgent:
         self.tau = tau
         self.max_action = max_action
         if target_entropy is None:
-            self.target_entropy = -act_dim
+            self.target_entropy = -act_dim / 2
         else:
             self.target_entropy = target_entropy
 

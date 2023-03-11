@@ -14,7 +14,7 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 |  HalfCheetah-v4 |  980~1050   |  14311   |
 |  Hopper-v4      |  990~1010   |   2947   |
 |  Walker2d-v4    |  920~960    |   5447   |
-|  Ant-v4         |  730~750    |   5927   |
+|  Ant-v4         |  760~840    |   5927   |
 
 ![](imgs/mujoco.png)
 
