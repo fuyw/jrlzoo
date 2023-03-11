@@ -4,17 +4,16 @@ A Jax implemenation of SAC for continuous control tasks.
 
 ## Baselines
 
-Performance on some benchmark tasks: the average of the last 10 evaluation scores across 5 random seeds.
+Performance on some benchmark tasks: the average of the last 10 evaluation scores for every 5k steps across 5 random seeds. (7af0b928cf1951ca07e4c5f4531af91fa4d72729)
 
 ### MuJoCo
 
-
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
-|  HalfCheetah-v2 |  1020~1050  |  14311   |
-|  Hopper-v2      |  990~1010   |   2947   |
-|  Walker2d-v2    |  960~980    |   5447   |
-|  Ant-v2         |  730~750    |   5927   |
+|  HalfCheetah-v2 |  1020~1050  |  10114.7 |
+|  Hopper-v2      |  990~1010   |   2785.1 |
+|  Walker2d-v2    |  960~980    |   4812.6 |
+|  Ant-v2         |  730~750    |   5120.2 |
 
 ![](imgs/mujoco.png)
 
@@ -22,16 +21,16 @@ Performance on some benchmark tasks: the average of the last 10 evaluation score
 
 |     Env Name    |     FPS     |  Reward  |
 |-----------------|-------------|----------|
-|  cheetah-run    |   920~970   |   839    |
-|  quadruped-run  |   730~760   |   773    | 
-|  humanoid-run   |   660~680   |   132    |
-|  hopper-hop     |   860~900   |   201    |
+|  cheetah-run    |   920~970   |   820.6  |
+|  quadruped-run  |   730~760   |   803.5  | 
+|  humanoid-run   |   640~690   |   143.3  |
+|  hopper-hop     |   860~920   |   144.6  |
 
 ![](imgs/dmc.png)
 
 ## Versions
 
-Some software versions:
+Some software versions in the experiments:
 
 - gym==0.21.0
 - dm-control==1.0.10

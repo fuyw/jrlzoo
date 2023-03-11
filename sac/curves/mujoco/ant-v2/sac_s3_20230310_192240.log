@@ -1,0 +1,666 @@
+2023-03-10 19:22:40 - Exp configurations:
+batch_size: 256
+ckpt_freq: 200000
+env_name: Ant-v2
+eval_episodes: 10
+eval_freq: 5000
+gamma: 0.99
+hidden_dims: !!python/tuple
+- 256
+- 256
+initializer: orthogonal
+log_dir: logs
+lr: 0.0003
+max_timesteps: 1000000
+model_dir: saved_models
+seed: 3
+start_timesteps: 10000
+tau: 0.005
+
+2023-03-10 19:22:52 - 
+[#Step 10000] eval_reward: -386.843, eval_time: 2
+
+2023-03-10 19:23:12 - 
+[#Step 20000] eval_reward: -72.777, eval_step: 678, eval_time: 3, time: 0.532
+	actor_loss: -40.407, critic_loss: 9.091, alpha_loss: 0.600
+	q1: 39.742, target_q: 39.720, logp: -1.790, alpha: 0.104
+	batch_reward: -0.434, batch_reward_max: 1.312, batch_reward_min: -2.184
+
+2023-03-10 19:23:30 - 
+[#Step 30000] eval_reward: 536.337, eval_step: 866, eval_time: 5, time: 0.832
+	actor_loss: -29.041, critic_loss: 4.761, alpha_loss: -0.001
+	q1: 28.543, target_q: 28.533, logp: 4.060, alpha: 0.022
+	batch_reward: -0.123, batch_reward_max: 1.547, batch_reward_min: -2.229
+
+2023-03-10 19:23:48 - 
+[#Step 40000] eval_reward: 474.043, eval_step: 807, eval_time: 4, time: 1.131
+	actor_loss: -29.876, critic_loss: 2.799, alpha_loss: -0.001
+	q1: 29.361, target_q: 29.442, logp: 4.043, alpha: 0.026
+	batch_reward: -0.018, batch_reward_max: 1.790, batch_reward_min: -2.857
+
+2023-03-10 19:24:05 - 
+[#Step 50000] eval_reward: 374.471, eval_step: 666, eval_time: 4, time: 1.419
+	actor_loss: -34.607, critic_loss: 2.842, alpha_loss: -0.002
+	q1: 34.357, target_q: 34.371, logp: 4.084, alpha: 0.028
+	batch_reward: 0.162, batch_reward_max: 1.722, batch_reward_min: -1.903
+
+2023-03-10 19:24:24 - 
+[#Step 60000] eval_reward: 678.975, eval_step: 822, eval_time: 4, time: 1.721
+	actor_loss: -38.445, critic_loss: 2.026, alpha_loss: -0.007
+	q1: 38.186, target_q: 38.187, logp: 4.248, alpha: 0.030
+	batch_reward: 0.237, batch_reward_max: 2.055, batch_reward_min: -2.823
+
+2023-03-10 19:24:42 - 
+[#Step 70000] eval_reward: 708.438, eval_step: 842, eval_time: 5, time: 2.024
+	actor_loss: -40.314, critic_loss: 1.834, alpha_loss: -0.008
+	q1: 40.150, target_q: 40.209, logp: 4.243, alpha: 0.032
+	batch_reward: 0.255, batch_reward_max: 2.402, batch_reward_min: -2.435
+
+2023-03-10 19:24:57 - 
+[#Step 80000] eval_reward: 377.449, eval_step: 420, eval_time: 2, time: 2.287
+	actor_loss: -43.577, critic_loss: 2.822, alpha_loss: -0.007
+	q1: 43.436, target_q: 43.155, logp: 4.200, alpha: 0.034
+	batch_reward: 0.377, batch_reward_max: 2.470, batch_reward_min: -1.626
+
+2023-03-10 19:25:16 - 
+[#Step 90000] eval_reward: 744.148, eval_step: 908, eval_time: 5, time: 2.596
+	actor_loss: -45.287, critic_loss: 2.137, alpha_loss: 0.002
+	q1: 45.144, target_q: 45.169, logp: 3.931, alpha: 0.034
+	batch_reward: 0.324, batch_reward_max: 1.554, batch_reward_min: -2.256
+
+2023-03-10 19:25:34 - 
+[#Step 100000] eval_reward: 782.249, eval_step: 931, eval_time: 5, time: 2.901
+	actor_loss: -49.351, critic_loss: 2.173, alpha_loss: 0.000
+	q1: 49.225, target_q: 49.413, logp: 4.000, alpha: 0.034
+	batch_reward: 0.468, batch_reward_max: 2.478, batch_reward_min: -2.029
+
+2023-03-10 19:25:53 - 
+[#Step 110000] eval_reward: 851.589, eval_step: 1000, eval_time: 5, time: 3.216
+	actor_loss: -53.229, critic_loss: 2.015, alpha_loss: -0.001
+	q1: 53.060, target_q: 52.879, logp: 4.033, alpha: 0.034
+	batch_reward: 0.471, batch_reward_max: 2.234, batch_reward_min: -2.376
+
+2023-03-10 19:26:11 - 
+[#Step 120000] eval_reward: 838.209, eval_step: 856, eval_time: 5, time: 3.520
+	actor_loss: -55.744, critic_loss: 2.560, alpha_loss: -0.006
+	q1: 55.642, target_q: 55.702, logp: 4.167, alpha: 0.034
+	batch_reward: 0.535, batch_reward_max: 2.129, batch_reward_min: -1.856
+
+2023-03-10 19:26:29 - 
+[#Step 130000] eval_reward: 725.538, eval_step: 739, eval_time: 4, time: 3.812
+	actor_loss: -55.625, critic_loss: 3.079, alpha_loss: -0.009
+	q1: 55.736, target_q: 55.827, logp: 4.270, alpha: 0.035
+	batch_reward: 0.563, batch_reward_max: 3.049, batch_reward_min: -2.526
+
+2023-03-10 19:26:46 - 
+[#Step 140000] eval_reward: 802.569, eval_step: 692, eval_time: 3, time: 4.099
+	actor_loss: -61.107, critic_loss: 2.103, alpha_loss: -0.002
+	q1: 61.046, target_q: 61.013, logp: 4.043, alpha: 0.035
+	batch_reward: 0.647, batch_reward_max: 2.385, batch_reward_min: -1.537
+
+2023-03-10 19:27:05 - 
+[#Step 150000] eval_reward: 941.701, eval_step: 851, eval_time: 5, time: 4.406
+	actor_loss: -62.966, critic_loss: 2.922, alpha_loss: -0.001
+	q1: 62.913, target_q: 62.570, logp: 4.037, alpha: 0.037
+	batch_reward: 0.671, batch_reward_max: 2.435, batch_reward_min: -3.117
+
+2023-03-10 19:27:23 - 
+[#Step 160000] eval_reward: 1057.007, eval_step: 931, eval_time: 5, time: 4.716
+	actor_loss: -66.056, critic_loss: 3.231, alpha_loss: -0.006
+	q1: 65.958, target_q: 65.879, logp: 4.156, alpha: 0.038
+	batch_reward: 0.648, batch_reward_max: 2.132, batch_reward_min: -1.772
+
+2023-03-10 19:27:41 - 
+[#Step 170000] eval_reward: 865.676, eval_step: 653, eval_time: 3, time: 5.006
+	actor_loss: -69.984, critic_loss: 3.248, alpha_loss: -0.001
+	q1: 69.826, target_q: 70.024, logp: 4.021, alpha: 0.040
+	batch_reward: 0.666, batch_reward_max: 3.478, batch_reward_min: -2.917
+
+2023-03-10 19:27:59 - 
+[#Step 180000] eval_reward: 1368.295, eval_step: 838, eval_time: 4, time: 5.314
+	actor_loss: -74.136, critic_loss: 5.342, alpha_loss: -0.001
+	q1: 74.239, target_q: 74.107, logp: 4.029, alpha: 0.043
+	batch_reward: 0.703, batch_reward_max: 2.617, batch_reward_min: -2.214
+
+2023-03-10 19:28:17 - 
+[#Step 190000] eval_reward: 1258.045, eval_step: 852, eval_time: 4, time: 5.616
+	actor_loss: -76.862, critic_loss: 5.479, alpha_loss: 0.007
+	q1: 76.752, target_q: 76.897, logp: 3.845, alpha: 0.044
+	batch_reward: 0.642, batch_reward_max: 3.032, batch_reward_min: -2.287
+
+2023-03-10 19:28:35 - 
+[#Step 200000] eval_reward: 1277.114, eval_step: 744, eval_time: 4, time: 5.907
+	actor_loss: -82.904, critic_loss: 6.376, alpha_loss: -0.005
+	q1: 82.842, target_q: 82.947, logp: 4.100, alpha: 0.046
+	batch_reward: 0.745, batch_reward_max: 3.366, batch_reward_min: -1.338
+
+2023-03-10 19:28:35 - Saving checkpoint at step: 1
+2023-03-10 19:28:35 - Saved checkpoint at saved_models/ant-v2/sac_s3_20230310_192240/actor_1
+2023-03-10 19:28:35 - Saving checkpoint at step: 1
+2023-03-10 19:28:35 - Saved checkpoint at saved_models/ant-v2/sac_s3_20230310_192240/critic_1
+2023-03-10 19:28:51 - 
+[#Step 210000] eval_reward: 873.724, eval_step: 544, eval_time: 3, time: 6.182
+	actor_loss: -90.085, critic_loss: 10.733, alpha_loss: 0.003
+	q1: 89.700, target_q: 89.614, logp: 3.931, alpha: 0.049
+	batch_reward: 0.822, batch_reward_max: 4.089, batch_reward_min: -2.012
+
+2023-03-10 19:29:09 - 
+[#Step 220000] eval_reward: 1180.829, eval_step: 704, eval_time: 4, time: 6.472
+	actor_loss: -95.449, critic_loss: 6.101, alpha_loss: 0.000
+	q1: 95.390, target_q: 95.639, logp: 3.997, alpha: 0.050
+	batch_reward: 0.858, batch_reward_max: 3.740, batch_reward_min: -2.156
+
+2023-03-10 19:29:27 - 
+[#Step 230000] eval_reward: 1538.180, eval_step: 889, eval_time: 5, time: 6.781
+	actor_loss: -94.729, critic_loss: 7.442, alpha_loss: 0.020
+	q1: 94.495, target_q: 94.566, logp: 3.627, alpha: 0.053
+	batch_reward: 0.856, batch_reward_max: 4.157, batch_reward_min: -1.416
+
+2023-03-10 19:29:44 - 
+[#Step 240000] eval_reward: 896.036, eval_step: 554, eval_time: 3, time: 7.054
+	actor_loss: -101.867, critic_loss: 9.567, alpha_loss: -0.002
+	q1: 101.387, target_q: 100.956, logp: 4.032, alpha: 0.057
+	batch_reward: 0.901, batch_reward_max: 3.485, batch_reward_min: -2.664
+
+2023-03-10 19:30:02 - 
+[#Step 250000] eval_reward: 1720.211, eval_step: 849, eval_time: 4, time: 7.356
+	actor_loss: -110.369, critic_loss: 15.457, alpha_loss: -0.007
+	q1: 109.862, target_q: 109.649, logp: 4.126, alpha: 0.058
+	batch_reward: 0.989, batch_reward_max: 4.007, batch_reward_min: -2.415
+
+2023-03-10 19:30:20 - 
+[#Step 260000] eval_reward: 2221.891, eval_step: 959, eval_time: 5, time: 7.662
+	actor_loss: -116.826, critic_loss: 11.352, alpha_loss: -0.004
+	q1: 116.938, target_q: 116.417, logp: 4.071, alpha: 0.061
+	batch_reward: 1.027, batch_reward_max: 4.375, batch_reward_min: -1.572
+
+2023-03-10 19:30:38 - 
+[#Step 270000] eval_reward: 1853.235, eval_step: 747, eval_time: 4, time: 7.961
+	actor_loss: -114.933, critic_loss: 14.354, alpha_loss: -0.014
+	q1: 114.252, target_q: 114.637, logp: 4.224, alpha: 0.063
+	batch_reward: 0.984, batch_reward_max: 4.081, batch_reward_min: -2.430
+
+2023-03-10 19:30:56 - 
+[#Step 280000] eval_reward: 1666.259, eval_step: 861, eval_time: 4, time: 8.265
+	actor_loss: -119.463, critic_loss: 10.836, alpha_loss: -0.006
+	q1: 118.995, target_q: 119.461, logp: 4.096, alpha: 0.064
+	batch_reward: 1.024, batch_reward_max: 4.591, batch_reward_min: -1.729
+
+2023-03-10 19:31:14 - 
+[#Step 290000] eval_reward: 2310.455, eval_step: 866, eval_time: 5, time: 8.569
+	actor_loss: -124.377, critic_loss: 15.336, alpha_loss: 0.016
+	q1: 124.137, target_q: 123.630, logp: 3.750, alpha: 0.066
+	batch_reward: 1.091, batch_reward_max: 4.047, batch_reward_min: -1.640
+
+2023-03-10 19:31:32 - 
+[#Step 300000] eval_reward: 2209.174, eval_step: 770, eval_time: 4, time: 8.864
+	actor_loss: -136.246, critic_loss: 15.901, alpha_loss: -0.003
+	q1: 135.786, target_q: 136.361, logp: 4.046, alpha: 0.067
+	batch_reward: 1.138, batch_reward_max: 4.444, batch_reward_min: -2.076
+
+2023-03-10 19:31:51 - 
+[#Step 310000] eval_reward: 2133.789, eval_step: 811, eval_time: 5, time: 9.177
+	actor_loss: -129.747, critic_loss: 13.202, alpha_loss: 0.021
+	q1: 128.820, target_q: 129.018, logp: 3.689, alpha: 0.068
+	batch_reward: 1.186, batch_reward_max: 5.390, batch_reward_min: -1.246
+
+2023-03-10 19:32:08 - 
+[#Step 320000] eval_reward: 1813.271, eval_step: 690, eval_time: 3, time: 9.463
+	actor_loss: -150.749, critic_loss: 120.375, alpha_loss: -0.020
+	q1: 150.445, target_q: 150.309, logp: 4.296, alpha: 0.069
+	batch_reward: 1.359, batch_reward_max: 4.556, batch_reward_min: -1.239
+
+2023-03-10 19:32:24 - 
+[#Step 330000] eval_reward: 1173.596, eval_step: 493, eval_time: 3, time: 9.736
+	actor_loss: -158.729, critic_loss: 18.006, alpha_loss: -0.012
+	q1: 158.418, target_q: 158.557, logp: 4.170, alpha: 0.070
+	batch_reward: 1.443, batch_reward_max: 4.457, batch_reward_min: -1.238
+
+2023-03-10 19:32:42 - 
+[#Step 340000] eval_reward: 2517.061, eval_step: 884, eval_time: 4, time: 10.036
+	actor_loss: -151.169, critic_loss: 22.735, alpha_loss: -0.003
+	q1: 150.950, target_q: 151.127, logp: 4.047, alpha: 0.071
+	batch_reward: 1.394, batch_reward_max: 4.690, batch_reward_min: -1.997
+
+2023-03-10 19:33:00 - 
+[#Step 350000] eval_reward: 2615.641, eval_step: 867, eval_time: 4, time: 10.335
+	actor_loss: -149.608, critic_loss: 12.134, alpha_loss: 0.015
+	q1: 149.474, target_q: 149.826, logp: 3.795, alpha: 0.074
+	batch_reward: 1.423, batch_reward_max: 4.722, batch_reward_min: -1.039
+
+2023-03-10 19:33:18 - 
+[#Step 360000] eval_reward: 2592.981, eval_step: 909, eval_time: 5, time: 10.635
+	actor_loss: -161.698, critic_loss: 18.611, alpha_loss: -0.020
+	q1: 161.619, target_q: 161.868, logp: 4.265, alpha: 0.075
+	batch_reward: 1.638, batch_reward_max: 5.922, batch_reward_min: -2.377
+
+2023-03-10 19:33:36 - 
+[#Step 370000] eval_reward: 2972.086, eval_step: 891, eval_time: 5, time: 10.933
+	actor_loss: -163.701, critic_loss: 27.783, alpha_loss: -0.002
+	q1: 163.574, target_q: 163.333, logp: 4.021, alpha: 0.076
+	batch_reward: 1.514, batch_reward_max: 4.907, batch_reward_min: -0.979
+
+2023-03-10 19:33:54 - 
+[#Step 380000] eval_reward: 3326.962, eval_step: 925, eval_time: 5, time: 11.236
+	actor_loss: -174.323, critic_loss: 37.622, alpha_loss: -0.022
+	q1: 174.039, target_q: 173.418, logp: 4.285, alpha: 0.078
+	batch_reward: 1.560, batch_reward_max: 5.915, batch_reward_min: -1.083
+
+2023-03-10 19:34:12 - 
+[#Step 390000] eval_reward: 2666.966, eval_step: 897, eval_time: 5, time: 11.537
+	actor_loss: -176.948, critic_loss: 19.990, alpha_loss: 0.037
+	q1: 176.710, target_q: 176.996, logp: 3.530, alpha: 0.078
+	batch_reward: 1.681, batch_reward_max: 5.307, batch_reward_min: -2.126
+
+2023-03-10 19:34:31 - 
+[#Step 400000] eval_reward: 3063.758, eval_step: 1000, eval_time: 5, time: 11.849
+	actor_loss: -187.066, critic_loss: 31.772, alpha_loss: -0.030
+	q1: 186.396, target_q: 186.144, logp: 4.372, alpha: 0.081
+	batch_reward: 1.743, batch_reward_max: 5.458, batch_reward_min: -0.943
+
+2023-03-10 19:34:31 - Saving checkpoint at step: 2
+2023-03-10 19:34:31 - Saved checkpoint at saved_models/ant-v2/sac_s3_20230310_192240/actor_2
+2023-03-10 19:34:31 - Saving checkpoint at step: 2
+2023-03-10 19:34:31 - Saved checkpoint at saved_models/ant-v2/sac_s3_20230310_192240/critic_2
+2023-03-10 19:34:49 - 
+[#Step 410000] eval_reward: 2217.568, eval_step: 760, eval_time: 4, time: 12.142
+	actor_loss: -189.539, critic_loss: 53.692, alpha_loss: -0.037
+	q1: 189.405, target_q: 188.775, logp: 4.452, alpha: 0.081
+	batch_reward: 1.741, batch_reward_max: 5.520, batch_reward_min: -1.689
+
+2023-03-10 19:35:04 - 
+[#Step 420000] eval_reward: 1301.626, eval_step: 446, eval_time: 2, time: 12.402
+	actor_loss: -186.143, critic_loss: 37.346, alpha_loss: -0.010
+	q1: 185.802, target_q: 185.730, logp: 4.116, alpha: 0.085
+	batch_reward: 1.659, batch_reward_max: 5.073, batch_reward_min: -1.215
+
+2023-03-10 19:35:22 - 
+[#Step 430000] eval_reward: 3071.983, eval_step: 846, eval_time: 4, time: 12.697
+	actor_loss: -186.057, critic_loss: 23.335, alpha_loss: 0.024
+	q1: 185.611, target_q: 186.102, logp: 3.717, alpha: 0.084
+	batch_reward: 1.896, batch_reward_max: 5.560, batch_reward_min: -1.724
+
+2023-03-10 19:35:39 - 
+[#Step 440000] eval_reward: 2527.027, eval_step: 709, eval_time: 4, time: 12.978
+	actor_loss: -194.935, critic_loss: 43.700, alpha_loss: -0.018
+	q1: 194.006, target_q: 193.659, logp: 4.208, alpha: 0.086
+	batch_reward: 1.680, batch_reward_max: 5.446, batch_reward_min: -2.924
+
+2023-03-10 19:35:57 - 
+[#Step 450000] eval_reward: 2333.756, eval_step: 864, eval_time: 4, time: 13.271
+	actor_loss: -194.192, critic_loss: 20.514, alpha_loss: -0.004
+	q1: 193.896, target_q: 194.143, logp: 4.048, alpha: 0.085
+	batch_reward: 1.813, batch_reward_max: 6.140, batch_reward_min: -1.286
+
+2023-03-10 19:36:14 - 
+[#Step 460000] eval_reward: 2843.434, eval_step: 772, eval_time: 4, time: 13.564
+	actor_loss: -197.476, critic_loss: 26.075, alpha_loss: 0.010
+	q1: 197.657, target_q: 197.589, logp: 3.885, alpha: 0.086
+	batch_reward: 1.823, batch_reward_max: 5.652, batch_reward_min: -0.950
+
+2023-03-10 19:36:33 - 
+[#Step 470000] eval_reward: 2632.351, eval_step: 918, eval_time: 5, time: 13.873
+	actor_loss: -193.683, critic_loss: 33.125, alpha_loss: 0.022
+	q1: 193.304, target_q: 193.062, logp: 3.754, alpha: 0.089
+	batch_reward: 1.722, batch_reward_max: 6.144, batch_reward_min: -1.317
+
+2023-03-10 19:36:51 - 
+[#Step 480000] eval_reward: 2964.230, eval_step: 911, eval_time: 5, time: 14.181
+	actor_loss: -198.052, critic_loss: 32.154, alpha_loss: -0.009
+	q1: 197.901, target_q: 197.611, logp: 4.100, alpha: 0.089
+	batch_reward: 1.846, batch_reward_max: 5.889, batch_reward_min: -0.902
+
+2023-03-10 19:37:09 - 
+[#Step 490000] eval_reward: 2911.984, eval_step: 832, eval_time: 4, time: 14.478
+	actor_loss: -203.865, critic_loss: 38.584, alpha_loss: 0.025
+	q1: 203.455, target_q: 203.154, logp: 3.725, alpha: 0.090
+	batch_reward: 1.754, batch_reward_max: 5.442, batch_reward_min: -1.208
+
+2023-03-10 19:37:26 - 
+[#Step 500000] eval_reward: 2233.359, eval_step: 767, eval_time: 4, time: 14.768
+	actor_loss: -215.434, critic_loss: 27.930, alpha_loss: -0.033
+	q1: 214.986, target_q: 215.318, logp: 4.359, alpha: 0.091
+	batch_reward: 2.013, batch_reward_max: 5.691, batch_reward_min: -0.954
+
+2023-03-10 19:37:45 - 
+[#Step 510000] eval_reward: 3565.332, eval_step: 1000, eval_time: 5, time: 15.087
+	actor_loss: -206.081, critic_loss: 42.381, alpha_loss: -0.015
+	q1: 205.659, target_q: 206.299, logp: 4.153, alpha: 0.095
+	batch_reward: 1.827, batch_reward_max: 5.396, batch_reward_min: -1.859
+
+2023-03-10 19:38:04 - 
+[#Step 520000] eval_reward: 3875.685, eval_step: 1000, eval_time: 5, time: 15.401
+	actor_loss: -211.855, critic_loss: 30.801, alpha_loss: 0.002
+	q1: 211.790, target_q: 212.207, logp: 3.980, alpha: 0.095
+	batch_reward: 2.021, batch_reward_max: 5.980, batch_reward_min: -1.928
+
+2023-03-10 19:38:23 - 
+[#Step 530000] eval_reward: 2611.724, eval_step: 859, eval_time: 4, time: 15.706
+	actor_loss: -208.927, critic_loss: 39.101, alpha_loss: 0.011
+	q1: 208.731, target_q: 209.146, logp: 3.887, alpha: 0.094
+	batch_reward: 1.816, batch_reward_max: 6.071, batch_reward_min: -1.202
+
+2023-03-10 19:38:41 - 
+[#Step 540000] eval_reward: 3392.766, eval_step: 829, eval_time: 4, time: 16.009
+	actor_loss: -210.974, critic_loss: 34.567, alpha_loss: 0.049
+	q1: 210.624, target_q: 211.451, logp: 3.484, alpha: 0.095
+	batch_reward: 2.038, batch_reward_max: 5.823, batch_reward_min: -1.002
+
+2023-03-10 19:38:58 - 
+[#Step 550000] eval_reward: 2745.596, eval_step: 702, eval_time: 4, time: 16.301
+	actor_loss: -219.455, critic_loss: 54.284, alpha_loss: 0.006
+	q1: 219.611, target_q: 218.353, logp: 3.937, alpha: 0.097
+	batch_reward: 2.043, batch_reward_max: 6.837, batch_reward_min: -1.543
+
+2023-03-10 19:39:15 - 
+[#Step 560000] eval_reward: 2597.772, eval_step: 653, eval_time: 3, time: 16.586
+	actor_loss: -228.090, critic_loss: 36.394, alpha_loss: 0.001
+	q1: 227.669, target_q: 227.467, logp: 3.989, alpha: 0.097
+	batch_reward: 2.080, batch_reward_max: 6.444, batch_reward_min: -1.499
+
+2023-03-10 19:39:32 - 
+[#Step 570000] eval_reward: 2967.746, eval_step: 699, eval_time: 4, time: 16.869
+	actor_loss: -234.247, critic_loss: 47.288, alpha_loss: -0.034
+	q1: 234.324, target_q: 233.748, logp: 4.354, alpha: 0.096
+	batch_reward: 2.216, batch_reward_max: 7.544, batch_reward_min: -1.019
+
+2023-03-10 19:39:50 - 
+[#Step 580000] eval_reward: 3491.240, eval_step: 865, eval_time: 4, time: 17.169
+	actor_loss: -240.095, critic_loss: 25.366, alpha_loss: -0.026
+	q1: 240.006, target_q: 240.274, logp: 4.265, alpha: 0.098
+	batch_reward: 2.364, batch_reward_max: 6.079, batch_reward_min: -1.993
+
+2023-03-10 19:40:07 - 
+[#Step 590000] eval_reward: 2518.818, eval_step: 612, eval_time: 3, time: 17.443
+	actor_loss: -236.971, critic_loss: 88.820, alpha_loss: 0.015
+	q1: 236.665, target_q: 236.081, logp: 3.849, alpha: 0.100
+	batch_reward: 2.345, batch_reward_max: 5.964, batch_reward_min: -1.328
+
+2023-03-10 19:40:24 - 
+[#Step 600000] eval_reward: 3390.011, eval_step: 778, eval_time: 4, time: 17.735
+	actor_loss: -247.454, critic_loss: 35.216, alpha_loss: -0.028
+	q1: 247.457, target_q: 246.702, logp: 4.284, alpha: 0.097
+	batch_reward: 2.361, batch_reward_max: 5.955, batch_reward_min: -1.477
+
+2023-03-10 19:40:24 - Saving checkpoint at step: 3
+2023-03-10 19:40:24 - Saved checkpoint at saved_models/ant-v2/sac_s3_20230310_192240/actor_3
+2023-03-10 19:40:24 - Saving checkpoint at step: 3
+2023-03-10 19:40:24 - Saved checkpoint at saved_models/ant-v2/sac_s3_20230310_192240/critic_3
+2023-03-10 19:40:42 - 
+[#Step 610000] eval_reward: 3434.074, eval_step: 846, eval_time: 4, time: 18.030
+	actor_loss: -234.377, critic_loss: 36.411, alpha_loss: 0.022
+	q1: 234.135, target_q: 234.667, logp: 3.781, alpha: 0.101
+	batch_reward: 2.303, batch_reward_max: 6.019, batch_reward_min: -1.012
+
+2023-03-10 19:41:00 - 
+[#Step 620000] eval_reward: 4060.481, eval_step: 1000, eval_time: 5, time: 18.336
+	actor_loss: -250.471, critic_loss: 43.707, alpha_loss: -0.035
+	q1: 250.115, target_q: 251.120, logp: 4.345, alpha: 0.100
+	batch_reward: 2.280, batch_reward_max: 6.029, batch_reward_min: -1.920
+
+2023-03-10 19:41:18 - 
+[#Step 630000] eval_reward: 2935.892, eval_step: 732, eval_time: 4, time: 18.626
+	actor_loss: -245.723, critic_loss: 34.322, alpha_loss: 0.020
+	q1: 245.411, target_q: 245.693, logp: 3.807, alpha: 0.102
+	batch_reward: 2.477, batch_reward_max: 6.087, batch_reward_min: -1.082
+
+2023-03-10 19:41:35 - 
+[#Step 640000] eval_reward: 3124.852, eval_step: 692, eval_time: 4, time: 18.911
+	actor_loss: -244.119, critic_loss: 36.217, alpha_loss: 0.002
+	q1: 243.776, target_q: 244.304, logp: 3.981, alpha: 0.103
+	batch_reward: 2.314, batch_reward_max: 6.090, batch_reward_min: -1.443
+
+2023-03-10 19:41:52 - 
+[#Step 650000] eval_reward: 2517.248, eval_step: 591, eval_time: 3, time: 19.189
+	actor_loss: -246.283, critic_loss: 27.462, alpha_loss: 0.005
+	q1: 246.310, target_q: 246.663, logp: 3.956, alpha: 0.105
+	batch_reward: 2.397, batch_reward_max: 6.368, batch_reward_min: -1.522
+
+2023-03-10 19:42:09 - 
+[#Step 660000] eval_reward: 3617.487, eval_step: 828, eval_time: 4, time: 19.483
+	actor_loss: -246.592, critic_loss: 93.497, alpha_loss: -0.003
+	q1: 246.331, target_q: 246.631, logp: 4.032, alpha: 0.104
+	batch_reward: 2.406, batch_reward_max: 6.377, batch_reward_min: -1.192
+
+2023-03-10 19:42:27 - 
+[#Step 670000] eval_reward: 3719.679, eval_step: 895, eval_time: 5, time: 19.785
+	actor_loss: -254.467, critic_loss: 29.293, alpha_loss: -0.020
+	q1: 254.214, target_q: 254.187, logp: 4.188, alpha: 0.105
+	batch_reward: 2.397, batch_reward_max: 6.498, batch_reward_min: -1.178
+
+2023-03-10 19:42:44 - 
+[#Step 680000] eval_reward: 3241.411, eval_step: 725, eval_time: 4, time: 20.070
+	actor_loss: -263.371, critic_loss: 39.028, alpha_loss: 0.007
+	q1: 263.633, target_q: 264.028, logp: 3.932, alpha: 0.106
+	batch_reward: 2.474, batch_reward_max: 7.019, batch_reward_min: -2.463
+
+2023-03-10 19:43:02 - 
+[#Step 690000] eval_reward: 3135.394, eval_step: 727, eval_time: 4, time: 20.356
+	actor_loss: -260.528, critic_loss: 35.729, alpha_loss: 0.009
+	q1: 260.573, target_q: 259.487, logp: 3.916, alpha: 0.107
+	batch_reward: 2.569, batch_reward_max: 6.318, batch_reward_min: -0.853
+
+2023-03-10 19:43:19 - 
+[#Step 700000] eval_reward: 3362.070, eval_step: 742, eval_time: 4, time: 20.639
+	actor_loss: -257.098, critic_loss: 41.140, alpha_loss: 0.023
+	q1: 257.091, target_q: 258.016, logp: 3.789, alpha: 0.108
+	batch_reward: 2.500, batch_reward_max: 6.305, batch_reward_min: -1.305
+
+2023-03-10 19:43:37 - 
+[#Step 710000] eval_reward: 4138.947, eval_step: 1000, eval_time: 5, time: 20.947
+	actor_loss: -263.082, critic_loss: 59.029, alpha_loss: -0.027
+	q1: 262.228, target_q: 262.662, logp: 4.247, alpha: 0.108
+	batch_reward: 2.581, batch_reward_max: 7.333, batch_reward_min: -2.766
+
+2023-03-10 19:43:55 - 
+[#Step 720000] eval_reward: 4180.686, eval_step: 947, eval_time: 5, time: 21.249
+	actor_loss: -256.834, critic_loss: 49.096, alpha_loss: -0.002
+	q1: 256.589, target_q: 256.983, logp: 4.018, alpha: 0.111
+	batch_reward: 2.446, batch_reward_max: 6.732, batch_reward_min: -1.082
+
+2023-03-10 19:44:13 - 
+[#Step 730000] eval_reward: 3628.654, eval_step: 846, eval_time: 4, time: 21.539
+	actor_loss: -280.767, critic_loss: 31.787, alpha_loss: -0.009
+	q1: 280.169, target_q: 280.407, logp: 4.078, alpha: 0.113
+	batch_reward: 2.769, batch_reward_max: 6.863, batch_reward_min: -1.003
+
+2023-03-10 19:44:30 - 
+[#Step 740000] eval_reward: 3726.821, eval_step: 769, eval_time: 4, time: 21.829
+	actor_loss: -266.074, critic_loss: 34.301, alpha_loss: 0.023
+	q1: 265.221, target_q: 264.610, logp: 3.796, alpha: 0.114
+	batch_reward: 2.573, batch_reward_max: 7.172, batch_reward_min: -0.982
+
+2023-03-10 19:44:47 - 
+[#Step 750000] eval_reward: 2951.304, eval_step: 653, eval_time: 3, time: 22.109
+	actor_loss: -268.946, critic_loss: 41.582, alpha_loss: 0.042
+	q1: 268.852, target_q: 269.156, logp: 3.627, alpha: 0.114
+	batch_reward: 2.669, batch_reward_max: 6.467, batch_reward_min: -2.158
+
+2023-03-10 19:45:05 - 
+[#Step 760000] eval_reward: 4168.433, eval_step: 833, eval_time: 4, time: 22.408
+	actor_loss: -293.031, critic_loss: 49.260, alpha_loss: -0.083
+	q1: 292.575, target_q: 293.067, logp: 4.717, alpha: 0.116
+	batch_reward: 3.025, batch_reward_max: 6.362, batch_reward_min: -1.962
+
+2023-03-10 19:45:23 - 
+[#Step 770000] eval_reward: 4230.110, eval_step: 921, eval_time: 5, time: 22.713
+	actor_loss: -286.868, critic_loss: 45.840, alpha_loss: -0.014
+	q1: 286.854, target_q: 286.833, logp: 4.121, alpha: 0.117
+	batch_reward: 2.793, batch_reward_max: 6.541, batch_reward_min: -0.669
+
+2023-03-10 19:45:42 - 
+[#Step 780000] eval_reward: 4833.501, eval_step: 1000, eval_time: 5, time: 23.021
+	actor_loss: -277.956, critic_loss: 44.212, alpha_loss: 0.016
+	q1: 277.616, target_q: 276.946, logp: 3.865, alpha: 0.118
+	batch_reward: 2.615, batch_reward_max: 6.809, batch_reward_min: -2.041
+
+2023-03-10 19:45:59 - 
+[#Step 790000] eval_reward: 4006.049, eval_step: 819, eval_time: 4, time: 23.316
+	actor_loss: -281.113, critic_loss: 51.898, alpha_loss: 0.077
+	q1: 280.493, target_q: 280.208, logp: 3.354, alpha: 0.119
+	batch_reward: 2.771, batch_reward_max: 6.436, batch_reward_min: -1.139
+
+2023-03-10 19:46:17 - 
+[#Step 800000] eval_reward: 4079.336, eval_step: 892, eval_time: 4, time: 23.610
+	actor_loss: -296.969, critic_loss: 38.740, alpha_loss: 0.014
+	q1: 296.498, target_q: 296.284, logp: 3.881, alpha: 0.121
+	batch_reward: 2.865, batch_reward_max: 6.981, batch_reward_min: -2.646
+
+2023-03-10 19:46:17 - Saving checkpoint at step: 4
+2023-03-10 19:46:17 - Saved checkpoint at saved_models/ant-v2/sac_s3_20230310_192240/actor_4
+2023-03-10 19:46:17 - Saving checkpoint at step: 4
+2023-03-10 19:46:17 - Saved checkpoint at saved_models/ant-v2/sac_s3_20230310_192240/critic_4
+2023-03-10 19:46:36 - 
+[#Step 810000] eval_reward: 4652.604, eval_step: 977, eval_time: 5, time: 23.922
+	actor_loss: -282.720, critic_loss: 30.672, alpha_loss: -0.008
+	q1: 282.655, target_q: 282.153, logp: 4.070, alpha: 0.121
+	batch_reward: 2.675, batch_reward_max: 6.744, batch_reward_min: -1.409
+
+2023-03-10 19:46:54 - 
+[#Step 820000] eval_reward: 4692.976, eval_step: 959, eval_time: 5, time: 24.233
+	actor_loss: -294.834, critic_loss: 74.921, alpha_loss: 0.006
+	q1: 293.773, target_q: 292.534, logp: 3.949, alpha: 0.123
+	batch_reward: 2.764, batch_reward_max: 6.769, batch_reward_min: -1.466
+
+2023-03-10 19:47:13 - 
+[#Step 830000] eval_reward: 5019.728, eval_step: 1000, eval_time: 5, time: 24.549
+	actor_loss: -293.484, critic_loss: 62.768, alpha_loss: -0.038
+	q1: 293.138, target_q: 293.871, logp: 4.302, alpha: 0.125
+	batch_reward: 2.810, batch_reward_max: 6.825, batch_reward_min: -1.348
+
+2023-03-10 19:47:32 - 
+[#Step 840000] eval_reward: 4490.612, eval_step: 895, eval_time: 5, time: 24.858
+	actor_loss: -299.847, critic_loss: 38.705, alpha_loss: 0.014
+	q1: 299.703, target_q: 299.085, logp: 3.890, alpha: 0.126
+	batch_reward: 3.115, batch_reward_max: 6.829, batch_reward_min: -0.935
+
+2023-03-10 19:47:51 - 
+[#Step 850000] eval_reward: 4657.254, eval_step: 958, eval_time: 5, time: 25.179
+	actor_loss: -303.276, critic_loss: 44.744, alpha_loss: -0.050
+	q1: 302.614, target_q: 303.391, logp: 4.397, alpha: 0.127
+	batch_reward: 2.953, batch_reward_max: 6.680, batch_reward_min: -2.395
+
+2023-03-10 19:48:10 - 
+[#Step 860000] eval_reward: 3960.952, eval_step: 857, eval_time: 5, time: 25.488
+	actor_loss: -291.264, critic_loss: 82.215, alpha_loss: 0.029
+	q1: 291.723, target_q: 290.713, logp: 3.769, alpha: 0.127
+	batch_reward: 2.859, batch_reward_max: 6.799, batch_reward_min: -1.341
+
+2023-03-10 19:48:28 - 
+[#Step 870000] eval_reward: 4480.046, eval_step: 992, eval_time: 5, time: 25.803
+	actor_loss: -296.350, critic_loss: 40.746, alpha_loss: 0.051
+	q1: 296.578, target_q: 296.475, logp: 3.604, alpha: 0.130
+	batch_reward: 2.934, batch_reward_max: 7.022, batch_reward_min: -1.782
+
+2023-03-10 19:48:46 - 
+[#Step 880000] eval_reward: 3891.769, eval_step: 756, eval_time: 4, time: 26.092
+	actor_loss: -297.108, critic_loss: 45.648, alpha_loss: 0.037
+	q1: 297.097, target_q: 297.179, logp: 3.709, alpha: 0.127
+	batch_reward: 2.846, batch_reward_max: 6.770, batch_reward_min: -1.525
+
+2023-03-10 19:49:04 - 
+[#Step 890000] eval_reward: 4025.555, eval_step: 877, eval_time: 4, time: 26.391
+	actor_loss: -306.273, critic_loss: 91.203, alpha_loss: -0.022
+	q1: 305.684, target_q: 305.994, logp: 4.166, alpha: 0.130
+	batch_reward: 2.898, batch_reward_max: 7.304, batch_reward_min: -2.589
+
+2023-03-10 19:49:22 - 
+[#Step 900000] eval_reward: 4485.409, eval_step: 932, eval_time: 5, time: 26.701
+	actor_loss: -318.321, critic_loss: 51.675, alpha_loss: -0.003
+	q1: 318.359, target_q: 318.291, logp: 4.020, alpha: 0.132
+	batch_reward: 3.117, batch_reward_max: 7.368, batch_reward_min: -1.340
+
+2023-03-10 19:49:39 - 
+[#Step 910000] eval_reward: 3214.306, eval_step: 633, eval_time: 3, time: 26.982
+	actor_loss: -326.057, critic_loss: 57.559, alpha_loss: -0.056
+	q1: 325.274, target_q: 325.137, logp: 4.417, alpha: 0.133
+	batch_reward: 3.450, batch_reward_max: 7.030, batch_reward_min: -1.246
+
+2023-03-10 19:49:58 - 
+[#Step 920000] eval_reward: 4226.627, eval_step: 897, eval_time: 5, time: 27.288
+	actor_loss: -305.045, critic_loss: 104.779, alpha_loss: 0.041
+	q1: 305.007, target_q: 304.541, logp: 3.697, alpha: 0.134
+	batch_reward: 2.902, batch_reward_max: 6.922, batch_reward_min: -1.217
+
+2023-03-10 19:50:16 - 
+[#Step 930000] eval_reward: 4750.754, eval_step: 910, eval_time: 5, time: 27.590
+	actor_loss: -313.535, critic_loss: 68.203, alpha_loss: -0.034
+	q1: 313.239, target_q: 312.369, logp: 4.257, alpha: 0.133
+	batch_reward: 3.121, batch_reward_max: 7.369, batch_reward_min: -1.564
+
+2023-03-10 19:50:34 - 
+[#Step 940000] eval_reward: 4487.086, eval_step: 906, eval_time: 4, time: 27.892
+	actor_loss: -328.186, critic_loss: 85.156, alpha_loss: -0.070
+	q1: 328.079, target_q: 327.154, logp: 4.522, alpha: 0.134
+	batch_reward: 3.209, batch_reward_max: 7.115, batch_reward_min: -1.713
+
+2023-03-10 19:50:52 - 
+[#Step 950000] eval_reward: 4857.111, eval_step: 923, eval_time: 5, time: 28.196
+	actor_loss: -321.450, critic_loss: 72.127, alpha_loss: -0.034
+	q1: 321.353, target_q: 321.354, logp: 4.249, alpha: 0.136
+	batch_reward: 3.309, batch_reward_max: 6.758, batch_reward_min: -1.997
+
+2023-03-10 19:51:03 - 
+[#Step 955000] eval_reward: 4214.439, eval_step: 818, eval_time: 4, time: 28.374
+	actor_loss: -329.079, critic_loss: 55.370, alpha_loss: -0.058
+	q1: 328.901, target_q: 329.311, logp: 4.433, alpha: 0.133
+	batch_reward: 3.345, batch_reward_max: 6.479, batch_reward_min: -1.311
+
+2023-03-10 19:51:14 - 
+[#Step 960000] eval_reward: 5286.082, eval_step: 1000, eval_time: 5, time: 28.569
+	actor_loss: -309.381, critic_loss: 35.671, alpha_loss: 0.064
+	q1: 309.119, target_q: 308.669, logp: 3.528, alpha: 0.136
+	batch_reward: 2.908, batch_reward_max: 6.521, batch_reward_min: -1.885
+
+2023-03-10 19:51:26 - 
+[#Step 965000] eval_reward: 4330.312, eval_step: 889, eval_time: 5, time: 28.760
+	actor_loss: -312.983, critic_loss: 44.867, alpha_loss: 0.076
+	q1: 312.946, target_q: 313.554, logp: 3.440, alpha: 0.136
+	batch_reward: 3.165, batch_reward_max: 6.667, batch_reward_min: -1.322
+
+2023-03-10 19:51:37 - 
+[#Step 970000] eval_reward: 4322.840, eval_step: 911, eval_time: 5, time: 28.950
+	actor_loss: -323.323, critic_loss: 43.136, alpha_loss: 0.007
+	q1: 323.192, target_q: 322.794, logp: 3.950, alpha: 0.138
+	batch_reward: 3.236, batch_reward_max: 7.445, batch_reward_min: -1.239
+
+2023-03-10 19:51:49 - 
+[#Step 975000] eval_reward: 4964.317, eval_step: 931, eval_time: 5, time: 29.144
+	actor_loss: -318.926, critic_loss: 42.209, alpha_loss: 0.020
+	q1: 318.889, target_q: 319.447, logp: 3.851, alpha: 0.138
+	batch_reward: 3.303, batch_reward_max: 7.200, batch_reward_min: -1.005
+
+2023-03-10 19:52:00 - 
+[#Step 980000] eval_reward: 4502.744, eval_step: 849, eval_time: 4, time: 29.331
+	actor_loss: -329.749, critic_loss: 86.913, alpha_loss: -0.019
+	q1: 329.925, target_q: 329.502, logp: 4.139, alpha: 0.139
+	batch_reward: 3.202, batch_reward_max: 6.958, batch_reward_min: -1.049
+
+2023-03-10 19:52:12 - 
+[#Step 985000] eval_reward: 5366.627, eval_step: 1000, eval_time: 5, time: 29.530
+	actor_loss: -318.755, critic_loss: 60.878, alpha_loss: 0.048
+	q1: 318.678, target_q: 318.429, logp: 3.649, alpha: 0.138
+	batch_reward: 3.272, batch_reward_max: 6.778, batch_reward_min: -2.275
+
+2023-03-10 19:52:24 - 
+[#Step 990000] eval_reward: 5523.207, eval_step: 1000, eval_time: 5, time: 29.727
+	actor_loss: -332.859, critic_loss: 56.314, alpha_loss: 0.003
+	q1: 333.093, target_q: 333.730, logp: 3.978, alpha: 0.140
+	batch_reward: 3.356, batch_reward_max: 6.723, batch_reward_min: -1.963
+
+2023-03-10 19:52:35 - 
+[#Step 995000] eval_reward: 4755.959, eval_step: 890, eval_time: 5, time: 29.914
+	actor_loss: -315.455, critic_loss: 53.242, alpha_loss: 0.072
+	q1: 315.761, target_q: 316.157, logp: 3.488, alpha: 0.140
+	batch_reward: 3.174, batch_reward_max: 7.293, batch_reward_min: -1.127
+
+2023-03-10 19:52:46 - 
+[#Step 1000000] eval_reward: 4631.232, eval_step: 890, eval_time: 4, time: 30.100
+	actor_loss: -330.678, critic_loss: 41.106, alpha_loss: 0.027
+	q1: 330.561, target_q: 330.306, logp: 3.805, alpha: 0.140
+	batch_reward: 3.332, batch_reward_max: 6.786, batch_reward_min: -0.848
+
+2023-03-10 19:52:46 - Saving checkpoint at step: 5
+2023-03-10 19:52:46 - Saved checkpoint at saved_models/ant-v2/sac_s3_20230310_192240/actor_5
+2023-03-10 19:52:46 - Saving checkpoint at step: 5
+2023-03-10 19:52:46 - Saved checkpoint at saved_models/ant-v2/sac_s3_20230310_192240/critic_5
