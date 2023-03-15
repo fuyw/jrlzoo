@@ -189,6 +189,16 @@ class SACAgent:
         action = np.asarray(action)
         return action.clip(-self.max_action, self.max_action)
 
+    @functools.partial(jax.jit, static_argnames=("self"))
+    def _get_q(self, params, observation, action):
+        q1, q2 = self.critic.apply({"params": params}, observation, action)
+        q = min(q1, q2)
+        return q1
+
+    def get_q(self, observation, action):
+        q = self._get_q(self.critic_state.params, observation, action)
+        return q
+
     def actor_alpha_train_step(self,
                                batch: Batch,
                                key: Any,

@@ -18,4 +18,10 @@ def get_config():
     config.max_timesteps = int(1e6)
     config.hidden_dims = (256, 256)
     config.initializer = "orthogonal" # "glorot_uniform"
+
+    # gsac sample trajectory init state
+    config.traj_sample_ratio = 0.5
+    config.future_ret_step_num = -1
+    config.continue_step = 100
+
     return config
