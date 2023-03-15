@@ -49,7 +49,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
     exp_name = f"pex_s{config.seed}_{timestamp}"
-    logger = get_logger(f"logs/{exp_name}.log")
+    log_dir = f"logs/{config.env_name}"
+    os.makedirs(log_dir, exist_ok=True)
+    logger = get_logger(f"{log_dir}/{exp_name}.log")
 
     exp_info = f"# Running experiment for: {exp_name}_{config.env_name} #"
     print("#" * len(exp_info) + f"\n{exp_info}\n" + "#" * len(exp_info))
@@ -136,4 +138,4 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 )
 
     log_df = pd.DataFrame(logs)
-    log_df.to_csv(f"logs/{exp_name}.csv")
+    log_df.to_csv(f"{log_dir}/{exp_name}.csv")
