@@ -20,6 +20,7 @@ An RL codebase in JAX which focuses on efficiency and simplicity. Each baseline 
 ## Fine-tuning Offline RL
 - AWAC
 - Off2OnRL
+- PEX
 
 ## Meta RL
 - HypeRL
