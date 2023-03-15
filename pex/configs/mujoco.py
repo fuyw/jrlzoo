@@ -13,8 +13,7 @@ def get_config():
 
     # Train and eval
     config.eval_episodes = 10
-    # config.max_timesteps = int(2.5e5)
-    config.max_timesteps = int(1e6)
+    config.max_timesteps = int(2.5e5)
     config.eval_freq = config.max_timesteps // 100
     config.start_timesteps = 2500
 
@@ -27,10 +26,6 @@ def get_config():
     # GDE setting
     config.algo = "iql"
     config.base_algo = "iql"
-    config.nstep = 1
-    config.lmbda = 0.3
-    config.buffer_size = int(2e5)
-    config.update_num = 100
 
     # IQL settings
     config.tau = 0.005

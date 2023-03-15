@@ -14,4 +14,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
+    os.makedirs("logs", exist_ok=True)
     app.run(main)
