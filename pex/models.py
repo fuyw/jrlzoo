@@ -182,24 +182,37 @@ class PEXAgent:
         self.max_action = max_action
 
         self.rng = jax.random.PRNGKey(seed)
-        self.rng, actor_key, critic_key, value_key = jax.random.split(
-            self.rng, 4)
+        self.rng, actor_key, critic_key, value_key = jax.random.split(self.rng, 4)
         dummy_obs = jnp.ones([1, obs_dim], dtype=jnp.float32)
         dummy_act = jnp.ones([1, act_dim], dtype=jnp.float32)
 
-        self.actor = Actor(act_dim=act_dim,
-                           max_action=max_action,
-                           std_temperature=std_temperature,
-                           hidden_dims=hidden_dims,
-                           initializer=initializer)
-        actor_params = self.actor.init(actor_key, actor_key,
-                                       dummy_obs)["params"]
+        # freezed offline actor
+        self.offline_actor = Actor(act_dim=act_dim,
+                                   max_action=max_action,
+                                   std_temperature=std_temperature,
+                                   hidden_dims=hidden_dims,
+                                   initializer=initializer)
+        offline_actor_params = self.offline_actor.init(
+            actor_key, actor_key, dummy_obs)["params"]
         schedule_fn = optax.cosine_decay_schedule(-self.lr, max_timesteps)
-        self.actor_state = train_state.TrainState.create(
-            apply_fn=self.actor.apply,
-            params=actor_params,
+        self.offline_actor_state = train_state.TrainState.create(
+            apply_fn=self.offline_actor.apply,
+            params=offline_actor_params,
             tx=optax.chain(optax.scale_by_adam(),
                            optax.scale_by_schedule(schedule_fn)))
+
+        # online actor
+        self.online_actor = Actor(act_dim=act_dim,
+                                  max_action=max_action,
+                                  std_temperature=std_temperature,
+                                  hidden_dims=hidden_dims,
+                                  initializer=initializer)
+        online_actor_params = self.online_actor.init(
+            actor_key, actor_key, dummy_obs)["params"]
+        self.online_actor_state = train_state.TrainState.create(
+            apply_fn=self.online_actor.apply,
+            params=online_actor_params,
+            tx=optax.adam(learning_rate=self.lr))
 
         self.critic = DoubleCritic(hidden_dims=hidden_dims,
                                    initializer=initializer)
@@ -219,21 +232,47 @@ class PEXAgent:
             tx=optax.adam(learning_rate=self.lr))
 
     @functools.partial(jax.jit, static_argnames=("self"))
-    def _sample_action(self, params: FrozenDict, rng: Any,
+    def _sample_action(self,
+                       online_actor_params: FrozenDict,
+                       offline_actor_params: FrozenDict,
+                       critic_params: FrozenDict,
+                       rng: Any,
                        observation: np.ndarray) -> jnp.ndarray:
-        rng, sample_key = jax.random.split(rng, 2)
-        mean_action, sampled_action = self.actor.apply({"params": params},
-                                                       sample_key,
-                                                       observation)
-        return rng, mean_action, sampled_action
+        rng, online_key, offline_key = jax.random.split(rng, 3)
+        online_mean_action, online_sampled_action = self.online_actor.apply(
+            {"params": online_actor_params}, online_key, observation)
+        offline_mean_action, offline_sampled_action = self.offline_actor.apply(
+            {"params": offline_actor_params}, offline_key, observation) 
+        online_q = self.critic.apply({"params": critic_params}, observation, online_sampled_action).min()
+        offline_q = self.critic.apply({"params": critic_params}, observation, offline_sampled_action).min()
+
+        return rng, online_mean_action, online_sampled_action, offline_sampled_action, online_q, offline_q
 
     def sample_action(self,
                       observation: np.ndarray,
                       eval_mode: bool = False) -> np.ndarray:
-        self.rng, mean_action, sampled_action = self._sample_action(
-            self.actor_state.params, self.rng, observation)
-        action = mean_action if eval_mode else sampled_action
-        action = np.asarray(action)
+        (self.rng,
+         online_mean_action,
+         online_sampled_action,
+         offline_sampled_action,
+         online_q,
+         offline_q) = self._sample_action(self.online_actor_state.params,
+                                          self.offline_actor_state.params,
+                                          self.critic_state.params,
+                                          self.rng,
+                                          observation)
+        if eval_mode:
+            action = np.asarray(online_mean_action)
+        else:
+            sampled_qs = np.array([online_q, offline_q])
+            sampled_qs -= max(sampled_qs)
+            exp_qs = np.exp(sampled_qs)
+            prob = exp_qs/exp_qs.sum()
+            idx = np.random.choice(2, p=prob)
+            if idx == 0:
+                action = np.array(online_sampled_action)
+            else:
+                action = np.array(offline_sampled_action)
         return action.clip(-self.max_action, self.max_action)
 
     def value_train_step(
@@ -272,7 +311,7 @@ class PEXAgent:
         exp_a = jnp.minimum(exp_a, 100.0)
 
         def loss_fn(params):
-            logp = self.actor.apply({"params": params},
+            logp = self.online_actor.apply({"params": params},
                                     batch.observations,
                                     batch.actions,
                                     method=Actor.get_logp)
@@ -337,16 +376,16 @@ class PEXAgent:
         }
 
     def update(self, batch: Batch):
-        (self.actor_state, self.value_state, self.critic_state,
+        (self.online_actor_state, self.value_state, self.critic_state,
          self.critic_target_params,
-         log_info) = self.train_step(batch, self.actor_state, self.value_state,
+         log_info) = self.train_step(batch, self.online_actor_state, self.value_state,
                                      self.critic_state,
                                      self.critic_target_params)
         return log_info
 
     def save(self, fname: str, cnt: int):
         checkpoints.save_checkpoint(fname,
-                                    self.actor_state,
+                                    self.online_actor_state,
                                     cnt,
                                     prefix="actor_",
                                     keep=20,
@@ -365,14 +404,14 @@ class PEXAgent:
                                     overwrite=True)
 
     def load(self, ckpt_dir, step):
-        self.actor_state = checkpoints.restore_checkpoint(
+        self.offline_actor_state = checkpoints.restore_checkpoint(
             ckpt_dir=ckpt_dir,
-            target=self.actor_state,
+            target=self.offline_actor_state,
             step=step,
             prefix="actor_")
-        self.actor_state = train_state.TrainState.create(
-            apply_fn=self.actor.apply,
-            params=self.actor_state.params,
+        self.online_actor_state = train_state.TrainState.create(
+            apply_fn=self.online_actor.apply,
+            params=self.offline_actor_state.params,
             tx=optax.adam(learning_rate=self.lr))  # remove lr scheduler
         self.critic_state = checkpoints.restore_checkpoint(
             ckpt_dir=ckpt_dir,
