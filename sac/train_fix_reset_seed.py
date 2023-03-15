@@ -15,10 +15,10 @@ from models import SACAgent
 from utils import ReplayBuffer, get_logger
 
 
-FIX_SEEDS = [1]
-def get_fix_seed():
-    seed = np.random.choice(FIX_SEEDS)
-    return seed.item()
+fix_seeds = 1
+def get_fix_seed(n=1):
+    seed = np.random.choice(n)
+    return seed
 
 
 def eval_policy(agent: SACAgent,
@@ -41,7 +41,7 @@ def eval_policy(agent: SACAgent,
 def train_and_evaluate(config: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-    exp_name = f"sac_fixseed_s{config.seed}_{timestamp}"
+    exp_name = f"sac_fixseed{fix_seeds}_s{config.seed}_{timestamp}"
     exp_info = f"# Running experiment for: {exp_name}_{config.env_name} #"
     ckpt_dir = f"{config.model_dir}/{config.env_name.lower()}/{exp_name}"
     print("#"*len(exp_info) + f"\n{exp_info}\n" + "#"*len(exp_info))
@@ -81,7 +81,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     replay_buffer = ReplayBuffer(obs_dim, act_dim)
     logs = [{"step": 0, "reward": eval_policy(agent, eval_env, config.eval_episodes)[0]}]
 
-    obs, _  = env.reset(seed=get_fix_seed())
+    obs, _  = env.reset(seed=get_fix_seed(fix_seeds))
     for t in trange(1, config.max_timesteps+1):
         if t <= config.start_timesteps:
             action = env.action_space.sample()
@@ -95,7 +95,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         obs = next_obs
 
         if done or truncated:
-            (obs, _), done, truncated = env.reset(seed=get_fix_seed()), False, False
+            (obs, _), done, truncated = env.reset(seed=get_fix_seed(fix_seeds)), False, False
 
         if t > config.start_timesteps:
             batch = replay_buffer.sample(config.batch_size)
