@@ -93,6 +93,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             log_info = agent.update(batch)
 
         if done:
+            # obs, done = env.reset(), False
+            env = make_env(config.env_name, config.seed)
             obs, done = env.reset(), False
 
         if ((t>int(9.5e5) and (t % config.eval_freq == 0)) or (

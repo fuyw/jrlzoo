@@ -35,6 +35,7 @@ Some software versions in the experiments:
 - gym==0.21.0
 - dm-control==1.0.10
 - mujoco-py==2.1.2.14
+- numpy==1.22.4
 - flax==0.6.1
 - distrax==0.1.2
 - optax==0.1.3
@@ -61,6 +62,26 @@ def create():
     print('>>>> should be equal', h(obs1), h(obs2))
 
 create()
+```
+
+DMC reset function
+```
+def reset(self):
+    """Starts a new episode and returns the first `TimeStep`."""
+    self._reset_next_step = False
+    self._step_count = 0
+    with self._physics.reset_context():
+        self._task.initialize_episode(self._physics)
+
+    observation = self._task.get_observation(self._physics)
+    if self._flat_observation:
+        observation = flatten_observation(observation)
+
+    return dm_env.TimeStep(
+        step_type=dm_env.StepType.FIRST,
+        reward=None,
+        discount=None,
+        observation=observation)
 ```
 
 ## Implementation details
