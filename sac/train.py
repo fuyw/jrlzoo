@@ -89,6 +89,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         obs = next_obs
 
         if done or truncated:
+        # if t == int(5e5):
             (obs, _), done, truncated = env.reset(), False, False
 
         if t > config.start_timesteps:

@@ -8,13 +8,13 @@ envs=(
     # "hopper-hop"
     # "cartpole-balance"
 
-    "Hopper-v4"
+    # "Hopper-v4"
     "HalfCheetah-v4"
-    "Walker2d-v4"
-    "Ant-v4"
+    # "Walker2d-v4"
+    # "Ant-v4"
 )
 
-for seed in 0 1 2 3 4
+for seed in 1 2 3 4
 do 
     for env in ${envs[*]}
     do

@@ -15,7 +15,7 @@ from models import SACAgent
 from utils import ReplayBuffer, get_logger
 
 
-fix_seeds = 1
+fix_seeds = 10
 def get_fix_seed(n=1):
     seed = np.random.choice(n)
     return seed

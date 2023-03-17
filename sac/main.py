@@ -11,8 +11,7 @@ def main(argv):
     configs = FLAGS.config
     os.makedirs(f"{configs.log_dir}/{configs.env_name.lower()}", exist_ok=True)
     os.makedirs(f"{configs.model_dir}/{configs.env_name.lower()}", exist_ok=True)
-    # train.train_and_evaluate(configs)
-    train_fix_reset_seed.train_and_evaluate(configs)
+    train.train_and_evaluate(configs)
 
 
 if __name__ == '__main__':
