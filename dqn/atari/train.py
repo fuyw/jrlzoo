@@ -43,7 +43,7 @@ def train_and_evaluate(config):
     exp_info = f'# Running experiment for: {exp_name}_{config.env_name} #'
     eval_freq = config.total_timesteps // config.eval_num
     ckpt_freq = config.total_timesteps // config.ckpt_num
-    ckpt_dir = f"{config.model_dir}/{config.env_name}/{exp_name}"
+    ckpt_dir = f"{config.model_dir}/{config.env_name}"
 
     print('#' * len(exp_info) + f'\n{exp_info}\n' + '#' * len(exp_info))
     logger = get_logger(f"logs/{config.env_name}/{exp_name}.log")

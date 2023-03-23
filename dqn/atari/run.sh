@@ -7,7 +7,6 @@ atari_envs=(
     # "Seaquest"
     # "SpaceInvaders"
 )
-sleep 3h
 for i in 1
 do
     for env in ${atari_envs[*]}

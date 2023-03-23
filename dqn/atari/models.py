@@ -2,6 +2,7 @@ import functools
 import optax
 import jax
 import jax.numpy as jnp
+from flax import serialization
 from flax import linen as nn
 from flax.training import train_state, checkpoints
 
@@ -115,17 +116,31 @@ class DQNAgent:
         self.target_params = self.state.params
 
     def save(self, fname: str, cnt: int):
-        self.new_state = train_state.TrainState.create(
-            apply_fn=self.q_network.apply,
-            params=self.state.params,
-            tx=optax.adam(3e-4))
-        checkpoints.save_checkpoint(fname, self.new_state, cnt, prefix="qnet_", keep=20, overwrite=True)
+        # self.new_state = train_state.TrainState.create(
+        #     apply_fn=self.q_network.apply,
+        #     params=self.state.params,
+        #     tx=optax.adam(3e-4))
+        # checkpoints.save_checkpoint(fname, self.new_state, cnt, prefix="qnet_", keep=20, overwrite=True)
         # checkpoints.save_checkpoint(fname, self.state, cnt, prefix="qnet_", keep=20, overwrite=True)
 
+        serialized_params = serialization.to_bytes(self.state.params)
+        with open(f"{fname}/qnet_{cnt}", "wb") as f:
+            f.write(serialized_params)
+
+
     def load(self, fname: str, step: int):
-        state = checkpoints.restore_checkpoint(ckpt_dir=fname, target=self.state, step=step, prefix="qnet_")
+        # new_state = train_state.TrainState.create(
+        #     apply_fn=self.q_network.apply,
+        #     params=self.state.params,
+        #     tx=optax.adam(3e-4))
+        # self.state = checkpoints.restore_checkpoint(ckpt_dir=fname, target=new_state, step=step, prefix="qnet_")
+        # self.state = train_state.TrainState.create(
+        #     apply_fn=self.q_network.apply, params=state.params,
+        #     tx=optax.adam(3e-4))
+        with open(f"{fname}/qnet_{step}", "rb") as f:
+            params = serialization.from_bytes(self.state.params, f.read())
         self.state = train_state.TrainState.create(
-            apply_fn=self.q_network.apply, params=state.params,
+            apply_fn=self.q_network.apply, params=params,
             tx=optax.adam(3e-4))
 
 

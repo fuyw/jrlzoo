@@ -22,7 +22,7 @@ def get_config():
     config.gamma = 0.99
 
     # Logging
-    config.ckpt_num = 10
+    config.ckpt_num = 20
     config.eval_num = 50
 
     # Atari game
