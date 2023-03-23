@@ -16,40 +16,34 @@ from utils import Experience, ReplayBuffer, get_logger, linear_schedule
 ###################
 # Utils Functions #
 ###################
+def eval_policy(agent, env):
+    t1 = time.time()
+    obs = env.reset()
+    act_counts = np.zeros(env.action_space.n)
+    while not env.get_real_done():
+        # action = agent.sample(np.moveaxis(obs[None], 1, -1))
+        action = agent.sample(obs[None])
+        act_counts[action] += 1
+        obs, _, done, _ = env.step(action)
+        if done:
+            obs = env.reset()
+    act_counts /= act_counts.sum()
+    act_counts = ", ".join([f"{i:.2f}" for i in act_counts])
+    return np.mean(env.get_eval_rewards()), act_counts, time.time() - t1
+
+
 env_name = "Breakout"
-ckpt_dir = os.listdir(f"saved_models/{env_name}")[0]
+ckpt_dir = os.listdir(f"backup/saved_models/{env_name}")[0]
 
 
 env = gym.make(f"{env_name}NoFrameskip-v4")
 env = wrap_deepmind(env, dim=84, framestack=False, obs_format="NCHW")
+eval_env = gym.make(f"{env_name}NoFrameskip-v4")
+eval_env = wrap_deepmind(eval_env, dim=84, obs_format="NHWC", test=True)
 act_dim = env.action_space.n
-agent = DQNAgent(act_dim=act_dim)
 
-
-replay_buffer = ReplayBuffer(max_size=int(2.5e6))
-
-
-L = 200_000
 for i in range(1, 11):
-    agent.load(f"saved_models/{env_name}/{ckpt_dir}", i)
-    cnts = 0
-    with tqdm(total=L) as pbar:
-        steps = 0
-        while cnts < L: 
-            obs = env.reset()
-            if np.random.random() < 0.2:
-                action = np.random.choice(act_dim)
-            else:
-                context = replay_buffer.recent_obs()
-                context.append(obs)
-                context = np.stack(context, axis=-1)[None]
-                action = agent.sample(context)
-            steps += 1
-            next_obs, reward, done, _ = env.step(action)
-            replay_buffer.add(Experience(obs, action, reward, done))
-            obs = next_obs
-            if done:
-                obs = env.reset()
-                cnts += steps
-                pbar.update(steps)
-                steps = 0
+    agent = DQNAgent(act_dim=act_dim)
+    agent.load(f"backup/saved_models/{env_name}/{ckpt_dir}", i)
+    eval_reward, act_counts, eval_time = eval_policy(agent, eval_env)
+    print(f"{i}: {eval_reward:.3f}, {eval_time:.2f}, {act_counts}")

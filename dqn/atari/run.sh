@@ -1,8 +1,8 @@
 #!/bin/bash
 atari_envs=(
     "Breakout"
-    "Asterix"
-    "BeamRider"
+    # "Asterix"
+    # "BeamRider"
     # "Pong"
     # "Seaquest"
     # "SpaceInvaders"
@@ -12,7 +12,7 @@ do
     for env in ${atari_envs[*]}
     do
         python main.py \
-        --config=configs/cql.py \
+        --config=configs/dqn.py \
         --config.env_name=$env \
         --config.seed=$i
     done

@@ -120,3 +120,4 @@ def train_and_evaluate(config):
 
     res_df = pd.DataFrame(res)
     res_df.to_csv(f"logs/{config.env_name}/{exp_name}.csv")
+    replay_buffer.save(f"datasets/{config.env_name}/buffer_25e5")
