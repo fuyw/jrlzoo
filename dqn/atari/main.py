@@ -14,8 +14,8 @@ def main(argv):
     os.makedirs(f"{config.log_dir}/{config.env_name}", exist_ok=True)
     os.makedirs(f"{config.model_dir}/{config.env_name}", exist_ok=True)
     os.makedirs(f"{config.dataset_dir}/{config.env_name}", exist_ok=True)
-    # train_cql.train_and_evaluate(config)
-    train.train_and_evaluate(config)
+    train_cql.train_and_evaluate(config)
+    # train.train_and_evaluate(config)
     # collect.train_and_evaluate(config)
 
 

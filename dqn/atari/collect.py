@@ -47,16 +47,16 @@ def train_and_evaluate(config):
     # initialize DQN agent
 
     # create the replay buffer
-    replay_buffer = ReplayBuffer(max_size=int(2.5e6))
+    replay_buffer = ReplayBuffer(max_size=int(1.5e6))
     L = 200_000
-    ckpt_dir = os.listdir(f"saved_models/{config.env_name}")[0]
-    for i in range(1, 11):
+    ckpt_dir = os.listdir(f"backup/saved_models/{config.env_name}")[0]
+    for i in range(1, 8):
         agent = DQNAgent(act_dim=act_dim,
                         seed=config.seed,
                         lr_start=config.lr_start,
                         lr_end=config.lr_end,
                         total_timesteps=config.total_timesteps//config.train_freq)
-        agent.load(f"saved_models/{config.env_name}/{ckpt_dir}", i)
+        agent.load(f"backup/saved_models/{config.env_name}/{ckpt_dir}", i)
         cnts = 0
         obs = env.reset()
         for j in trange(L):
@@ -74,5 +74,5 @@ def train_and_evaluate(config):
             obs = next_obs
             if done:
                 obs = env.reset()
-    replay_buffer.save(f"datasets/{config.env_name}/offline_buffer")
+    replay_buffer.save(f"datasets/{config.env_name}/offline_buffer_new")
     

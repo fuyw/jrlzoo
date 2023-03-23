@@ -9,8 +9,8 @@ import pandas as pd
 from tqdm import tqdm, trange
 
 from atari_wrappers import wrap_deepmind
-from models import DQNAgent
-from utils import Experience, ReplayBuffer, get_logger, linear_schedule
+from models import DQNAgent, CQLAgent
+from utils import Experience
 
 
 ###################
@@ -20,21 +20,21 @@ def eval_policy(agent, env):
     t1 = time.time()
     obs = env.reset()
     act_counts = np.zeros(env.action_space.n)
-    while not env.get_real_done():
-        # action = agent.sample(np.moveaxis(obs[None], 1, -1))
-        action = agent.sample(obs[None])
-        act_counts[action] += 1
-        obs, _, done, _ = env.step(action)
-        if done:
-            obs = env.reset()
+    with tqdm(total=int(1e5)) as pbar:
+        while not env.get_real_done():
+            action = agent.sample(obs[None])
+            act_counts[action] += 1
+            obs, _, done, _ = env.step(action)
+            if done:
+                obs = env.reset()
+            pbar.update(1)
     act_counts /= act_counts.sum()
     act_counts = ", ".join([f"{i:.2f}" for i in act_counts])
     return np.mean(env.get_eval_rewards()), act_counts, time.time() - t1
 
 
-env_name = "Breakout"
-ckpt_dir = os.listdir(f"backup/saved_models/{env_name}")[0]
-
+env_name = "Seaquest"
+ckpt_dir = f"saved_models/{env_name}"
 
 env = gym.make(f"{env_name}NoFrameskip-v4")
 env = wrap_deepmind(env, dim=84, framestack=False, obs_format="NCHW")
@@ -43,7 +43,8 @@ eval_env = wrap_deepmind(eval_env, dim=84, obs_format="NHWC", test=True)
 act_dim = env.action_space.n
 
 for i in range(1, 11):
-    agent = DQNAgent(act_dim=act_dim)
-    agent.load(f"backup/saved_models/{env_name}/{ckpt_dir}", i)
+    # agent = DQNAgent(act_dim=act_dim)
+    agent = CQLAgent(act_dim=act_dim)
+    agent.load(f"{ckpt_dir}", i)
     eval_reward, act_counts, eval_time = eval_policy(agent, eval_env)
-    print(f"{i}: {eval_reward:.3f}, {eval_time:.2f}, {act_counts}")
+    print(f"{i}: {eval_reward:.3f}, {eval_time:.2f}\n\t{act_counts}")

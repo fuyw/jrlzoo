@@ -61,8 +61,8 @@ def train_and_evaluate(config):
 
     # create the replay buffer
     replay_buffer = ReplayBuffer(max_size=config.buffer_size)
-    replay_buffer.load(f"datasets/{config.env_name}/offline_buffer.npz")
-    print(f"Loaded datasets/{config.env_name}/offline_buffer.npz")
+    replay_buffer.load(f"datasets/{config.env_name}/offline_buffer_new.npz")
+    print(f"Loaded datasets/{config.env_name}/offline_buffer_new.npz")
 
     # start training
     fps_t1 = None
