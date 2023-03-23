@@ -117,16 +117,7 @@ class DQNAgent:
         self.target_params = self.state.params
 
     def save(self, fname: str, cnt: int):
-        # self.new_state = train_state.TrainState.create(
-        #     apply_fn=self.q_network.apply,
-        #     params=self.state.params,
-        #     tx=optax.adam(3e-4))
-        # checkpoints.save_checkpoint(fname, self.new_state, cnt, prefix="qnet_", keep=20, overwrite=True)
-        # checkpoints.save_checkpoint(fname, self.state, cnt, prefix="qnet_", keep=20, overwrite=True)
-
-        serialized_params = serialization.to_bytes(self.state.params)
-        with open(f"{fname}/qnet_{cnt}", "wb") as f:
-            f.write(serialized_params)
+        checkpoints.save_checkpoint(fname, self.state, cnt, prefix="qnet_", keep=20, overwrite=True)
 
     def load(self, fname: str, step: int):
         old_state = checkpoints.restore_checkpoint(ckpt_dir=fname, target=self.state, step=step, prefix="qnet_")
