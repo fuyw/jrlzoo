@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 from flax import serialization
 from flax import linen as nn
+from flax.core import frozen_dict
 from flax.training import train_state, checkpoints
 
 
@@ -127,20 +128,25 @@ class DQNAgent:
         with open(f"{fname}/qnet_{cnt}", "wb") as f:
             f.write(serialized_params)
 
-
     def load(self, fname: str, step: int):
-        # new_state = train_state.TrainState.create(
-        #     apply_fn=self.q_network.apply,
-        #     params=self.state.params,
-        #     tx=optax.adam(3e-4))
-        # self.state = checkpoints.restore_checkpoint(ckpt_dir=fname, target=new_state, step=step, prefix="qnet_")
-        # self.state = train_state.TrainState.create(
-        #     apply_fn=self.q_network.apply, params=state.params,
-        #     tx=optax.adam(3e-4))
-        with open(f"{fname}/qnet_{step}", "rb") as f:
-            params = serialization.from_bytes(self.state.params, f.read())
+        old_state = checkpoints.restore_checkpoint(ckpt_dir=fname, target=self.state, step=step, prefix="qnet_")
+        params = old_state.params
+        new_params = {
+            "conv1": {"kernel": jnp.array(params["conv1"]["kernel"]),
+                      "bias": jnp.array(params["conv1"]["bias"])},
+            "conv2": {"kernel": jnp.array(params["conv2"]["kernel"]),
+                      "bias": jnp.array(params["conv2"]["bias"])},
+            "conv3": {"kernel": jnp.array(params["conv3"]["kernel"]),
+                      "bias": jnp.array(params["conv3"]["bias"])},
+            "fc": {"kernel": jnp.array(params["fc"]["kernel"]),
+                   "bias": jnp.array(params["fc"]["bias"])},
+            "out": {"kernel": jnp.array(params["out"]["kernel"]),
+                    "bias": jnp.array(params["out"]["bias"])},
+        }
+        new_params = frozen_dict.freeze(new_params)
         self.state = train_state.TrainState.create(
-            apply_fn=self.q_network.apply, params=params,
+            apply_fn=self.q_network.apply,
+            params=new_params,
             tx=optax.adam(3e-4))
 
 
