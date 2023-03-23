@@ -32,6 +32,6 @@ def get_config():
 
     # Dirs
     config.log_dir = "logs"
-    config.ckpt_dir = "ckpts"
+    config.model_dir = "saved_models"
     config.dataset_dir = "datasets"
     return config

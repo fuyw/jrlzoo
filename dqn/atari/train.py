@@ -6,7 +6,6 @@ import time
 import gym
 import numpy as np
 import pandas as pd
-import wandb
 from tqdm import trange
 
 from atari_wrappers import wrap_deepmind
@@ -40,13 +39,15 @@ def train_and_evaluate(config):
     # general setting
     start_time = time.time()
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
-    exp_name = f"DQN_{config.env_name}_s{config.seed}_{timestamp}"
+    exp_name = f"dqn_s{config.seed}_{timestamp}"
     exp_info = f'# Running experiment for: {exp_name}_{config.env_name} #'
     eval_freq = config.total_timesteps // config.eval_num
     ckpt_freq = config.total_timesteps // config.ckpt_num
+    ckpt_dir = f"{config.model_dir}/{config.env_name}/{exp_name}"
+
     print('#' * len(exp_info) + f'\n{exp_info}\n' + '#' * len(exp_info))
     logger = get_logger(f"logs/{config.env_name}/{exp_name}.log")
-    wandb.init(project="dqn", config=config, name=exp_name)
+    logger.info(f"Exp configurations:\n{config}")
 
     # make environments
     env = gym.make(f"{config.env_name}NoFrameskip-v4")
@@ -56,7 +57,7 @@ def train_and_evaluate(config):
     act_dim = env.action_space.n
 
     # initialize DQN agent
-    agent = DQNAgent(act_dim=act_dim,   
+    agent = DQNAgent(act_dim=act_dim,
                      seed=config.seed,
                      lr_start=config.lr_start,
                      lr_end=config.lr_end,
@@ -110,12 +111,11 @@ def train_and_evaluate(config):
                         f"\tavg_loss: {log_info['avg_loss']:.2f}, avg_Q: {log_info['avg_Q']:.2f}, avg_target_Q: {log_info['avg_target_Q']:.2f}\n"
                         f"\tavg_batch_rewards: {batch.rewards.mean():.3f}, avg_batch_discounts: {batch.discounts.mean():.3f}\n"
                         f"\tact_counts: ({act_counts}), epsilon={epsilon:.3f}, lr={current_lr:.6f}\n")
-            wandb.log(log_info)
             fps_t1 = time.time()
 
         # save checkpoints
-        # if t % ckpt_freq == 0:
-        #     checkpoints.save_checkpoint("ckpts", state, t//ckpt_freq, prefix="dqn_breakout", keep=20, overwrite=True)
+        if t % ckpt_freq == 0:
+            agent.save(f"{ckpt_dir}", t//ckpt_freq)
 
     res_df = pd.DataFrame(res)
     res_df.to_csv(f"logs/{config.env_name}/{exp_name}.csv")

@@ -3,7 +3,7 @@ import optax
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
-from flax.training import train_state
+from flax.training import train_state, checkpoints
 
 
 class QNetwork_Nature(nn.Module):
@@ -113,3 +113,6 @@ class DQNAgent:
 
     def sync_target_network(self):
         self.target_params = self.state.params
+
+    def save(self, fname: str, cnt: int):
+        checkpoints.save_checkpoint(fname, self.state, cnt, prefix="qnet_", keep=20, overwrite=True)
