@@ -95,13 +95,91 @@ class DQNAgent:
         def loss_fn(params):
             Qs = self.q_network.apply({"params": params}, batch.observations)
             Q = jax.vmap(lambda q,a: q[a])(Qs, batch.actions)
-            loss = (Q - target_Q) ** 2
+            loss = ((Q - target_Q) ** 2).mean()
             log_info = {
                 "avg_Q": Q.mean(),
                 "avg_target_Q": target_Q.mean(),
-                "avg_loss": loss.mean(),
+                "avg_loss": loss,
             }
-            return loss.mean(), log_info
+            return loss, log_info
+        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+        (_, log_info), grads = grad_fn(state.params)
+        new_state = state.apply_gradients(grads=grads)
+        return new_state, log_info
+
+    def update(self, batch):
+        self.state, log_info = self.train_step(self.state, self.target_params, batch)
+        return log_info
+
+    def sync_target_network(self):
+        self.target_params = self.state.params
+
+    def save(self, fname: str, cnt: int):
+        self.new_state = train_state.TrainState.create(
+            apply_fn=self.q_network.apply,
+            params=self.state.params,
+            tx=optax.adam(3e-4))
+        checkpoints.save_checkpoint(fname, self.new_state, cnt, prefix="qnet_", keep=20, overwrite=True)
+        # checkpoints.save_checkpoint(fname, self.state, cnt, prefix="qnet_", keep=20, overwrite=True)
+
+    def load(self, fname: str, step: int):
+        state = checkpoints.restore_checkpoint(ckpt_dir=fname, target=self.state, step=step, prefix="qnet_")
+        self.state = train_state.TrainState.create(
+            apply_fn=self.q_network.apply, params=state.params,
+            tx=optax.adam(3e-4))
+
+
+class CQLAgent:
+    def __init__(self,
+                 act_dim,
+                 seed: int = 42,
+                 lr_start: float = 3e-4,
+                 lr_end: float = 1e-5,
+                 gamma: float = 0.99,
+                 cql_alpha: float = 1.0,
+                 total_timesteps: int = int(1e7)):
+        self.gamma = gamma
+        self.cql_alpha = cql_alpha
+        rng = jax.random.PRNGKey(seed)
+        self.q_network = QNetwork_Nature(act_dim)
+        params = self.q_network.init(rng, jnp.ones(shape=(1, 84, 84, 4)))["params"]
+        self.target_params = params
+        self.lr_scheduler = optax.linear_schedule(
+            init_value=lr_start, end_value=lr_end, transition_steps=total_timesteps)
+        self.state = train_state.TrainState.create(
+            apply_fn=self.q_network.apply, params=params,
+            tx=optax.adam(self.lr_scheduler))
+        self.cnt = 0
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def _sample(self, params, observation):
+        Qs = self.q_network.apply({"params": params}, observation)
+        action = Qs.argmax(-1)
+        return action
+
+    def sample(self, observation):
+        action = self._sample(self.state.params, observation)
+        return action.item()
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def train_step(self, state, target_params, batch):
+        next_Q = self.q_network.apply({"params": target_params}, batch.next_observations).max(-1)
+        target_Q = batch.rewards + self.gamma * next_Q * batch.discounts
+        def loss_fn(params):
+            Qs = self.q_network.apply({"params": params}, batch.observations)
+            Q = jax.vmap(lambda q,a: q[a])(Qs, batch.actions)
+            ood_Q = jax.scipy.special.logsumexp(Qs, axis=1)
+            cql_loss = self.cql_alpha * (ood_Q - Q).mean()
+            mse_loss = ((Q - target_Q) ** 2).mean()
+            loss = cql_loss + mse_loss
+            log_info = {
+                "avg_Q": Q.mean(),
+                "avg_target_Q": target_Q.mean(),
+                "cql_loss": cql_loss,
+                "mse_loss": mse_loss,
+                "avg_loss": loss,
+            }
+            return loss, log_info
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
         (_, log_info), grads = grad_fn(state.params)
         new_state = state.apply_gradients(grads=grads)

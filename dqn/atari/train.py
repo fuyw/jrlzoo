@@ -106,6 +106,7 @@ def train_and_evaluate(config):
                 log_info["fps"] = fps = eval_freq/(fps_t2 - fps_t1)
             eval_reward, act_counts, eval_time = eval_policy(agent, eval_env)
             log_info.update({"step": t,"eval_reward": eval_reward, "eval_time": eval_time, 'total_time': (time.time()-start_time)/60})
+            res.append(log_info)
             logger.info(f"Step {t//1000}K [{t/config.total_timesteps*100.:.1f}%]: reward={eval_reward:.1f}\n"
                         f"\teval_time={eval_time:.1f}s, total_time={log_info['total_time']:.1f}min, fps={fps:.0f}\n"
                         f"\tavg_loss: {log_info['avg_loss']:.2f}, avg_Q: {log_info['avg_Q']:.2f}, avg_target_Q: {log_info['avg_target_Q']:.2f}\n"
