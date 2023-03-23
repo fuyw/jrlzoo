@@ -57,11 +57,7 @@ def train_and_evaluate(config):
     act_dim = env.action_space.n
 
     # initialize CQL agent
-    agent = CQLAgent(act_dim=act_dim,
-                     seed=config.seed,
-                     lr_start=config.lr_start,
-                     lr_end=config.lr_end,
-                     total_timesteps=config.total_timesteps//config.train_freq)
+    agent = CQLAgent(act_dim=act_dim, seed=config.seed)
 
     # create the replay buffer
     replay_buffer = ReplayBuffer(max_size=config.buffer_size)

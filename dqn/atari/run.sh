@@ -1,9 +1,9 @@
 #!/bin/bash
 atari_envs=(
-    # "Asterix"
-    # "BeamRider"
-    # "Breakout"
-    "Pong"
+    "Breakout"
+    "Asterix"
+    "BeamRider"
+    # "Pong"
     # "Seaquest"
     # "SpaceInvaders"
 )

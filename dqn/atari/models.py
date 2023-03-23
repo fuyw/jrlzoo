@@ -145,22 +145,18 @@ class CQLAgent:
     def __init__(self,
                  act_dim,
                  seed: int = 42,
-                 lr_start: float = 3e-4,
-                 lr_end: float = 1e-5,
+                 lr: float = 3e-4,
                  gamma: float = 0.99,
-                 cql_alpha: float = 1.0,
-                 total_timesteps: int = int(1e7)):
+                 cql_alpha: float = 1.0):
         self.gamma = gamma
         self.cql_alpha = cql_alpha
         rng = jax.random.PRNGKey(seed)
         self.q_network = QNetwork_Nature(act_dim)
         params = self.q_network.init(rng, jnp.ones(shape=(1, 84, 84, 4)))["params"]
         self.target_params = params
-        self.lr_scheduler = optax.linear_schedule(
-            init_value=lr_start, end_value=lr_end, transition_steps=total_timesteps)
         self.state = train_state.TrainState.create(
             apply_fn=self.q_network.apply, params=params,
-            tx=optax.adam(self.lr_scheduler))
+            tx=optax.adam(lr))
         self.cnt = 0
 
     @functools.partial(jax.jit, static_argnums=0)
