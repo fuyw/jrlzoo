@@ -21,7 +21,6 @@ def eval_policy(agent, env):
     obs = env.reset()
     act_counts = np.zeros(env.action_space.n)
     while not env.get_real_done():
-        # action = agent.sample(np.moveaxis(obs[None], 1, -1))
         action = agent.sample(obs[None])
         act_counts[action] += 1
         obs, _, done, _ = env.step(action)
@@ -35,44 +34,34 @@ def eval_policy(agent, env):
 #################
 # Main Function #
 #################
-def train_and_evaluate(config):
-    # general setting
-    start_time = time.time() 
+env_name = "Breakout"
+start_time = time.time() 
+env = gym.make(f"{env_name}NoFrameskip-v4")
+env = wrap_deepmind(env, dim=84, framestack=False, obs_format="NCHW")
+act_dim = env.action_space.n
+L = 200_000
 
-    # make environments
-    env = gym.make(f"{config.env_name}NoFrameskip-v4")
-    env = wrap_deepmind(env, dim=84, framestack=False, obs_format="NCHW")
-    act_dim = env.action_space.n
+# create the replay buffer
+replay_buffer = ReplayBuffer(max_size=int(1.5e6))
+ckpt_dir = f"backup/saved_models/{env_name}"
+for i in range(1, 8):
+    agent = DQNAgent(act_dim=act_dim) 
+    agent.load(ckpt_dir, i)
+    cnts = 0
+    obs = env.reset()
+    for j in trange(L, desc="[Collect]"):
+        if np.random.random() < 0.2:
+            action = np.random.choice(act_dim)
+        else:
+            context = replay_buffer.recent_obs()
+            context.append(obs)
+            context = np.stack(context, axis=-1)[None]
+            action = agent.sample(context)
 
-    # initialize DQN agent
-
-    # create the replay buffer
-    replay_buffer = ReplayBuffer(max_size=int(1.5e6))
-    L = 200_000
-    ckpt_dir = os.listdir(f"backup/saved_models/{config.env_name}")[0]
-    for i in range(1, 8):
-        agent = DQNAgent(act_dim=act_dim,
-                        seed=config.seed,
-                        lr_start=config.lr_start,
-                        lr_end=config.lr_end,
-                        total_timesteps=config.total_timesteps//config.train_freq)
-        agent.load(f"backup/saved_models/{config.env_name}/{ckpt_dir}", i)
-        cnts = 0
-        obs = env.reset()
-        for j in trange(L):
-            if np.random.random() < 0.2:
-                action = np.random.choice(act_dim)
-            else:
-                context = replay_buffer.recent_obs()
-                context.append(obs)
-                context = np.stack(context, axis=-1)[None]
-                action = agent.sample(context)
-
-            # interact with the environment
-            next_obs, reward, done, _ = env.step(action)
-            replay_buffer.add(Experience(obs, action, reward, done))
-            obs = next_obs
-            if done:
-                obs = env.reset()
-    replay_buffer.save(f"datasets/{config.env_name}/offline_buffer_new")
-    
+        # interact with the environment
+        next_obs, reward, done, _ = env.step(action)
+        replay_buffer.add(Experience(obs, action, reward, done))
+        obs = next_obs
+        if done:
+            obs = env.reset()
+replay_buffer.save(f"datasets/{env_name}/offline_buffer_new")

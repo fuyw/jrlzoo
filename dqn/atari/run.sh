@@ -1,10 +1,10 @@
 #!/bin/bash
 atari_envs=(
-    # "Breakout"
+    "Breakout"
     # "Asterix"
     # "BeamRider"
     # "Pong"
-    "Seaquest"
+    # "Seaquest"
     # "SpaceInvaders"
 )
 for i in 1

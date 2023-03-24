@@ -21,7 +21,6 @@ def eval_policy(agent, env):
     obs = env.reset()
     act_counts = np.zeros(env.action_space.n)
     while not env.get_real_done():
-        # action = agent.sample(np.moveaxis(obs[None], 1, -1))
         action = agent.sample(obs[None])
         act_counts[action] += 1
         obs, _, done, _ = env.step(action)
