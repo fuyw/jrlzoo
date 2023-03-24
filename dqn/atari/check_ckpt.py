@@ -33,8 +33,8 @@ def eval_policy(agent, env):
     return np.mean(env.get_eval_rewards()), act_counts, time.time() - t1
 
 
-env_name = "SpaceInvaders"
-ckpt_dir = f"saved_models/{env_name}"
+env_name = "Seaquest"
+ckpt_dir = f"saved_models/cql/{env_name}"
 
 env = gym.make(f"{env_name}NoFrameskip-v4")
 env = wrap_deepmind(env, dim=84, framestack=False, obs_format="NCHW")
@@ -42,7 +42,7 @@ eval_env = gym.make(f"{env_name}NoFrameskip-v4")
 eval_env = wrap_deepmind(eval_env, dim=84, obs_format="NHWC", test=True)
 act_dim = env.action_space.n
 
-for i in range(1, 11):
+for i in range(1, 2):
     # agent = DQNAgent(act_dim=act_dim)
     agent = CQLAgent(act_dim=act_dim)
     agent.load(f"{ckpt_dir}", i)

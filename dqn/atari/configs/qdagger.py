@@ -23,7 +23,7 @@ def get_config():
 
     # Logging
     config.ckpt_num = 10
-    config.eval_num = 50
+    config.eval_num = 10
 
     # Atari game
     config.env_name = "Breakout"
