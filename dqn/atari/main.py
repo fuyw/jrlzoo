@@ -14,10 +14,10 @@ def main(argv):
     os.makedirs(f"{config.log_dir}/{config.env_name}", exist_ok=True)
     os.makedirs(f"{config.model_dir}/{config.env_name}", exist_ok=True)
     os.makedirs(f"{config.dataset_dir}/{config.env_name}", exist_ok=True)
-    train_dqn.train_and_evaluate(config)
+    # train_dqn.train_and_evaluate(config)
     # train_qdagger.train_and_evaluate(config)
     # train_cql.train_and_evaluate(config)
-    # train.train_and_evaluate(config)
+    train.train_and_evaluate(config)
 
 
 if __name__ == '__main__':

@@ -13,6 +13,9 @@ from models import DQNAgent
 from utils import Experience, ReplayBuffer, get_logger, linear_schedule
 
 
+TDICT = {"Asterix": 4866, "Breakout": 150, "Seaquest": 1200, "SpaceInvaders": 900}
+
+
 ###################
 # Utils Functions #
 ###################
@@ -114,10 +117,15 @@ def train_and_evaluate(config):
                         f"\tact_counts: ({act_counts}), epsilon={epsilon:.3f}, lr={current_lr:.6f}\n")
             fps_t1 = time.time()
 
+            if eval_reward >= TDICT[config.env_name]:
+                break
+
         # save checkpoints
-        if t % ckpt_freq == 0:
-            agent.save(f"{ckpt_dir}", t//ckpt_freq)
+        # if t % ckpt_freq == 0:
+        #     agent.save(f"{ckpt_dir}", t//ckpt_freq)
 
     res_df = pd.DataFrame(res)
     res_df.to_csv(f"logs/{config.env_name}/{exp_name}.csv")
-    replay_buffer.save(f"datasets/{config.env_name}/buffer_25e5")
+
+    agent.save(f"saved_models", 0)
+    replay_buffer.save(f"datasets/{config.env_name}/buffer_done")

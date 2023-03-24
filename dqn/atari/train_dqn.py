@@ -57,7 +57,7 @@ def train_and_evaluate(config):
 
     # initialize DQN agent
     agent = DQN2Agent(act_dim=act_dim, seed=config.seed)
-    # agent.load(f"saved_models/cql/{config.env_name}", 1)
+    agent.load(f"saved_models/cql/{config.env_name}", 1)
 
     # create the replay buffer
     replay_buffer = ReplayBuffer(max_size=1e6)
@@ -69,41 +69,40 @@ def train_and_evaluate(config):
     logger.info(f"Step {0}K [{0.:.1f}%]: reward={res[0]['eval_reward']:.1f}\n")
 
     # pre-train
-    check_reward = 0
-    while check_reward < 1000:
-        for t in trange(1, 1+config.total_timesteps):
-            epsilon = linear_schedule(0.2, 0.05, config.explore_frac*config.total_timesteps, t)
-            if t <= config.warmup_timesteps:
-                action = np.random.choice(act_dim)
-            else:
-                if np.random.random() < epsilon:
-                    action = np.random.choice(act_dim)
-                else:
-                    context = replay_buffer.recent_obs()
-                    context.append(obs)
-                    context = np.stack(context, axis=-1)[None]
-                    action = agent.sample(context)
+    # check_reward = 0
+    # while check_reward < 1000:
+    #     for t in trange(1, 1+config.total_timesteps):
+    #         epsilon = linear_schedule(0.2, 0.05, config.explore_frac*config.total_timesteps, t)
+    #         if t <= config.warmup_timesteps:
+    #             action = np.random.choice(act_dim)
+    #         else:
+    #             if np.random.random() < epsilon:
+    #                 action = np.random.choice(act_dim)
+    #             else:
+    #                 context = replay_buffer.recent_obs()
+    #                 context.append(obs)
+    #                 context = np.stack(context, axis=-1)[None]
+    #                 action = agent.sample(context)
 
-            # interact with the environment
-            next_obs, reward, done, _ = env.step(action)
-            replay_buffer.add(Experience(obs, action, reward, done))
-            obs = next_obs
-            if done:
-                obs = env.reset()
+    #         # interact with the environment
+    #         next_obs, reward, done, _ = env.step(action)
+    #         replay_buffer.add(Experience(obs, action, reward, done))
+    #         obs = next_obs
+    #         if done:
+    #             obs = env.reset()
 
-            # update the agent
-            if (t > 10_000) and (t % config.train_freq == 0):
-                batch = replay_buffer.sample_batch(config.batch_size)
-                _ = agent.update(batch)
-                if t % config.update_target_freq == 0:
-                    agent.sync_target_network()
+    #         # update the agent
+    #         if (t > 10_000) and (t % config.train_freq == 0):
+    #             batch = replay_buffer.sample_batch(config.batch_size)
+    #             _ = agent.update(batch)
+    #             if t % config.update_target_freq == 0:
+    #                 agent.sync_target_network()
 
-            if (t > config.warmup_timesteps) and (t % 100_000 == 0):
-                check_reward, act_counts, eval_time = eval_policy(agent, eval_env)
-                logger.info(f"Step {t}K [{t/config.total_timesteps*100.:.1f}%]: reward={check_reward:.1f}\n")
-
-    res = [{"step": 0, "eval_reward": check_reward}]
-    logger.info(f"Step {0}K [{0.:.1f}%]: reward={check_reward:.1f}\n")
+    #         if (t > config.warmup_timesteps) and (t % 100_000 == 0):
+    #             check_reward, act_counts, eval_time = eval_policy(agent, eval_env)
+    #             logger.info(f"Step {t}K [{t/config.total_timesteps*100.:.1f}%]: reward={check_reward:.1f}\n")
+    # res = [{"step": 0, "eval_reward": check_reward}]
+    # logger.info(f"Step {0}K [{0.:.1f}%]: reward={check_reward:.1f}\n")
 
     # fine-tuning
     for t in trange(1, 1+config.total_timesteps):

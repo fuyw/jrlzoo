@@ -32,8 +32,10 @@ def eval_policy(agent, env):
     act_counts = ", ".join([f"{i:.2f}" for i in act_counts])
     return np.mean(env.get_eval_rewards()), act_counts, time.time() - t1
 
+# Asterix: 4866
+# Breakout: 150
 
-env_name = "Seaquest"
+env_name = "Asterix"
 ckpt_dir = f"saved_models/cql/{env_name}"
 
 env = gym.make(f"{env_name}NoFrameskip-v4")
