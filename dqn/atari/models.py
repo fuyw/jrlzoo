@@ -245,14 +245,10 @@ class QDaggerAgent:
         self.q_network = QNetwork_Nature(act_dim)
         params = self.q_network.init(rng, jnp.ones(shape=(1, 84, 84, 4)))["params"]
         self.target_params = params
-        self.lr_scheduler = optax.linear_schedule(
-            init_value=lr_start, end_value=lr_end, transition_steps=total_timesteps)
+        self.teacher_params = params
         self.state = train_state.TrainState.create(
             apply_fn=self.q_network.apply, params=params,
-            tx=optax.adam(self.lr_scheduler))
-        self.teacher_state = train_state.TrainState.create(
-            apply_fn=self.q_network.apply, params=params,
-            tx=optax.adam(self.lr_scheduler))
+            tx=optax.adam(3e-4))
         self.cnt = 0
 
     @functools.partial(jax.jit, static_argnums=0)
@@ -266,13 +262,15 @@ class QDaggerAgent:
         return action.item()
 
     @functools.partial(jax.jit, static_argnums=0)
-    def train_step(self, state, target_params, batch):
+    def train_step(self, lmbda, state, teacher_params, target_params, batch):
         next_Q = self.q_network.apply({"params": target_params}, batch.next_observations).max(-1)
         target_Q = batch.rewards + self.gamma * next_Q * batch.discounts
+        teacher_Qs = self.q_network.apply({"params": teacher_params}, batch.observations)
         def loss_fn(params):
             Qs = self.q_network.apply({"params": params}, batch.observations)
+            kl_loss = (jax.vmap(kl_divergence_with_logits)(teacher_Qs/0.1, Qs/0.1)).mean()
             Q = jax.vmap(lambda q,a: q[a])(Qs, batch.actions)
-            loss = ((Q - target_Q) ** 2).mean()
+            loss = ((Q - target_Q) ** 2).mean() + lmbda * kl_loss
             log_info = {
                 "avg_Q": Q.mean(),
                 "avg_target_Q": target_Q.mean(),
@@ -284,8 +282,8 @@ class QDaggerAgent:
         new_state = state.apply_gradients(grads=grads)
         return new_state, log_info
 
-    def update(self, batch):
-        self.state, log_info = self.train_step(self.state, self.target_params, batch)
+    def update(self, batch, lmbda):
+        self.state, log_info = self.train_step(lmbda, self.state, self.teacher_params, self.target_params, batch)
         return log_info
 
     def sync_target_network(self):
@@ -314,3 +312,5 @@ class QDaggerAgent:
             apply_fn=self.q_network.apply,
             params=new_params,
             tx=optax.adam(3e-4))
+        self.target_params = new_params
+        self.teacher_params = new_params

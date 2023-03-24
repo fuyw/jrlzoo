@@ -33,7 +33,7 @@ def eval_policy(agent, env):
     return np.mean(env.get_eval_rewards()), act_counts, time.time() - t1
 
 
-env_name = "Seaquest"
+env_name = "SpaceInvaders"
 ckpt_dir = f"saved_models/{env_name}"
 
 env = gym.make(f"{env_name}NoFrameskip-v4")
