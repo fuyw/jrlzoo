@@ -145,7 +145,8 @@ class DQNAgent:
         self.state = train_state.TrainState.create(
             apply_fn=self.q_network.apply,
             params=new_params,
-            tx=optax.adam(3e-4))
+            tx=optax.adam(self.lr_scheduler))
+        self.target_params = new_params
 
 
 class CQLAgent:

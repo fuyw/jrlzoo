@@ -7,12 +7,12 @@ atari_envs=(
     # "Seaquest"
     # "SpaceInvaders"
 )
-for i in 0 1 2 3 4
+for i in 10
 do
     for env in ${atari_envs[*]}
     do
         python main.py \
-        --config=configs/dqn.py \
+        --config=configs/done.py \
         --config.env_name=$env \
         --config.seed=$i
     done
