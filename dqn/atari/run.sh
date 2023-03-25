@@ -1,13 +1,13 @@
 #!/bin/bash
 atari_envs=(
-    "Breakout"
-    # "Asterix"
+    # "Breakout"
+    "Asterix"
     # "BeamRider"
     # "Pong"
     # "Seaquest"
     # "SpaceInvaders"
 )
-for i in 10
+for i in 10 20
 do
     for env in ${atari_envs[*]}
     do

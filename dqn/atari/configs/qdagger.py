@@ -6,7 +6,7 @@ def get_config():
     config = ml_collections.ConfigDict()
 
     # General setting
-    config.warmup_timesteps = int(1e4)
+    config.warmup_timesteps = int(2e4)
     config.total_timesteps = int(5e6)
     config.buffer_size = int(1e6)
     config.update_target_freq = int(1e4)
@@ -23,7 +23,7 @@ def get_config():
 
     # Logging
     config.ckpt_num = 10
-    config.eval_num = 10
+    config.eval_num = 20
 
     # Atari game
     config.env_name = "Breakout"

@@ -247,9 +247,11 @@ class QDaggerAgent:
         params = self.q_network.init(rng, jnp.ones(shape=(1, 84, 84, 4)))["params"]
         self.target_params = params
         self.teacher_params = params
+        self.lr_scheduler = optax.linear_schedule(
+            init_value=lr_start, end_value=lr_end, transition_steps=total_timesteps)
         self.state = train_state.TrainState.create(
             apply_fn=self.q_network.apply, params=params,
-            tx=optax.adam(3e-4))
+            tx=optax.adam(self.lr_scheduler))
         self.cnt = 0
 
     @functools.partial(jax.jit, static_argnums=0)
@@ -312,7 +314,7 @@ class QDaggerAgent:
         self.state = train_state.TrainState.create(
             apply_fn=self.q_network.apply,
             params=new_params,
-            tx=optax.adam(3e-4))
+            tx=optax.adam(self.lr_scheduler))
         self.target_params = new_params
         self.teacher_params = new_params
 

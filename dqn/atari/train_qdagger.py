@@ -57,9 +57,9 @@ def train_and_evaluate(config):
 
     # initialize DQN agent
     agent = QDaggerAgent(act_dim=act_dim, seed=config.seed)
-    agent.load(f"saved_models/cql/{config.env_name}", 1)
-    lmbda = 1.0
-    lmbda_delta = lmbda / int(5e6)
+    agent.load(f"saved_models/{config.env_name}", 1)
+    lmbda = 0.5
+    lmbda_delta = lmbda / int(3e6)
 
     # create the replay buffer
     replay_buffer = ReplayBuffer(max_size=1e6)
@@ -68,18 +68,16 @@ def train_and_evaluate(config):
     obs = env.reset()   # (84, 84)
     fps_t1 = None
     res = [{"step": 0, "eval_reward": eval_policy(agent, eval_env)[0]}]
+    logger.info(f"Step {0}K [{0.:.1f}%]: reward={res[0]['eval_reward']:.1f}\n")
     for t in trange(1, 1+config.total_timesteps):
         epsilon = linear_schedule(0.2, 0.05, config.explore_frac*config.total_timesteps, t)
-        if t <= config.warmup_timesteps:
+        if np.random.random() < epsilon:
             action = np.random.choice(act_dim)
         else:
-            if np.random.random() < epsilon:
-                action = np.random.choice(act_dim)
-            else:
-                context = replay_buffer.recent_obs()
-                context.append(obs)
-                context = np.stack(context, axis=-1)[None]
-                action = agent.sample(context)
+            context = replay_buffer.recent_obs()
+            context.append(obs)
+            context = np.stack(context, axis=-1)[None]
+            action = agent.sample(context)
 
         # interact with the environment
         next_obs, reward, done, _ = env.step(action)
@@ -88,13 +86,14 @@ def train_and_evaluate(config):
         if done:
             obs = env.reset()
 
+        lmbda = max(0, lmbda - lmbda_delta)
+
         # update the agent
         if (t > config.warmup_timesteps) and (t % config.train_freq == 0):
             batch = replay_buffer.sample_batch(config.batch_size)
             log_info = agent.update(batch, lmbda)
             if t % config.update_target_freq == 0:
                 agent.sync_target_network()
-            lmbda = max(0, lmbda - lmbda_delta)
 
         # evaluate the agent
         if (t > config.warmup_timesteps) and (t % eval_freq == 0):
