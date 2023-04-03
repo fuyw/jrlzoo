@@ -10,10 +10,9 @@ mujoco_envs=(
     "Hopper-v3"
     "Walker2d-v3"
     "Humanoid-v3"
-    # "Ant-v3"
 )
 
-for i in 0
+for i in 0 1 2 3 4
 do
     for env in ${mujoco_envs[*]}
     do

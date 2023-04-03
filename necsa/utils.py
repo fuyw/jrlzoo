@@ -1,4 +1,5 @@
 import collections
+import envpool
 import jax
 import jax.numpy as jnp
 import logging
@@ -79,3 +80,9 @@ def target_update(params: FrozenDict, target_params: FrozenDict, tau: float) -> 
 
 def get_kernel_norm(kernel_params: jnp.array):
     return jnp.linalg.norm(kernel_params)
+
+
+def make_env(env_name, seed, num_train_envs=1, num_test_envs=10):
+    train_envs = envpool.make_gym(env_name, num_envs=num_train_envs, seed=seed)
+    test_envs = envpool.make_gym(env_name, num_envs=num_test_envs, seed=seed+42)
+    return train_envs, test_envs
