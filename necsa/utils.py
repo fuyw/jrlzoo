@@ -7,6 +7,34 @@ import numpy as np
 from flax.core import FrozenDict
 
 
+###################
+# Utils Functions #
+###################
+def get_logger(fname):
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        filename=fname,
+                        filemode='w',
+                        force=True)
+    logger = logging.getLogger()
+    return logger
+
+
+def target_update(params: FrozenDict, target_params: FrozenDict, tau: float) -> FrozenDict:
+    def _update(param: FrozenDict, target_param: FrozenDict):
+        return tau*param + (1-tau)*target_param
+    updated_params = jax.tree_util.tree_map(_update, params, target_params)
+    return updated_params
+
+
+def get_kernel_norm(kernel_params: jnp.array):
+    return jnp.linalg.norm(kernel_params)
+
+
+#################
+# Replay Buffer #
+#################
 Batch = collections.namedtuple(
     "Batch",
     ["observations", "actions", "rewards", "discounts", "next_observations"])
@@ -60,29 +88,98 @@ class ReplayBuffer:
         return mean, std
 
 
-def get_logger(fname):
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S',
-                        filename=fname,
-                        filemode='w',
-                        force=True)
-    logger = logging.getLogger()
-    return logger
+###########################
+# Neural Episodic Control #
+###########################
+class Grid:
+    def __init__(self,
+                 min_val: np.ndarray,
+                 max_val: np.ndarray,
+                 grid_num: int,
+                 clipped: bool = True):
+
+        self.min_val = min_val
+        self.max_val = max_val
+        self.k = grid_num
+        self.dim = min_val.shape[0]
+        self.state_num = np.power(grid_num, self.dim)
+        self.delta = (max_val - min_val) / self.k
+        self.clipped = clipped
+
+    def state_abstract(self, raw_states):
+        abstract_states = np.zeros(raw_states.shape[0], dtype=np.int32)
 
 
-def target_update(params: FrozenDict, target_params: FrozenDict, tau: float) -> FrozenDict:
-    def _update(param: FrozenDict, target_param: FrozenDict):
-        return tau*param + (1-tau)*target_param
-    updated_params = jax.tree_util.tree_map(_update, params, target_params)
-    return updated_params
+class ScoreInspector:
+    def __init__(self,
+                 step: int,
+                 grid_num: int,
+                 obs_dim: int,
+                 hid_dim: int,
+                 act_dim: int,
+                 max_obs: float,
+                 max_action: float,
+                 reduction: bool = False):
+
+        self.step = step
+        self.grid_num = grid_num
+        self.obs_dim = obs_dim
+        self.act_dim = act_dim
+        self.hid_dim = hid_dim
+        self.max_obs = max_obs
+        self.max_action = max_action
+        self.reduction = reduction
+
+        # (state, action) pair
+        self.state_dim = obs_dim + act_dim
+
+        self.setup()
+
+    def setup(self):
+        if self.reduction:
+            self.project_matrix = np.random.uniform(0, 0.1, (self.state_dim, self.hid_dim))
+            self.min_state = np.dot(np.array([-self.max_obs for _ in range(self.obs_dim)] + [
+                -self.max_action for _ in range(self.act_dim)]), self.project_matrix)
+            self.max_state = np.dot(np.array([self.max_obs for _ in range(self.obs_dim)] + [
+                self.max_action for _ in range(self.act_dim)]), self.project_matrix)
+        else:
+            self.min_state = np.array([-self.max_obs for _ in range(self.obs_dim)] + [
+                -self.max_action for _ in range(self.act_dim)])
+            self.max_state = np.array([self.max_obs for _ in range(self.obs_dim)] + [
+                self.max_action for _ in range(self.act_dim)])
+
+        self.min_avg_proceed = 0
+        self.max_avg_proceed = 1000
+
+        self.avg_score = 0
+
+        self.states_info = dict()
+
+        self.grid = Grid(self.min_state, self.max_state, self.grid_num)
 
 
-def get_kernel_norm(kernel_params: jnp.array):
-    return jnp.linalg.norm(kernel_params)
+class Abstractor:
+    def __init__(self, step, epsilon):
+        self.step = step
+        self.epsilon = epsilon
+        self.inspector = None
+
+    def dim_reduction(self, state):
+        small_state = np.dot(state, self.inspector.project_matrix)
 
 
-def make_env(env_name, seed, num_train_envs=1, num_test_envs=10):
-    train_envs = envpool.make_gym(env_name, num_envs=num_train_envs, seed=seed)
-    test_envs = envpool.make_gym(env_name, num_envs=num_test_envs, seed=seed+42)
-    return train_envs, test_envs
+class NECReplayBuffer:
+    def __init__(self,
+                 obs_dim: int,
+                 act_dim: int,
+                 max_obs: float,
+                 max_action: float):
+
+        self.max_obs = max_obs
+        self.max_action = max_action
+
+        self.obs_list = []
+        self.obs_action_list = []
+        self.reward_list = []
+        self.episode_reward = []
+        

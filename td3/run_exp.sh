@@ -2,15 +2,15 @@
 
 # Script to reproduce results
 mujoco_envs=(
-    # "cheetah-run"
-    # "humanoid-run"
-    # "quadruped-run"
-    # "hopper-hop"
+    "cheetah-run"
+    "humanoid-run"
+    "quadruped-run"
+    "hopper-hop"
 
-    "HalfCheetah-v2"
-    "Hopper-v2"
-    "Walker2d-v2"
-    "Ant-v2"
+    # "HalfCheetah-v2"
+    # "Hopper-v2"
+    # "Walker2d-v2"
+    # "Ant-v2"
 )
 for i in 0 1 2 3 4
 do
