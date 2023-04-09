@@ -40,11 +40,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     os.makedirs(f"logs/{exp_prefix}/{config.env_name}", exist_ok=True)
     os.makedirs(f"saved_models/{exp_prefix}/{config.env_name}", exist_ok=True)
 
-    exp_info = f'# Running experiment for: {exp_name}_{config.env_name} #'
-    ckpt_dir = f"{config.model_dir}/{config.env_name.lower()}/{exp_name}"
+    exp_info = f"# Running experiment for: {exp_name}_{config.env_name} #"
+    ckpt_dir = f"{config.model_dir}/{exp_prefix}/{config.env_name}/{exp_name}"
     print('#'*len(exp_info) + f'\n{exp_info}\n' + '#'*len(exp_info))
 
-    logger = get_logger(f'logs/{config.env_name.lower()}/{exp_name}.log')
+    logger = get_logger(f"logs/{exp_prefix}/{config.env_name}/{exp_name}.log")
     logger.info(f"Exp configurations:\n{config}")
 
     # initialize the mujoco/dm_control environment
