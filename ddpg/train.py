@@ -1,5 +1,5 @@
-"""Online DDPG Agent (~1000fps)
-"""
+"""Online DDPG Agent (~1100fps)"""
+
 from typing import Tuple
 import os
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".2"

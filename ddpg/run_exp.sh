@@ -9,8 +9,7 @@ mujoco_envs=(
 )
 
 
-
-for i in 0
+for i in 1 2
 do
     for env in ${mujoco_envs[*]}
     do

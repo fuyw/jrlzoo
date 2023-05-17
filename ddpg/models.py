@@ -48,11 +48,6 @@ class Critic(nn.Module):
         q = self.out_layer(x)
         return q.squeeze(-1)
 
-    def encode(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        x = jnp.concatenate([observations, actions], axis=-1)
-        x = self.net(x)
-        return x
-
 
 class DoubleCritic(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
@@ -140,7 +135,7 @@ class DDPGAgent:
     def sample_action(self, observation: np.ndarray) -> np.ndarray:
         sampled_action = self._sample_action(self.actor_state.params, observation)
         sampled_action = np.asarray(sampled_action)
-        return sampled_action.clip(-1.0, 1.0)
+        return sampled_action
 
     def actor_train_step(self,
                          batch: Batch,
@@ -164,7 +159,6 @@ class DDPGAgent:
                           critic_state: train_state.TrainState,
                           actor_target_params: FrozenDict,
                           critic_target_params: FrozenDict):
-
         next_actions = self.actor.apply({"params": actor_target_params},
                                         batch.next_observations)  # (B, act_dim)
         next_q1, next_q2 = self.critic.apply({"params": critic_target_params},
@@ -172,7 +166,6 @@ class DDPGAgent:
                                              next_actions)
         next_q = jnp.minimum(next_q1, next_q2)
         target_q = batch.rewards + self.gamma * batch.discounts * next_q
-
         def loss_fn(params: FrozenDict):
             q1, q2 = self.critic.apply({"params": params},
                                        batch.observations,

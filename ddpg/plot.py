@@ -75,7 +75,7 @@ def plot_exp(envs, exp_name):
     plt.subplots_adjust(hspace=0.2, wspace=0.15)
     for idx, env in enumerate(envs):
         ax = axes[idx]
-        data, rewards = read_data(logdir=f'logs/{env.lower()}', window=10)
+        data, rewards = read_data(logdir=f'logs/ddpg/{env}', window=10)
         plot_ax(ax, data, colors[0], title=f'{env}', label=f"{np.mean(rewards):.1f}±{np.std(rewards):.1f}")
     plt.tight_layout()
     plt.savefig(f'imgs/{exp_name}.png', dpi=560)
@@ -83,7 +83,5 @@ def plot_exp(envs, exp_name):
 
 if __name__ == '__main__':
     os.makedirs('imgs', exist_ok=True)
-    dmc_envs = ["cheetah-run", "quadruped-run", "humanoid-run", "hopper-hop"]
-    mj_envs = ['HalfCheetah-v2', 'Hopper-v2', 'Walker2d-v2', 'Ant-v2']
-    # plot_exp(dmc_envs, 'dmc')
-    plot_exp(mj_envs, 'mujoco')
+    envs = ["HalfCheetah-v3", "Hopper-v3", "Walker2d-v3", "Ant-v3"]
+    plot_exp(envs, 'dmc')
