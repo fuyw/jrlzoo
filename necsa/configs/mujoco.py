@@ -3,11 +3,11 @@ import ml_collections
 
 def get_config():
     config = ml_collections.ConfigDict()
-    config.env_name = "Walker2d-v2"
+    config.env_name = "Walker2d-v3"
     config.log_dir = "logs"
     config.model_dir = "saved_models"
     config.lr = 3e-4
-    config.seed = 2
+    config.seed = 0
     config.tau = 0.005
     config.gamma = 0.99
     config.batch_size = 256
@@ -21,6 +21,5 @@ def get_config():
     config.noise_clip = 0.5
     config.policy_freq = 2
     config.hidden_dims = (256, 256)
-    config.fixed_ep_step = 200
     config.initializer = "glorot_uniform"
     return config

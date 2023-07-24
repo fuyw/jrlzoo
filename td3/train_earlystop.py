@@ -35,7 +35,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
 
-    exp_prefix = "td3"
+    exp_prefix = f"td3_L{config.fixed_ep_step}"
     exp_name = f"s{config.seed}_{timestamp}"
     os.makedirs(f"logs/{exp_prefix}/{config.env_name}", exist_ok=True)
     os.makedirs(f"saved_models/{exp_prefix}/{config.env_name}", exist_ok=True)
@@ -110,7 +110,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             batch = replay_buffer.sample(config.batch_size)
             log_info = agent.update(batch)
 
-        if done:
+        if done or ep_step==config.fixed_ep_step:
             obs, done = env.reset(), False
             lst_ep_reward, lst_ep_step = ep_reward, ep_step
             ep_reward, ep_step = 0, 0
