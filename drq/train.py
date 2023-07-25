@@ -155,4 +155,4 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     # Save logs
     log_df = pd.DataFrame(logs)
     log_df.to_csv(
-        f"{config.log_dir}/{config.env_nam}/{exp_name}.csv")
+        f"{config.log_dir}/{config.env_name}/{exp_name}.csv")
