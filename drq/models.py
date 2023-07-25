@@ -49,13 +49,6 @@ def target_update(params, target_params, tau: float = 0.005):
     return updated_params
 
 
-# def _share_encoder(source, target):
-#     new_params = target.params.copy(
-#         add_or_replace={"encoder": source.params["encoder"]}
-#     )
-#     return target.replace(params=new_params)
-
-
 class MLP(nn.Module):
     hidden_dims: Sequence[int] = (256, 256)
     init_fn: Callable = nn.initializers.glorot_uniform()
@@ -74,6 +67,7 @@ class Encoder(nn.Module):
     features: Sequence[int] = (32, 64, 128, 256)
     kernels: Sequence[int] = (3, 3, 3, 3)
     strides: Sequence[int] = (2, 2, 2, 2)
+    init_fn: Callable = nn.initializers.glorot_uniform()
     padding: str = "VALID"
 
     @nn.compact
@@ -88,7 +82,8 @@ class Encoder(nn.Module):
             x = nn.Conv(features,
                         kernel_size=(kernel, kernel),
                         strides=(stride, stride),
-                        padding=self.padding)(x)
+                        padding=self.padding,
+                        kernel_init=self.init_fn)(x)
             x = nn.relu(x)
         return x.reshape((*x.shape[:-3], -1))
 
@@ -245,7 +240,8 @@ class DrQAgent:
         encoder = Encoder(features=cnn_features,
                           kernels=cnn_kernels,
                           strides=cnn_strides,
-                          padding=cnn_padding)
+                          padding=cnn_padding,
+                          kernel_init=init_fn(self.initializer))
 
         # Critic
         sac_critic = DoubleCritic(hidden_dims=hidden_dims,
@@ -381,15 +377,17 @@ class DrQAgent:
                    critic_state,
                    target_critic_params):
 
-        # actor_state = _share_encoder(source=critic_state, target=actor_state)
+        # update actor's encoder parameter
         sync_params = actor_state.params.copy(
             add_or_replace={"encoder": critic_state.params["encoder"]})
         actor_state = actor_state.replace(params=sync_params)
 
+        # data augmentation
         aug_key1, aug_key2, actor_key, critic_key = jax.random.split(rng, 4)
         aug_observations = batched_random_crop(aug_key1, batch.observations[..., :-1])
         aug_next_observations = batched_random_crop(aug_key2, batch.observations[..., 1:])
 
+        # update model
         (new_alpha_state,
          new_actor_state,
          actor_info) = self.actor_alpha_train_step(aug_observations,
