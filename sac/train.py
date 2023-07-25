@@ -83,7 +83,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             action = agent.sample_action(obs)
 
         next_obs, reward, done, info = env.step(action)
-        done_bool = float(done) if "TimeLimit.truncated" not in info else 0
+        done_bool = int(done) if "TimeLimit.truncated" not in info else 0
 
         replay_buffer.add(obs, action, next_obs, reward, done_bool)
         obs = next_obs

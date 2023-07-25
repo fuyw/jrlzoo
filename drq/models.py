@@ -39,15 +39,6 @@ def target_update(params, target_params, tau: float = 0.005):
     return updated_params
 
 
-def _unpack(batch):
-    obs_pixels = batch["observations"]["pixels"][..., :-1]
-    next_obs_pixels = batch["observations"]["pixels"][..., 1:]
-    obs = batch["observations"].copy(add_or_replace={"pixels": obs_pixels})
-    next_obs = batch["next_observations"].copy(add_or_replace={"pixels": next_obs_pixels})
-    batch = batch.copy(add_or_replace={"observations": obs, "next_observations": next_obs})
-    return batch
-
-
 def _share_encoder(source, target):
     new_params = target.params.copy(
         add_or_replace={"encoder": source.params["encoder"]}

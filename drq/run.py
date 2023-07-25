@@ -12,7 +12,6 @@ from models import DrQLearner
 
 import jaxrl2.extra_envs.dm_control_suite
 from jaxrl2.wrappers import wrap_pixels
-from jaxrl2.data import MemoryEfficientReplayBuffer
 
 
 class Config:
@@ -84,10 +83,11 @@ def run():
             action = agent.sample_action(observation)
 
         next_observation, reward, done, info = env.step(action)
-        if not done or "TimeLimit.truncated" in info:
-            done_bool = 0
-        else:
-            done_bool = 1
+        done_bool = int(done) if "TimeLimit.truncated" not in info else 0
+        # if not done or "TimeLimit.truncated" in info:
+        #     done_bool = 0
+        # else:
+        #     done_bool = 1
 
         replay_buffer.add(observation["pixels"],
                           action,
