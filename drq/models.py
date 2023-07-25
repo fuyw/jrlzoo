@@ -193,7 +193,7 @@ class DrQActor(nn.Module):
 #############
 # DrQ Agent #
 #############
-class DrQLearner:
+class DrQAgent:
     def __init__(self,
                  obs_shape,
                  act_dim,
@@ -307,7 +307,7 @@ class DrQLearner:
             return critic_loss, {
                 "critic_loss": critic_loss,
                 "q": qs.mean(),
-                "target_actor_entropy": -next_log_probs.mean(),
+                "target_q": target_q.mean(),
             }
         grads, info = jax.grad(critic_loss_fn, has_aux=True)(critic_state.params)
         new_critic_state = critic_state.apply_gradients(grads=grads)
@@ -336,7 +336,13 @@ class DrQLearner:
             q = qs.mean(axis=0)
             actor_loss = (alpha * log_probs - q).mean()
             total_loss = alpha_loss + actor_loss
-            return total_loss, {"actor_loss": actor_loss, "entropy": -log_probs.mean()}
+            return total_loss, {
+                "alpha": alpha,
+                "logp": log_probs.mean(),
+                "actor_loss": actor_loss,
+                "alpha_loss": alpha_loss,
+                "entropy": -log_probs.mean(),
+            }
 
         grads, info = jax.grad(actor_loss_fn, argnums=(0, 1), has_aux=True)(alpha_state.params,
                                                                             actor_state.params)
