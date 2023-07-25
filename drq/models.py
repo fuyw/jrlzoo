@@ -18,6 +18,16 @@ from flax.core import FrozenDict
 ###################
 # Utils Functions #
 ###################
+def init_fn(initializer: str, gain: float = jnp.sqrt(2)):
+    if initializer == "orthogonal":
+        return nn.initializers.orthogonal(gain)
+    elif initializer == "glorot_uniform":
+        return nn.initializers.glorot_uniform()
+    elif initializer == "glorot_normal":
+        return nn.initializers.glorot_normal()
+    return nn.initializers.lecun_normal()
+
+
 def random_crop(key, img, padding):
     crop_from = jax.random.randint(key, (2,), 0, 2 * padding + 1)
     crop_from = jnp.concatenate([crop_from, jnp.zeros((2,), dtype=jnp.int32)])
@@ -39,11 +49,11 @@ def target_update(params, target_params, tau: float = 0.005):
     return updated_params
 
 
-def _share_encoder(source, target):
-    new_params = target.params.copy(
-        add_or_replace={"encoder": source.params["encoder"]}
-    )
-    return target.replace(params=new_params)
+# def _share_encoder(source, target):
+#     new_params = target.params.copy(
+#         add_or_replace={"encoder": source.params["encoder"]}
+#     )
+#     return target.replace(params=new_params)
 
 
 class MLP(nn.Module):
@@ -102,8 +112,10 @@ class Critic(nn.Module):
     output_dim: int = 1
 
     def setup(self):
-        self.net = MLP(self.hidden_dims, activate_final=True)
-        self.out_layer = nn.Dense(self.output_dim)
+        self.net = MLP(self.hidden_dims,
+                       init_fn=init_fn(self.initializer),
+                       activate_final=True)
+        self.out_layer = nn.Dense(self.output_dim, kernel_init=init_fn(self.initializer, 1.0))
 
     def __call__(self, observations: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         x = jnp.concatenate([observations, actions], axis=-1)
@@ -142,9 +154,11 @@ class Actor(nn.Module):
     min_scale: float = 1e-3
 
     def setup(self):
-        self.net = MLP(self.hidden_dims, activate_final=True)
-        self.mu_layer = nn.Dense(self.act_dim)
-        self.std_layer = nn.Dense(self.act_dim)
+        self.net = MLP(self.hidden_dims,
+                       init_fn=init_fn(self.initializer),
+                       activate_final=True)
+        self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
+        self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1.0))
 
     def __call__(self, observation: jnp.ndarray, training: bool = False):
         x = self.net(observation)
@@ -165,11 +179,12 @@ class DrQCritic(nn.Module):
     encoder: nn.Module
     critic: nn.Module
     emb_dim: int = 50
+    initializer: str = "orthogonal"
 
     @nn.compact
     def __call__(self, observations, actions):
         x = self.encoder(observations)
-        x = nn.Dense(self.emb_dim)(x)
+        x = nn.Dense(self.emb_dim, kernel_init=init_fn(self.initializer))(x)
         x = nn.LayerNorm()(x)
         x = nn.tanh(x)
         return self.critic(x, actions)
@@ -179,12 +194,13 @@ class DrQActor(nn.Module):
     encoder: nn.Module
     actor: nn.Module
     emb_dim: int = 50
+    initializer: str = "orthogonal"
 
     @nn.compact
     def __call__(self, observations):
         x = self.encoder(observations)
         x = jax.lax.stop_gradient(x)
-        x = nn.Dense(self.emb_dim)(x)
+        x = nn.Dense(self.emb_dim, kernel_init=init_fn(self.initializer))(x)
         x = nn.LayerNorm()(x)
         x = nn.tanh(x)
         return self.actor(x)
@@ -208,6 +224,7 @@ class DrQAgent:
                  cnn_kernels: Sequence[int] = (3, 3, 3, 3),
                  cnn_strides: Sequence[int] = (2, 2, 2, 2),
                  cnn_padding: str = "VALID",
+                 initializer: str = "orthogonal",
                  target_entropy: Optional[float] = None):
 
         self.tau = tau
@@ -231,10 +248,12 @@ class DrQAgent:
                           padding=cnn_padding)
 
         # Critic
-        sac_critic = DoubleCritic()
+        sac_critic = DoubleCritic(hidden_dims=hidden_dims,
+                                  initializer=initializer)
         self.critic = DrQCritic(encoder=encoder,
                                 critic=sac_critic,
-                                emb_dim=emb_dim)
+                                emb_dim=emb_dim,
+                                initializer=initializer)
         critic_params = self.critic.init(critic_key,
                                          dummy_obs,
                                          dummy_act)["params"]
@@ -245,10 +264,13 @@ class DrQAgent:
             tx=optax.adam(learning_rate=lr))
 
         # Actor
-        sac_actor = Actor(act_dim)
+        sac_actor = Actor(act_dim=act_dim,
+                          hidden_dims=hidden_dims,
+                          initializer=initializer)
         self.actor = DrQActor(encoder=encoder,
                               actor=sac_actor,
-                              emb_dim=emb_dim)
+                              emb_dim=emb_dim,
+                              initializer=initializer)
         actor_params = self.actor.init(actor_key, dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(
             apply_fn=self.actor.apply,
@@ -280,50 +302,14 @@ class DrQAgent:
         action = np.asarray(action)
         return action.clip(-self.max_action, self.max_action)
 
-    def critic_train_step(self,
-                          key,
-                          alpha_state,
-                          actor_state,
-                          critic_state,
-                          target_critic_params,
-                          observations,
-                          actions,
-                          rewards,
-                          next_observations,
-                          masks):
-        _, dist = self.actor.apply({"params": actor_state.params}, next_observations)
-        next_actions, next_log_probs = dist.sample_and_log_prob(seed=key)
-        next_qs = self.critic.apply({"params": target_critic_params},
-                                    next_observations, next_actions)
+    def actor_alpha_train_step(self,
+                               observations: jnp.ndarray,
+                               key: Any,
+                               alpha_state: train_state.TrainState,
+                               actor_state: train_state.TrainState,
+                               critic_state: train_state.TrainState):
 
-        log_alpha = self.log_alpha.apply({"params": alpha_state.params})
-        alpha = jnp.exp(log_alpha)
-        next_q = next_qs.min(axis=0) - alpha * next_log_probs
-        target_q = rewards + self.gamma * masks * next_q
-
-        def critic_loss_fn(critic_params):
-            qs = self.critic.apply({"params": critic_params}, observations, actions)
-            critic_loss = ((qs - target_q) ** 2).mean()
-            return critic_loss, {
-                "critic_loss": critic_loss,
-                "q": qs.mean(),
-                "target_q": target_q.mean(),
-            }
-        grads, info = jax.grad(critic_loss_fn, has_aux=True)(critic_state.params)
-        new_critic_state = critic_state.apply_gradients(grads=grads)
-        new_critic_target_params = target_update(new_critic_state.params,
-                                                 target_critic_params,
-                                                 self.tau)
-        return new_critic_state, new_critic_target_params, info
-
-    def actor_train_step(self,
-                         key,
-                         alpha_state,
-                         actor_state,
-                         critic_state,
-                         observations):
-
-        def actor_loss_fn(alpha_params, actor_params):
+        def actor_loss_fn(alpha_params: FrozenDict, actor_params: FrozenDict):
             _, dist = self.actor.apply({"params": actor_params}, observations)
             actions, log_probs = dist.sample_and_log_prob(seed=key)
 
@@ -352,55 +338,92 @@ class DrQAgent:
 
         return new_alpha_state, new_actor_state, info
 
+    def critic_train_step(self,
+                          observations: jnp.ndarray,
+                          actions: jnp.ndarray,
+                          rewards: jnp.ndarray,
+                          next_observations: jnp.ndarray,
+                          discounts: jnp.ndarray,
+                          key: Any,
+                          alpha: float,
+                          actor_state: train_state.TrainState,
+                          critic_state: train_state.TrainState,
+                          target_critic_params: FrozenDict):
+        _, dist = self.actor.apply({"params": actor_state.params}, next_observations)
+        next_actions, next_log_probs = dist.sample_and_log_prob(seed=key)
+        next_qs = self.critic.apply({"params": target_critic_params},
+                                    next_observations, next_actions)
+
+        next_q = next_qs.min(axis=0) - alpha * next_log_probs
+        target_q = rewards + self.gamma * discounts * next_q
+
+        def critic_loss_fn(critic_params):
+            qs = self.critic.apply({"params": critic_params}, observations, actions)
+            critic_loss = ((qs - target_q) ** 2).mean()
+            return critic_loss, {
+                "critic_loss": critic_loss,
+                "q": qs.mean(),
+                "target_q": target_q.mean(),
+            }
+        grads, info = jax.grad(critic_loss_fn, has_aux=True)(critic_state.params)
+        new_critic_state = critic_state.apply_gradients(grads=grads)
+        new_critic_target_params = target_update(new_critic_state.params,
+                                                 target_critic_params,
+                                                 self.tau)
+        return new_critic_state, new_critic_target_params, info
+
     @functools.partial(jax.jit, static_argnames=("self"))
     def train_step(self,
+                   batch,
                    rng,
                    alpha_state,
                    actor_state,
                    critic_state,
-                   target_critic_params,
-                   batch):
+                   target_critic_params):
 
-        actor_state = _share_encoder(source=critic_state, target=actor_state)
+        # actor_state = _share_encoder(source=critic_state, target=actor_state)
+        sync_params = actor_state.params.copy(
+            add_or_replace={"encoder": critic_state.params["encoder"]})
+        actor_state = actor_state.replace(params=sync_params)
 
-        rng, aug_key1, aug_key2, actor_key, critic_key = jax.random.split(rng, 5)
-        aug_pixels = batched_random_crop(aug_key1, batch.observations[..., :-1])
-        aug_next_pixels = batched_random_crop(aug_key2, batch.observations[..., 1:])
-
-        (new_critic_state,
-         new_target_critic_params,
-         critic_info) = self.critic_train_step(critic_key,
-                                               alpha_state,
-                                               actor_state,
-                                               critic_state,
-                                               target_critic_params,
-                                               aug_pixels, 
-                                               batch.actions,
-                                               batch.rewards,
-                                               aug_next_pixels,
-                                               batch.discounts)
+        aug_key1, aug_key2, actor_key, critic_key = jax.random.split(rng, 4)
+        aug_observations = batched_random_crop(aug_key1, batch.observations[..., :-1])
+        aug_next_observations = batched_random_crop(aug_key2, batch.observations[..., 1:])
 
         (new_alpha_state,
          new_actor_state,
-         actor_info) = self.actor_train_step(actor_key,
-                                             alpha_state,
-                                             actor_state,
-                                             critic_state,
-                                             aug_pixels)
+         actor_info) = self.actor_alpha_train_step(aug_observations,
+                                                   actor_key,
+                                                   alpha_state,
+                                                   actor_state,
+                                                   critic_state)
+        alpha = actor_info["alpha"]
+        (new_critic_state,
+         new_target_critic_params,
+         critic_info) = self.critic_train_step(aug_observations,
+                                               batch.actions,
+                                               batch.rewards,
+                                               aug_next_observations,
+                                               batch.discounts,
+                                               critic_key,
+                                               alpha,
+                                               actor_state,
+                                               critic_state,
+                                               target_critic_params)
 
-        return rng, new_alpha_state, new_actor_state, new_critic_state, \
-            new_target_critic_params, {**critic_info, **actor_info},
+        return new_alpha_state, new_actor_state, new_critic_state, \
+            new_target_critic_params, {**critic_info, **actor_info}
 
     def update(self, batch: FrozenDict) -> Dict[str, float]:
-        (self.rng,
-         self.alpha_state,
+        self.rng, key = jax.random.split(self.rng)
+        (self.alpha_state,
          self.actor_state,
          self.critic_state,
          self.target_critic_params,
-         info) = self.train_step(self.rng,
+         info) = self.train_step(batch,
+                                 key,
                                  self.alpha_state,
                                  self.actor_state,
                                  self.critic_state,
-                                 self.target_critic_params,
-                                 batch)
+                                 self.target_critic_params)
         return info

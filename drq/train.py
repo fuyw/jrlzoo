@@ -49,6 +49,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     logger = get_logger(f"logs/{config.env_name.lower()}/{exp_name}.log")
     logger.info(f"Exp configurations:\n{config}")
 
+    # set random seed
+    np.random.seed(config.seed)
+    random.seed(config.seed)
+
     # initialize environments
     action_repeat = PLANET_ACTION_REPEAT.get(config.env_name, 2)
     env = make_env(env_name=config.env_name,
@@ -61,10 +65,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                         action_repeat=action_repeat,
                         image_size=config.image_size,
                         num_stack=config.num_stack)
-
-    # set random seed
-    np.random.seed(config.seed)
-    random.seed(config.seed)
 
     # DrQAgent
     obs_shape = env.observation_space["pixels"].shape

@@ -12,6 +12,7 @@ def make_env(env_name, seed, action_repeat, image_size, num_stack):
     domain_name, task_name = env_name.split('-')
     env = suite.load(domain_name=domain_name, task_name=task_name)
     env = DMC2GYM(env)
+
     env.seed(seed)
     env.action_space.seed(seed)
     env.observation_space.seed(seed)
