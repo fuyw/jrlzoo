@@ -241,7 +241,7 @@ class DrQAgent:
                           kernels=cnn_kernels,
                           strides=cnn_strides,
                           padding=cnn_padding,
-                          kernel_init=init_fn(self.initializer))
+                          init_fn=init_fn(initializer))
 
         # Critic
         sac_critic = DoubleCritic(hidden_dims=hidden_dims,
