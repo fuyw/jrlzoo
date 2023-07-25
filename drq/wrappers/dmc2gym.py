@@ -49,20 +49,15 @@ def dmc_obs2gym_obs(obs):
 class DMC2GYM(gym.core.Env):
     def __init__(self, env: dm_env.Environment):
         self._env = env
-
         self.action_space = dmc_spec2gym_space(self._env.action_spec())
-
         self.observation_space = dmc_spec2gym_space(self._env.observation_spec())
-
         self.viewer = None
 
     def _get_viewer(self):
         if self.viewer is None:
             from gym.envs.mujoco.mujoco_rendering import Viewer
-
-            self.viewer = Viewer(
-                self._env.physics.model.ptr, self._env.physics.data.ptr
-            )
+            self.viewer = Viewer(self._env.physics.model.ptr,
+                                 self._env.physics.data.ptr)
         return self.viewer
 
     def __getattr__(self, name):

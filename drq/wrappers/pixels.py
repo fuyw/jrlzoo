@@ -6,7 +6,7 @@ from gym.wrappers.pixel_observation import PixelObservationWrapper
 from wrappers import frame_stack
 from wrappers.frame_stack import FrameStack
 from wrappers.repeat_action import RepeatAction
-from wrappers.universal_seed import UniversalSeed
+# from wrappers.universal_seed import UniversalSeed
 
 
 def wrap_pixels(
@@ -19,7 +19,7 @@ def wrap_pixels(
     if action_repeat > 1:
         env = RepeatAction(env, action_repeat)
 
-    env = UniversalSeed(env)
+    # env = UniversalSeed(env)
     env = gym.wrappers.RescaleAction(env, -1, 1)
 
     env = PixelObservationWrapper(
