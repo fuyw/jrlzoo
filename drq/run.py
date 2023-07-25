@@ -7,7 +7,7 @@ import random
 import numpy as np
 
 from tqdm import trange
-from utils import get_logger
+from utils import get_logger, EfficientBuffer
 from models import DrQLearner
 
 import jaxrl2.extra_envs.dm_control_suite
@@ -71,12 +71,9 @@ def run():
     act_dim = env.action_space.shape[0]
     agent = DrQLearner(obs_shape, act_dim)
 
-    replay_buffer_size = int(5e5) // 4
-    replay_buffer = MemoryEfficientReplayBuffer(env.observation_space,
-                                                env.action_space,
-                                                replay_buffer_size)
-    replay_buffer_iterator = replay_buffer.get_iterator(
-        sample_args={"batch_size": 256, "include_pixels": False})
+    buffer_size = int(5e5) // 4
+    replay_buffer = EfficientBuffer(obs_shape, act_dim, max_size=buffer_size)
+    replay_buffer_iterator = replay_buffer.get_iterator()
 
     observation, done = env.reset(), False
 
@@ -88,20 +85,16 @@ def run():
 
         next_observation, reward, done, info = env.step(action)
         if not done or "TimeLimit.truncated" in info:
-            mask = 1.0
+            done_bool = 0
         else:
-            mask = 0.0
+            done_bool = 1
 
-        replay_buffer.insert(
-            dict(
-                observations=observation,
-                actions=action,
-                rewards=reward,
-                masks=mask,
-                dones=done,
-                next_observations=next_observation,
-            )
-        )
+        replay_buffer.add(observation["pixels"],
+                          action,
+                          next_observation["pixels"],
+                          reward,
+                          done_bool,
+                          done)
         observation = next_observation
 
         if done:
@@ -109,7 +102,7 @@ def run():
 
         if i >= 1000:
             batch = next(replay_buffer_iterator)
-            update_info = agent.update(batch)  # 264 / 180 / 115
+            update_info = agent.update(batch)
 
         if (i * action_repeat) % 10000 == 0:
             eval_reward, eval_step, eval_time = eval_policy(agent, eval_env)

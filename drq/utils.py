@@ -46,17 +46,9 @@ class EfficientBuffer:
 
         # (100000, 64, 64, 3)
         self.observations = np.zeros((max_size, *obs_shape[:-1]), dtype=np.uint8)
-
-        # (100000, 4)
         self.actions = np.zeros((max_size, act_dim), dtype=np.float32)
-
-        # (100000,)
         self.rewards = np.zeros(max_size, dtype=np.float32)
-
-        # (100000,)
         self.discounts = np.zeros(max_size, dtype=np.uint8)
-
-        # (100000,)
         self.valid_idx = np.zeros(max_size, dtype=bool)
 
     def add(self,
@@ -105,7 +97,7 @@ class EfficientBuffer:
 
         # overwrite next frame_stack
         for i in range(self.frame_stack):
-            idx = (self.ptr + 1) % self.size
+            idx = (self.ptr + 1) % self.max_size
             self.valid_idx[idx] = False
 
     def sample(self):

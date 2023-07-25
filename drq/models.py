@@ -364,12 +364,11 @@ class DrQLearner:
                    target_critic_params,
                    batch):
 
-        batch = _unpack(batch)
         actor_state = _share_encoder(source=critic_state, target=actor_state)
 
         rng, aug_key1, aug_key2, actor_key, critic_key = jax.random.split(rng, 5)
-        aug_pixels = batched_random_crop(aug_key1, batch["observations"]["pixels"])
-        aug_next_pixels = batched_random_crop(aug_key2, batch["next_observations"]["pixels"])
+        aug_pixels = batched_random_crop(aug_key1, batch.observations[..., :-1])
+        aug_next_pixels = batched_random_crop(aug_key2, batch.observations[..., 1:])
 
         (new_critic_state,
          new_target_critic_params,
@@ -379,10 +378,10 @@ class DrQLearner:
                                                critic_state,
                                                target_critic_params,
                                                aug_pixels, 
-                                               batch["actions"],
-                                               batch["rewards"],
+                                               batch.actions,
+                                               batch.rewards,
                                                aug_next_pixels,
-                                               batch["masks"])
+                                               batch.discounts)
 
         (new_alpha_state,
          new_actor_state,
