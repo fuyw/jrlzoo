@@ -6,6 +6,7 @@ import gym
 import time
 import random
 import numpy as np
+import pandas as pd
 
 from tqdm import trange
 from models import DrQAgent
@@ -100,7 +101,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
     # start training
     observation, done = env.reset(), False
-    for t in trange(action_repeat, config.max_timesteps+action_repeat, action_repeat):
+    for t in trange(action_repeat,
+                    config.max_timesteps+action_repeat,
+                    action_repeat):
         if t < config.start_timesteps * action_repeat:
             action = env.action_space.sample()
         else:
@@ -108,7 +111,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
 
         next_observation, reward, done, info = env.step(action)
         done_bool = int(done) if "TimeLimit.truncated" not in info else 0
-
         replay_buffer.add(observation["pixels"],
                           action,
                           next_observation["pixels"],

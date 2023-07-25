@@ -16,6 +16,7 @@ from flax.core import FrozenDict
 
 from utils import init_fn, random_crop, batched_random_crop, target_update
 
+
 ###################
 # Utils Functions #
 ###################
@@ -114,8 +115,6 @@ class Actor(nn.Module):
     max_action: float = 1.0
     hidden_dims: Sequence[int] = (256, 256)
     initializer: str = "orthogonal"
-    log_std_min: Optional[float] = None
-    log_std_max: Optional[float] = None
     min_scale: float = 1e-3
 
     def setup(self):
@@ -125,7 +124,7 @@ class Actor(nn.Module):
         self.mu_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 5/3))
         self.std_layer = nn.Dense(self.act_dim, kernel_init=init_fn(self.initializer, 1.0))
 
-    def __call__(self, observation: jnp.ndarray, training: bool = False):
+    def __call__(self, rng: Any, observation: jnp.ndarray):
         x = self.net(observation)
         mu = self.mu_layer(x)
         mean_action = nn.tanh(mu)
@@ -137,7 +136,9 @@ class Actor(nn.Module):
             distrax.MultivariateNormalDiag(mu, std),
             distrax.Block(distrax.Tanh(), ndims=1))
 
-        return mean_action * self.max_action, action_distribution
+        sampled_action, logp = action_distribution.sample_and_log_prob(seed=rng)
+
+        return mean_action * self.max_action, sampled_action * self.max_action, logp
 
 
 class DrQCritic(nn.Module):
@@ -162,13 +163,13 @@ class DrQActor(nn.Module):
     initializer: str = "orthogonal"
 
     @nn.compact
-    def __call__(self, observations):
+    def __call__(self, rng, observations):
         x = self.encoder(observations)
         x = jax.lax.stop_gradient(x)
         x = nn.Dense(self.emb_dim, kernel_init=init_fn(self.initializer))(x)
         x = nn.LayerNorm()(x)
         x = nn.tanh(x)
-        return self.actor(x)
+        return self.actor(rng, x)
 
 
 #############
@@ -237,7 +238,9 @@ class DrQAgent:
                               actor=sac_actor,
                               emb_dim=emb_dim,
                               initializer=initializer)
-        actor_params = self.actor.init(actor_key, dummy_obs)["params"]
+        actor_params = self.actor.init(actor_key,
+                                       actor_key,
+                                       dummy_obs)["params"]
         self.actor_state = train_state.TrainState.create(
             apply_fn=self.actor.apply,
             params=actor_params,
@@ -255,15 +258,16 @@ class DrQAgent:
                        params: FrozenDict,
                        rng: Any,
                        observation: np.ndarray) -> jnp.ndarray:
-        mean_action, action_dist = self.actor.apply({"params": params}, observation)
-        sampled_action, _ = action_dist.sample_and_log_prob(seed=rng)
+        mean_action, sampled_action, _ = self.actor.apply(
+            {"params": params}, rng, observation)
         return mean_action, sampled_action
 
     def sample_action(self, observation, eval_mode: bool = False):
         self.rng, sample_rng = jax.random.split(self.rng)
-        mean_action, sampled_action = self._sample_action(self.actor_state.params,
-                                                          sample_rng,
-                                                          observation["pixels"])
+        mean_action, sampled_action = self._sample_action(
+            self.actor_state.params,
+            sample_rng,
+            observation["pixels"])
         action = mean_action if eval_mode else sampled_action
         action = np.asarray(action)
         return action.clip(-self.max_action, self.max_action)
@@ -276,8 +280,9 @@ class DrQAgent:
                                critic_state: train_state.TrainState):
 
         def actor_loss_fn(alpha_params: FrozenDict, actor_params: FrozenDict):
-            _, dist = self.actor.apply({"params": actor_params}, observations)
-            actions, log_probs = dist.sample_and_log_prob(seed=key)
+            _, actions, log_probs = self.actor.apply({"params": actor_params},
+                                                     key,
+                                                     observations)
 
             log_alpha = self.log_alpha.apply({"params": alpha_params})
             alpha = jnp.exp(log_alpha)
@@ -315,8 +320,8 @@ class DrQAgent:
                           actor_state: train_state.TrainState,
                           critic_state: train_state.TrainState,
                           target_critic_params: FrozenDict):
-        _, dist = self.actor.apply({"params": actor_state.params}, next_observations)
-        next_actions, next_log_probs = dist.sample_and_log_prob(seed=key)
+        _, next_actions, next_log_probs = self.actor.apply(
+            {"params": actor_state.params}, key, next_observations)
         next_qs = self.critic.apply({"params": target_critic_params},
                                     next_observations, next_actions)
 
