@@ -69,7 +69,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     # DrQAgent
     obs_shape = env.observation_space["pixels"].shape
     act_dim = env.action_space.shape[0]
-    agent = DrQAgent(obs_shape, act_dim)
+    agent = DrQAgent(obs_shape=obs_shape,
+                     act_dim=act_dim,
+                     emb_dim=config.emb_dim,
+                     seed=config.seed,
+                     lr=config.lr,
+                     tau=config.tau,
+                     gamma=config.gamma,
+                     hidden_dims=config.hidden_dims,
+                     cnn_features=config.cnn_features,
+                     cnn_kernels=config.cnn_kernels,
+                     cnn_strides=config.cnn_strides,
+                     cnn_padding=config.cnn_padding)
 
     # replay buffer
     buffer_size = config.max_timesteps // action_repeat
