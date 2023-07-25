@@ -10,7 +10,8 @@ from tqdm import trange
 from utils import get_logger, EfficientBuffer
 from models import DrQLearner
 
-import jaxrl2.extra_envs.dm_control_suite
+# import jaxrl2.extra_envs.dm_control_suite
+from dm_control import suite
 from jaxrl2.wrappers import wrap_pixels
 
 
@@ -21,6 +22,17 @@ class Config:
     image_size = 64
 
 FLAGS = Config()
+
+
+def make_env(env_name, seed):
+    from wrappers import DMC2GYM
+    domain_name, task_name = env_name.split('-')
+    env = suite.load(domain_name=domain_name, task_name=task_name)
+    env = DMC2GYM(env)
+    env.seed(seed)
+    env.action_space.seed(seed)
+    env.observation_space.seed(seed)
+    return env
 
 
 def eval_policy(agent, env, eval_episodes: int = 10):
@@ -57,14 +69,11 @@ def run():
     np.random.seed(0)
     random.seed(0)
 
-    env = gym.make(FLAGS.env_name)
+    env = make_env(FLAGS.env_name, 1)
     env = wrap(env)
-    env = gym.wrappers.RecordEpisodeStatistics(env, deque_size=1)
-    env.seed(FLAGS.seed)
 
-    eval_env = gym.make(FLAGS.env_name)
+    eval_env = make_env(FLAGS.env_name, 2)
     eval_env = wrap(eval_env)
-    eval_env.seed(FLAGS.seed + 42)
 
     obs_shape = env.observation_space["pixels"].shape
     act_dim = env.action_space.shape[0]
@@ -84,10 +93,6 @@ def run():
 
         next_observation, reward, done, info = env.step(action)
         done_bool = int(done) if "TimeLimit.truncated" not in info else 0
-        # if not done or "TimeLimit.truncated" in info:
-        #     done_bool = 0
-        # else:
-        #     done_bool = 1
 
         replay_buffer.add(observation["pixels"],
                           action,

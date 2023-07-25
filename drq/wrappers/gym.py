@@ -1,8 +1,8 @@
 import gym
 from gym.wrappers.flatten_observation import FlattenObservation
 
-from jaxrl2.wrappers.single_precision import SinglePrecision
-from jaxrl2.wrappers.universal_seed import UniversalSeed
+from wrappers.single_precision import SinglePrecision
+from wrappers.universal_seed import UniversalSeed
 
 
 def wrap_gym(env: gym.Env, rescale_actions: bool = True) -> gym.Env:

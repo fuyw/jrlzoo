@@ -3,10 +3,10 @@ from typing import Optional
 import gym
 from gym.wrappers.pixel_observation import PixelObservationWrapper
 
-from jaxrl2.wrappers import frame_stack
-from jaxrl2.wrappers.frame_stack import FrameStack
-from jaxrl2.wrappers.repeat_action import RepeatAction
-from jaxrl2.wrappers.universal_seed import UniversalSeed
+from wrappers import frame_stack
+from wrappers.frame_stack import FrameStack
+from wrappers.repeat_action import RepeatAction
+from wrappers.universal_seed import UniversalSeed
 
 
 def wrap_pixels(
