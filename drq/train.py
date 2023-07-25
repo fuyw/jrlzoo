@@ -58,19 +58,23 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     env = make_env(env_name=config.env_name,
                    seed=config.seed,
                    action_repeat=action_repeat,
+                   num_stack=config.num_stack,
                    image_size=config.image_size,
-                   num_stack=config.num_stack)
+                   from_pixels=True)
     eval_env = make_env(env_name=config.env_name,
                         seed=config.seed+42,
                         action_repeat=action_repeat,
+                        num_stack=config.num_stack,
                         image_size=config.image_size,
-                        num_stack=config.num_stack)
+                        from_pixels=True)
 
     # DrQAgent
     obs_shape = env.observation_space["pixels"].shape
     act_dim = env.action_space.shape[0]
+    max_action = env.action_space.high[0]
     agent = DrQAgent(obs_shape=obs_shape,
                      act_dim=act_dim,
+                     max_action=max_action,
                      emb_dim=config.emb_dim,
                      seed=config.seed,
                      lr=config.lr,

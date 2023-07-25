@@ -1,51 +1,7 @@
 from typing import Tuple
 import collections
-import logging
 import jax
 import numpy as np
-
-from dm_control import suite
-from wrappers import DMC2GYM, wrap_pixels
-
-
-def make_env(env_name, seed, action_repeat, image_size, num_stack):
-    domain_name, task_name = env_name.split('-')
-    env = suite.load(domain_name=domain_name,
-                     task_name=task_name,
-                     task_kwargs={"random": seed})
-    env = DMC2GYM(env)
-
-    def wrap(env):
-        if "quadruped" in env_name:
-            camera_id = 2
-        else:
-            camera_id = 0
-        return wrap_pixels(
-            env,
-            action_repeat=action_repeat,
-            image_size=image_size,
-            num_stack=num_stack,
-            camera_id=camera_id,
-        )
-
-    env = wrap(env)
-
-    env.seed(seed)
-    env.action_space.seed(seed)
-    env.observation_space.seed(seed)
-
-    return env
-
-
-def get_logger(fname: str) -> logging.Logger:
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S',
-                        filename=fname,
-                        filemode='w',
-                        force=True)
-    logger = logging.getLogger()
-    return logger
 
 
 Batch = collections.namedtuple(

@@ -341,7 +341,7 @@ class DrQAgent:
                           next_observations: jnp.ndarray,
                           discounts: jnp.ndarray,
                           key: Any,
-                          alpha: float,
+                          alpha_state: train_state.TrainState,
                           actor_state: train_state.TrainState,
                           critic_state: train_state.TrainState,
                           target_critic_params: FrozenDict):
@@ -349,6 +349,9 @@ class DrQAgent:
         next_actions, next_log_probs = dist.sample_and_log_prob(seed=key)
         next_qs = self.critic.apply({"params": target_critic_params},
                                     next_observations, next_actions)
+
+        log_alpha = self.log_alpha.apply({"params": alpha_state.params})
+        alpha = jnp.exp(log_alpha)
 
         next_q = next_qs.min(axis=0) - alpha * next_log_probs
         target_q = rewards + self.gamma * discounts * next_q
@@ -388,14 +391,6 @@ class DrQAgent:
         aug_next_observations = batched_random_crop(aug_key2, batch.observations[..., 1:])
 
         # update model
-        (new_alpha_state,
-         new_actor_state,
-         actor_info) = self.actor_alpha_train_step(aug_observations,
-                                                   actor_key,
-                                                   alpha_state,
-                                                   actor_state,
-                                                   critic_state)
-        alpha = actor_info["alpha"]
         (new_critic_state,
          new_target_critic_params,
          critic_info) = self.critic_train_step(aug_observations,
@@ -404,10 +399,18 @@ class DrQAgent:
                                                aug_next_observations,
                                                batch.discounts,
                                                critic_key,
-                                               alpha,
+                                               alpha_state,
                                                actor_state,
                                                critic_state,
                                                target_critic_params)
+
+        (new_alpha_state,
+         new_actor_state,
+         actor_info) = self.actor_alpha_train_step(aug_observations,
+                                                   actor_key,
+                                                   alpha_state,
+                                                   actor_state,
+                                                   critic_state)
 
         return new_alpha_state, new_actor_state, new_critic_state, \
             new_target_critic_params, {**critic_info, **actor_info}
