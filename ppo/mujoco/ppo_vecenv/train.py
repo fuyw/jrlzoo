@@ -40,7 +40,7 @@ def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
 def train_and_evaluate(config: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-    exp_prefix = f"ppo_N{config.actor_num}_L{config.config.rollout_len}"
+    exp_prefix = f"ppo_N{config.actor_num}_L{config.rollout_len}"
     exp_name = f"s{config.seed}_{timestamp}"
     exp_info = f"# Running experiment for: {exp_prefix}_{exp_name}_{config.env_name} #"
     print("#" * len(exp_info) + f"\n{exp_info}\n" + "#" * len(exp_info))

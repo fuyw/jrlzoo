@@ -24,21 +24,18 @@ export D4RL_SUPPRESS_IMPORT_ERROR=1
 export MUJOCO_GL=egl
 
 
-for seed in 0
+for seed in 0 1 2 3 4
 do
-    for param in 0 1 2 3 4
+    for env_name in ${mujoco_envs[*]}
     do
-        for env_name in ${mujoco_envs[*]}
-        do
-            python main.py \
-            --config=configs/dmc.py \
-            --config.env_name=$env_name \
-            --config.exp_name=ppo \
-            --config.actor_num=16 \
-            --config.rollout_len=125 \
-            --config.batch_size=256 \
-            --config.num_epochs=10 \
-            --config.seed=$seed
-        done
+        python main.py \
+        --config=configs/dmc.py \
+        --config.env_name=$env_name \
+        --config.exp_name=ppo \
+        --config.actor_num=16 \
+        --config.rollout_len=125 \
+        --config.batch_size=256 \
+        --config.num_epochs=10 \
+        --config.seed=$seed
     done
 done
