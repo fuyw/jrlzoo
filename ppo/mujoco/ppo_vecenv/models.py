@@ -195,6 +195,7 @@ class PPOAgent:
                 "value_loss": value_loss,
                 "entropy_loss": entropy_loss,
                 "total_loss": total_loss,
+                "approx_kl": approx_kl.mean(),
                 # "avg_target": targets.mean(),
                 # "max_target": targets.max(),
                 # "min_target": targets.min(),
@@ -213,7 +214,6 @@ class PPOAgent:
                 # "avg_old_logp": old_log_probs.mean(),
                 # "max_old_logp": old_log_probs.max(),
                 # "min_old_logp": old_log_probs.min(),
-                # "approx_kl": approx_kl.mean(),
                 # "clipped_frac": clipped.mean(),
             }
             return total_loss, log_info
@@ -263,4 +263,3 @@ class PPOAgent:
             target=self.critic_state,
             step=step,
             prefix="ppo_critic_")
-c
