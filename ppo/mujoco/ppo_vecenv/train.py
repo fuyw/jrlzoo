@@ -130,29 +130,24 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         # evaluate
         if (step + 1) % log_steps == 0:
             step_num = (step + 1) * trajectory_len // 1_000
-            step_fps = trajectory_len / (time.time() - step_time)
             eval_reward, eval_step, eval_time = eval_policy(agent, eval_env)
-            eval_fps = eval_step / eval_time
             elapsed_time = (time.time() - start_time) / 60
             log_info.update({
                 "step": step_num,
                 "reward": eval_reward,
                 "time": elapsed_time,
-                "step_fps": step_fps,
-                "eval_fps": eval_fps,
             })
             logs.append(log_info)
             logger.info(
-                f"\n#Step {step_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, eval_fps={eval_fps:.2f}\n"
-                f"\ttotal_time={elapsed_time:.2f}min, step_fps={step_fps:.2f}\n"
+                f"\n#Step {step_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, total_time={elapsed_time:.2f}min\n"
                 f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
                 f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n"
-                f"\tavg_target={log_info['avg_target']:.3f}, max_target={log_info['max_target']:.3f}, min_target={log_info['min_target']:.3f}\n"
-                f"\tavg_value={log_info['avg_value']:.3f}, max_value={log_info['max_value']:.3f}, min_value={log_info['min_value']:.3f}\n"
-                f"\tavg_logp={log_info['avg_logp']:.3f}, max_logp={log_info['max_logp']:.3f}, min_logp={log_info['min_logp']:.3f}\n"
-                f"\tavg_old_logp={log_info['avg_old_logp']:.3f}, max_old_logp={log_info['max_old_logp']:.3f}, min_old_logp={log_info['min_old_logp']:.3f}\n"
-                f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
-                f"\tapprox_kl={approx_kl:.3f}, clipped_frac={log_info['clipped_frac']:.3f}\n"
+                # f"\tavg_target={log_info['avg_target']:.3f}, max_target={log_info['max_target']:.3f}, min_target={log_info['min_target']:.3f}\n"
+                # f"\tavg_value={log_info['avg_value']:.3f}, max_value={log_info['max_value']:.3f}, min_value={log_info['min_value']:.3f}\n"
+                # f"\tavg_logp={log_info['avg_logp']:.3f}, max_logp={log_info['max_logp']:.3f}, min_logp={log_info['min_logp']:.3f}\n"
+                # f"\tavg_old_logp={log_info['avg_old_logp']:.3f}, max_old_logp={log_info['max_old_logp']:.3f}, min_old_logp={log_info['min_old_logp']:.3f}\n"
+                # f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
+                # f"\tapprox_kl={approx_kl:.3f}, clipped_frac={log_info['clipped_frac']:.3f}\n"
             )
 
         # Save checkpoints
