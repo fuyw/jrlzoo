@@ -13,8 +13,8 @@ FLAGS = flags.FLAGS
 def main(argv):
     try:
         config = FLAGS.config
-        # train.train_and_evaluate(config)
-        train2.train_and_evaluate(config)
+        train.train_and_evaluate(config)
+        # train2.train_and_evaluate(config)
 
     except KeyboardInterrupt:
         pass

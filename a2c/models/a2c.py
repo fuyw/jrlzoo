@@ -93,7 +93,7 @@ class A2CAgent:
                  max_action: float = 1.0,
                  seed: int = 0,
                  gamma: float = 0.99,
-                 lr: float = 3e-4):
+                 lr: float = 7e-4):
 
         self.gamma = gamma
         self.max_action = max_action
@@ -106,9 +106,11 @@ class A2CAgent:
         # initialize the actor
         self.model = ActorCritic(act_dim=act_dim)
         params = self.model.init(key, dummy_obs)["params"]
+        tx = optax.chain(optax.clip_by_global_norm(0.5),
+                         optax.adam(lr))
         self.state = train_state.TrainState.create(apply_fn=self.model.apply,
                                                    params=params,
-                                                   tx=optax.adam(lr))
+                                                   tx=tx)
 
     @functools.partial(jax.jit, static_argnames=("self"))
     def _get_value(self, params, observation):
@@ -149,7 +151,7 @@ class A2CAgent:
             entropy_loss = dist.entropy().mean() 
             actor_loss = -(log_probs * jax.lax.stop_gradient(advantage)).mean()
             critic_loss = jnp.square(advantage).mean()
-            total_loss = 0.5 * actor_loss + 0.5 * critic_loss - 0.001 * entropy_loss
+            total_loss = 0.5 * actor_loss + 0.5 * critic_loss - 0.01 * entropy_loss
 
             return total_loss, {
                 "actor_loss": actor_loss,

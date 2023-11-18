@@ -28,7 +28,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
 
     # logging
-    exp_prefix = f"a2c_N{config.actor_num}_L{config.rollout_len}"
+    exp_prefix = f"a2c_N{config.actor_num}_L{config.rollout_len}" +\
+        f"_{config.max_timesteps//1000000}M"
     exp_name = f"s{config.seed}_{timestamp}"
     log_dir = f"logs/{exp_prefix}/{config.env_name}"
     os.makedirs(log_dir, exist_ok=True)
@@ -86,12 +87,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         returns = agent.compute_returns(next_value, rewards, masks)  # (5, 4)
         observations = np.array(observations)                        # (5, 4, 15)
         actions = np.array(actions)                                  # (5, 4, 4)
+
         log_info = agent.update(observations, actions, returns)
 
         t += config.rollout_len * config.actor_num
         pbar.update(config.rollout_len * config.actor_num)
 
-        if t % config.eval_freq:
+        if t % config.eval_freq == 0:
             eval_reward, eval_time = eval_policy(agent,
                                                  eval_env,
                                                  config.eval_episodes)
