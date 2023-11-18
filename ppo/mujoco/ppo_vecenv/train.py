@@ -40,9 +40,12 @@ def eval_policy(agent, env, eval_episodes: int = 10) -> Tuple[float]:
 def train_and_evaluate(config: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-    exp_name = f"ppo_s{config.seed}_a{config.actor_num}_{timestamp}"
+    exp_prefix = f"ppo_N{config.actor_num}_L{config.config.rollout_len}"
+    exp_name = f"s{config.seed}_{timestamp}"
+    exp_info = f"# Running experiment for: {exp_prefix}_{exp_name}_{config.env_name} #"
+    print("#" * len(exp_info) + f"\n{exp_info}\n" + "#" * len(exp_info))
+
     os.makedirs(f"logs/{config.env_name}", exist_ok=True)
-    print(f"# Running experiment for: {exp_name}_{config.env_name} #")
     logger = get_logger(f"logs/{config.env_name}/{exp_name}.log")
     add_git_info(config)
     logger.info(f"Exp configurations:\n{config}")
@@ -57,9 +60,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     iterations_per_step = trajectory_len // batch_size
 
     loop_steps = config.total_steps // trajectory_len
-    assert config.total_steps % trajectory_len % config.log_num == 0
+    assert (config.total_steps % trajectory_len == 0) and ((config.total_steps // trajectory_len) % config.log_num == 0)
     log_steps = loop_steps // config.log_num
-    ckpt_steps = loop_steps // 10
 
     # Initialize envpool envs
     train_envs = gym.vector.SyncVectorEnv([env_fn(config.env_name, seed=i) for i in range(config.actor_num)])
@@ -149,19 +151,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_value={log_info['avg_value']:.3f}, max_value={log_info['max_value']:.3f}, min_value={log_info['min_value']:.3f}\n"
                 f"\tavg_logp={log_info['avg_logp']:.3f}, max_logp={log_info['max_logp']:.3f}, min_logp={log_info['min_logp']:.3f}\n"
                 f"\tavg_old_logp={log_info['avg_old_logp']:.3f}, max_old_logp={log_info['max_old_logp']:.3f}, min_old_logp={log_info['min_old_logp']:.3f}\n"
-                f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
-                f"\tapprox_kl={approx_kl:.3f}, clipped_frac={log_info['clipped_frac']:.3f}\n"
-            )
-            print(
-                f"\n#Step {step_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, eval_fps={eval_fps:.2f}\n"
-                f"\ttotal_time={elapsed_time:.2f}min, step_fps={step_fps:.2f}\n"
-                f"\tvalue_loss={log_info['value_loss']:.3f}, ppo_loss={log_info['ppo_loss']:.3f}, "
-                f"entropy_loss={log_info['entropy_loss']:.3f}, total_loss={log_info['total_loss']:.3f}\n"
-                f"\tavg_target={log_info['avg_target']:.3f}, max_target={log_info['max_target']:.3f}, min_target={log_info['min_target']:.3f}\n"
-                f"\tavg_value={log_info['avg_value']:.3f}, max_value={log_info['max_value']:.3f}, min_value={log_info['min_value']:.3f}\n"
-                f"\tavg_logp={log_info['avg_logp']:.3f}, max_logp={log_info['max_logp']:.3f}, min_logp={log_info['min_logp']:.3f}\n"
-                f"\tavg_old_logp={log_info['avg_old_logp']:.3f}, max_old_logp={log_info['max_old_logp']:.3f}, min_old_logp={log_info['min_old_logp']:.3f}\n"
-                f"\tavg_delta_logp={log_info['avg_delta_logp']:.3f}, max_delta_logp={log_info['max_delta_logp']:.3f}, min_delta_logp={log_info['min_delta_logp']:.3f}\n"
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
                 f"\tapprox_kl={approx_kl:.3f}, clipped_frac={log_info['clipped_frac']:.3f}\n"
             )
