@@ -9,9 +9,9 @@ import numpy as np
 import pandas as pd
 from tqdm import trange
 
-import env_utils
+
 from models import PPOAgent
-from utils import Batch, ExpTuple, PPOBuffer, get_logger, get_lr_scheduler
+from utils import env_fn, Batch, ExpTuple, PPOBuffer, get_logger, get_lr_scheduler, add_git_info
 
 
 #####################
@@ -41,9 +41,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     start_time = time.time()
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
     exp_name = f"ppo_s{config.seed}_a{config.actor_num}_{timestamp}"
-    ckpt_dir = f"{config.model_dir}/{config.env_name}/{exp_name}"
+    os.makedirs(f"logs/{config.env_name}", exist_ok=True)
     print(f"# Running experiment for: {exp_name}_{config.env_name} #")
     logger = get_logger(f"logs/{config.env_name}/{exp_name}.log")
+    add_git_info(config)
     logger.info(f"Exp configurations:\n{config}")
 
     # set random seed (deterministic on cpu)
@@ -61,13 +62,16 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     ckpt_steps = loop_steps // 10
 
     # Initialize envpool envs
-    train_envs = gym.vector.SyncVectorEnv([
-        env_utils.create_env(config.env_name, seed=i) for i in range(config.actor_num)])
-    eval_env = gym.make(config.env_name)
+    train_envs = gym.vector.SyncVectorEnv([env_fn(config.env_name, seed=i) for i in range(config.actor_num)])
+    eval_env = env_fn(config.env_name, seed=config.seed*100)()
     act_dim = eval_env.action_space.shape[0]
     obs_dim = eval_env.observation_space.shape[0]
-    buffer = PPOBuffer(obs_dim, act_dim, config.rollout_len, config.actor_num,
-                       config.gamma, config.lmbda)
+    buffer = PPOBuffer(obs_dim,
+                       act_dim,
+                       config.rollout_len,
+                       config.actor_num,
+                       config.gamma,
+                       config.lmbda)
 
     print(f"Total_steps={config.total_steps/1e6:.0f}M steps, actor_num={config.actor_num}, "
           f"trajectory_len={trajectory_len}, act_dim={act_dim}, obs_dim={obs_dim}.")
@@ -91,11 +95,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             actions, log_probs = agent.sample_actions(observations)
             values = agent.get_values(observations)
             next_observations, rewards, dones, _ = train_envs.step(actions.clip(-0.99999, 0.99999))
-            experiences = [
-                ExpTuple(observations[i], actions[i], rewards[i], values[i],
-                         log_probs[i], dones[i])
-                for i in range(config.actor_num)
-            ]
+            experiences = [ExpTuple(observations[i], actions[i], rewards[i],
+                                    values[i], log_probs[i], dones[i])
+                           for i in range(config.actor_num)]
             all_experiences.append(experiences)
             observations = next_observations
 
@@ -130,7 +132,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
             eval_reward, eval_step, eval_time = eval_policy(agent, eval_env)
             eval_fps = eval_step / eval_time
             elapsed_time = (time.time() - start_time) / 60
-            actions_str = ", ".join([f"{a:.2f}" for a in log_info['actions']])
             log_info.update({
                 "step": step_num,
                 "reward": eval_reward,
@@ -150,7 +151,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_old_logp={log_info['avg_old_logp']:.3f}, max_old_logp={log_info['max_old_logp']:.3f}, min_old_logp={log_info['min_old_logp']:.3f}\n"
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
                 f"\tapprox_kl={approx_kl:.3f}, clipped_frac={log_info['clipped_frac']:.3f}\n"
-                f"\tsampeld_actions=({actions_str})\n"
             )
             print(
                 f"\n#Step {step_num}K: eval_reward={eval_reward:.2f}, eval_time={eval_time:.2f}s, eval_fps={eval_fps:.2f}\n"
@@ -164,12 +164,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
                 f"\tavg_delta_logp={log_info['avg_delta_logp']:.3f}, max_delta_logp={log_info['max_delta_logp']:.3f}, min_delta_logp={log_info['min_delta_logp']:.3f}\n"
                 f"\tavg_ratio={log_info['avg_ratio']:.3f}, max_ratio={log_info['max_ratio']:.3f}, min_ratio={log_info['min_ratio']:.3f}\n"
                 f"\tapprox_kl={approx_kl:.3f}, clipped_frac={log_info['clipped_frac']:.3f}\n"
-                f"\tsampeld_actions=({actions_str})\n"
             )
 
         # Save checkpoints
-        if (step + 1) % ckpt_steps == 0:
-            agent.save(f"{ckpt_dir}", (step + 1) // ckpt_steps)
+        # if (step + 1) % ckpt_steps == 0:
+        #     agent.save(f"{ckpt_dir}", (step + 1) // ckpt_steps)
 
     log_df = pd.DataFrame(logs)
     log_df.to_csv(f"{config.log_dir}/{config.env_name}/{exp_name}.csv")
