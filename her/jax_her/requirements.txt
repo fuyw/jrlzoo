@@ -1,0 +1,12 @@
+wandb
+gymnasium-robotics
+flax
+optax
+distrax
+mpi4jax
+ipython
+tqdm
+pandas
+ml-collections
+imageio-ffmpeg
+gitpython

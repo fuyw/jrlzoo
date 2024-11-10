@@ -1,0 +1,10 @@
+torch
+wandb
+gymnasium-robotics
+mpi4py
+ipython
+tqdm
+pandas
+ml-collections
+imageio-ffmpeg
+gitpython
